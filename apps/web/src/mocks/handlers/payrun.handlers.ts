@@ -1,6 +1,19 @@
 import { http, HttpResponse } from 'msw';
 import { mockPayRuns, mockPayRunEmployees, mockPayslips } from '../data/payroll.data';
 import { mockUsers } from '../data/auth.data';
+import type { PayElement } from '@contracts/types/payroll';
+
+const seedElements: PayElement[] = [
+  { id: 'el-1', name: 'Basic Salary', type: 'earning', amount: 0, currency: 'NGN', isStatutory: false, formula: 'GROSS * 0.6' },
+  { id: 'el-2', name: 'Housing Allowance', type: 'earning', amount: 0, currency: 'NGN', isStatutory: false, formula: 'GROSS * 0.25' },
+  { id: 'el-3', name: 'Transport Allowance', type: 'earning', amount: 0, currency: 'NGN', isStatutory: false, formula: 'GROSS * 0.15' },
+  { id: 'el-4', name: 'PAYE Tax', type: 'deduction', amount: 0, currency: 'NGN', isStatutory: true, formula: 'NG_PAYE(GROSS)' },
+  { id: 'el-5', name: 'Employee Pension (8%)', type: 'deduction', amount: 0, currency: 'NGN', isStatutory: true, formula: 'BASIC * 0.08' },
+  { id: 'el-6', name: 'NHF', type: 'deduction', amount: 0, currency: 'NGN', isStatutory: true, formula: 'BASIC * 0.025' },
+  { id: 'el-7', name: 'Employer Pension (10%)', type: 'employer_contribution', amount: 0, currency: 'NGN', isStatutory: true, formula: 'BASIC * 0.10' },
+];
+
+let payElements = [...seedElements];
 
 function getAuthUser(request: Request) {
   const authHeader = request.headers.get('Authorization');
@@ -249,5 +262,54 @@ export const payrunHandlers = [
       );
     }
     return HttpResponse.json({ success: true, data: payslip });
+  }),
+
+  http.get('/api/pay-elements', ({ request }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    return HttpResponse.json({ success: true, data: payElements });
+  }),
+
+  http.post('/api/pay-elements', async ({ request }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const body = (await request.json()) as Record<string, unknown>;
+    const created: PayElement = {
+      id: `el-${Date.now()}`,
+      name: String(body.name ?? ''),
+      type: (body.type as PayElement['type']) ?? 'earning',
+      amount: 0,
+      currency: 'NGN',
+      isStatutory: false,
+      formula: body.formula ? String(body.formula) : null,
+    };
+    payElements = [...payElements, created];
+    return HttpResponse.json({ success: true, data: created }, { status: 201 });
+  }),
+
+  http.patch('/api/pay-elements/:id', async ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const body = (await request.json()) as Record<string, unknown>;
+    const idx = payElements.findIndex((e) => e.id === params.id);
+    if (idx === -1) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Pay element not found' } },
+        { status: 404 },
+      );
+    }
+    const updated = { ...payElements[idx], ...body };
+    payElements = payElements.map((e) => (e.id === params.id ? updated : e));
+    return HttpResponse.json({ success: true, data: updated });
+  }),
+
+  http.delete('/api/pay-elements/:id', ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const idx = payElements.findIndex((e) => e.id === params.id);
+    if (idx === -1) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Pay element not found' } },
+        { status: 404 },
+      );
+    }
+    payElements = payElements.filter((e) => e.id !== params.id);
+    return HttpResponse.json({ success: true, data: null });
   }),
 ];

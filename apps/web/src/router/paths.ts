@@ -1,6 +1,7 @@
 export const PATHS = {
   // Public
   HOME: '/',
+  REQUEST_ACCESS: '/request-access',
   LOGIN: '/login',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',

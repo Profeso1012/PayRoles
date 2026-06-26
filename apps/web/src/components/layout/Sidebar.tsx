@@ -53,7 +53,15 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
         { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
       ],
     },
-    { label: 'Settings', path: '/settings/profile', icon: Settings },
+    {
+      label: 'Settings', path: '/settings', icon: Settings,
+      children: [
+        { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
+        { label: 'Users & Roles', path: '/settings/users', icon: Users },
+        { label: 'Bank Details', path: '/settings/bank', icon: Landmark },
+        { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
+      ],
+    },
   ],
   HR_MANAGER: [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },

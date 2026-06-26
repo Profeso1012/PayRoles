@@ -149,4 +149,47 @@ export const tenantHandlers = [
     tenantProfile = { ...tenantProfile, setupComplete: true };
     return HttpResponse.json({ success: true, data: tenantProfile });
   }),
+
+  // Super Admin invite status per tenant (World 1 resend)
+  http.get('/api/admin/tenants/:id/invites', ({ request, params }) => {
+    const user = getAuthUser(request);
+    if (!user) return unauthorized();
+    if (user.role !== 'PLATFORM_ADMIN') return forbidden('Platform Admin only.');
+    const tenant = mockTenants.find((t) => t.id === params.id);
+    if (!tenant) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Tenant not found' } },
+        { status: 404 },
+      );
+    }
+    // Return a mock invite record for the Super Admin
+    const now = new Date();
+    const expiresAt = new Date(now);
+    expiresAt.setDate(expiresAt.getDate() + 7);
+    const invite = {
+      id: `admin-inv-${params.id}`,
+      email: tenant.adminEmail,
+      status: tenant.setupComplete ? 'accepted' : 'pending',
+      expiresAt: expiresAt.toISOString(),
+      createdAt: tenant.createdAt,
+    };
+    return HttpResponse.json({ success: true, data: [invite] });
+  }),
+
+  http.post('/api/admin/tenants/:id/invites/:inviteId/resend', ({ request, params }) => {
+    const user = getAuthUser(request);
+    if (!user) return unauthorized();
+    if (user.role !== 'PLATFORM_ADMIN') return forbidden('Platform Admin only.');
+    const tenant = mockTenants.find((t) => t.id === params.id);
+    if (!tenant) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Tenant not found' } },
+        { status: 404 },
+      );
+    }
+    return HttpResponse.json({
+      success: true,
+      data: { message: `Invite resent to ${tenant.adminEmail}` },
+    });
+  }),
 ];

@@ -24,6 +24,7 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 
 // Public pages
 const Landing = lazy(() => import('@/pages/public/Landing'));
+const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
 const Login = lazy(() => import('@/pages/auth/Login'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
@@ -108,6 +109,7 @@ function DashboardRouter() {
 export const router = createBrowserRouter([
   // Public
   { path: PATHS.HOME, element: <Suspense fallback={<Loading />}><Landing /></Suspense> },
+  { path: PATHS.REQUEST_ACCESS, element: <Suspense fallback={<Loading />}><RequestAccess /></Suspense> },
   { path: PATHS.UNAUTHORIZED, element: <Unauthorized /> },
 
   // Auth screens (AuthLayout wrapper)

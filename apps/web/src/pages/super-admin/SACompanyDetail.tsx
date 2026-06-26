@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Mail, Globe, BadgeCheck, PauseCircle } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Globe, BadgeCheck, PauseCircle, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
@@ -23,6 +23,14 @@ interface Tenant {
   adminEmail: string;
 }
 
+interface AdminInvite {
+  id: string;
+  email: string;
+  status: 'pending' | 'accepted' | 'expired';
+  expiresAt: string;
+  createdAt: string;
+}
+
 export default function SACompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -34,6 +42,23 @@ export default function SACompanyDetail() {
     queryKey: ['admin-tenant', id],
     queryFn: () => apiClient<Tenant>(`/admin/tenants/${id}`),
     enabled: !!id,
+  });
+
+  // Super Admin invite for this tenant
+  const { data: invites, refetch: refetchInvites } = useQuery({
+    queryKey: ['admin-tenant-invite', id],
+    queryFn: () => apiClient<AdminInvite[]>(`/admin/tenants/${id}/invites`),
+    enabled: !!id,
+  });
+
+  const resendInvite = useMutation({
+    mutationFn: (inviteId: string) =>
+      apiClient(`/admin/tenants/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
+    onSuccess: () => {
+      refetchInvites();
+      toast.success('Invite resent', `A fresh invite link was sent to the Super Admin.`);
+    },
+    onError: () => toast.error('Failed to resend', 'Please try again.'),
   });
 
   const toggleStatus = useMutation({
@@ -103,7 +128,7 @@ export default function SACompanyDetail() {
       </div>
 
       {/* Detail grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem' }} className="mb-6">
         {fields.map((f) => (
           <div key={f.label} className="bg-white border border-mint-light rounded-xl p-5 flex items-start gap-3 shadow-sm">
             <div className="w-9 h-9 rounded-lg bg-mint-light/40 flex items-center justify-center flex-shrink-0">
@@ -115,6 +140,57 @@ export default function SACompanyDetail() {
             </div>
           </div>
         ))}
+      </div>
+
+      {/* Super Admin invite status */}
+      <div className="bg-white border border-mint-light rounded-xl shadow-sm overflow-hidden mb-6">
+        <div className="px-6 py-4 border-b border-mint-light flex items-center gap-2">
+          <Mail size={16} className="text-cash-green" />
+          <h2 className="text-sm font-semibold text-deep-cash">Super Admin Invite</h2>
+        </div>
+        <div className="px-6 py-5">
+          {!invites || invites.length === 0 ? (
+            <p className="text-sm text-cash-green/60">No invite record found for this tenant.</p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {invites.map((inv) => {
+                const isExpired = inv.status === 'expired' || new Date(inv.expiresAt) < new Date();
+                const statusLabel = inv.status === 'accepted' ? 'Accepted' : isExpired ? 'Expired' : 'Pending';
+                const statusVariant = inv.status === 'accepted' ? 'success' : isExpired ? 'danger' : 'warning';
+                return (
+                  <div key={inv.id} className="flex items-center justify-between gap-4 flex-wrap">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-deep-cash">{inv.email}</span>
+                        <Badge variant={statusVariant} label={statusLabel} />
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-cash-green/60">
+                        <span className="flex items-center gap-1">
+                          <Clock size={11} />
+                          Sent {formatDate(inv.createdAt)}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          {isExpired && inv.status !== 'accepted' && <AlertTriangle size={11} className="text-red-400" />}
+                          {inv.status !== 'accepted' && `Expires ${formatDate(inv.expiresAt)}`}
+                        </span>
+                      </div>
+                    </div>
+                    {inv.status !== 'accepted' && (
+                      <Button
+                        variant="secondary"
+                        onClick={() => resendInvite.mutate(inv.id)}
+                        loading={resendInvite.isPending}
+                      >
+                        <RefreshCw size={13} className="mr-1.5" />
+                        {isExpired ? 'Resend (expired)' : 'Resend invite'}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Confirm modal */}
