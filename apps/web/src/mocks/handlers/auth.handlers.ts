@@ -1,8 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { mockUsers } from '../data/auth.data';
 
-const pendingRegistrations = new Map<string, { otp: string; fullName: string; companyName: string; password: string }>();
-
 function getAuthUser(request: Request) {
   const authHeader = request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
@@ -56,60 +54,6 @@ export const authHandlers = [
 
   http.post('/api/auth/reset-password', () => {
     return HttpResponse.json({ success: true, data: null });
-  }),
-
-  http.post('/api/auth/register', async ({ request }) => {
-    const body = (await request.json()) as {
-      fullName: string;
-      email: string;
-      companyName: string;
-      password: string;
-    };
-    if (mockUsers.find((u) => u.email === body.email)) {
-      return HttpResponse.json(
-        { success: false, error: { code: 'EMAIL_EXISTS', message: 'An account with this email already exists.' } },
-        { status: 409 },
-      );
-    }
-    pendingRegistrations.set(body.email, {
-      otp: '123456',
-      fullName: body.fullName,
-      companyName: body.companyName,
-      password: body.password,
-    });
-    return HttpResponse.json({ success: true, data: { message: 'Verification code sent to your email.' } });
-  }),
-
-  http.post('/api/auth/verify-email', async ({ request }) => {
-    const body = (await request.json()) as { email: string; otp: string };
-    const pending = pendingRegistrations.get(body.email);
-    if (!pending) {
-      return HttpResponse.json(
-        { success: false, error: { code: 'INVALID_OTP', message: 'Invalid or expired verification code.' } },
-        { status: 400 },
-      );
-    }
-    if (pending.otp !== body.otp) {
-      return HttpResponse.json(
-        { success: false, error: { code: 'INVALID_OTP', message: 'Incorrect verification code.' } },
-        { status: 400 },
-      );
-    }
-    pendingRegistrations.delete(body.email);
-    return HttpResponse.json({ success: true, data: { message: 'Email verified. Your account is ready.' } });
-  }),
-
-  http.post('/api/auth/resend-otp', async ({ request }) => {
-    const body = (await request.json()) as { email: string };
-    const pending = pendingRegistrations.get(body.email);
-    if (!pending) {
-      return HttpResponse.json(
-        { success: false, error: { code: 'NOT_FOUND', message: 'No pending registration found.' } },
-        { status: 404 },
-      );
-    }
-    pending.otp = '123456';
-    return HttpResponse.json({ success: true, data: { message: 'Verification code resent.' } });
   }),
 
   http.post('/api/auth/accept-invite', () => {

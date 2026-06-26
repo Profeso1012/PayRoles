@@ -155,15 +155,6 @@ export default function Login() {
           </>
         )}
 
-        <p className="text-xs text-cash-green/70 text-center mt-6">
-          New to PayRole?{' '}
-          <button
-            onClick={() => navigate('/register')}
-            className="text-cash-green font-medium hover:text-fresh-cash underline"
-          >
-            Create an account
-          </button>
-        </p>
       </div>
     </div>
   );

@@ -25,7 +25,6 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 // Public pages
 const Landing = lazy(() => import('@/pages/public/Landing'));
 const Login = lazy(() => import('@/pages/auth/Login'));
-const Register = lazy(() => import('@/pages/auth/Register'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
@@ -116,7 +115,6 @@ export const router = createBrowserRouter([
     element: <Suspense fallback={<Loading />}><AuthLayout /></Suspense>,
     children: [
       { path: PATHS.LOGIN, element: w(Login) },
-      { path: PATHS.REGISTER, element: w(Register) },
       { path: PATHS.FORGOT_PASSWORD, element: w(ForgotPassword) },
       { path: PATHS.RESET_PASSWORD, element: w(ResetPassword) },
       { path: PATHS.ACCEPT_INVITE, element: w(AcceptInvite) },

@@ -16,11 +16,13 @@ type BadgeVariant =
   | 'success'
   | 'warning'
   | 'error'
+  | 'danger'
   | 'info';
 
 interface BadgeProps {
   variant: BadgeVariant;
-  children: React.ReactNode;
+  label?: string;
+  children?: React.ReactNode;
   className?: string;
 }
 
@@ -34,6 +36,7 @@ const variantMap: Record<BadgeVariant, string> = {
   failed: 'bg-red-100 text-red-700',
   reversed: 'bg-red-100 text-red-700',
   error: 'bg-red-100 text-red-700',
+  danger: 'bg-red-100 text-red-700',
   draft: 'bg-gray-100 text-gray-600',
   info: 'bg-gray-100 text-gray-600',
   calculating: 'bg-blue-100 text-blue-600 animate-pulse',
@@ -43,16 +46,16 @@ const variantMap: Record<BadgeVariant, string> = {
   posted: 'bg-deep-cash/10 text-deep-cash',
 };
 
-export default function Badge({ variant, children, className }: BadgeProps) {
+export default function Badge({ variant, label, children, className }: BadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium',
+        'inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium capitalize',
         variantMap[variant],
         className,
       )}
     >
-      {children}
+      {label ?? children}
     </span>
   );
 }
