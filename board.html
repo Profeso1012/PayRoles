@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Account — CarryLink</title>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,700&display=swap');
+
+
+    /* ── CarryLink root variables ── */
+    :root {
+      --ab: #23bcf2;
+      --ab-d: rgb(4, 55, 75);
+      --ab-dk: #032b38;
+      --wh: #fff;
+      --gl: #f0faff;
+      --gt: #2d7a96;
+      --dv: rgba(255, 255, 255, 0.2);
+      --hh: 79px;
+      --bg: #eaf6fb;
+      --border: #b8eaf5;
+      --text: #0d1a1f;
+      --muted: #2d7a96;
+      --light: #7eb8cc;
+      --radius: 3px;
+      --shadow: 0 1px 6px rgba(4, 55, 75, 0.08);
+    }
+
+
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      overflow-x: hidden;
+    }
+
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #90d8ee;
+      border-radius: 4px;
+    }
+
+
+    /* ══════════════════════════════════════════════
+   CARRYLINK HEADER — exact from homepage iii
+══════════════════════════════════════════════ */
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--hh);
+      background: rgba(3, 43, 56, 0.26);
+      backdrop-filter: blur(20px) saturate(1.5);
+      -webkit-backdrop-filter: blur(20px) saturate(1.5);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+      z-index: 1000;
+      display: flex;
+      align-items: stretch;
+      transition: transform .38s cubic-bezier(.4, 0, .2, 1), background .3s ease;
+      will-change: transform;
+    }
+
+    .site-header.scrolled {
+      background: rgba(2, 38, 52, 0.92);
+    }
+
+    .site-header.hidden {
+      transform: translateY(-100%);
+    }
+
+
+    .header-inner {
+      display: flex;
+      align-items: stretch;
+      width: 100%;
+    }
+
+
+    .header-left {
+      display: flex;
+      align-items: stretch;
+      flex-shrink: 0;
+    }
+
+
+    .menu-toggle {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 0 28px 0 72px;
+      color: white;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: .02em;
+      position: relative;
+    }
+
+    .menu-toggle::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease;
+    }
+
+    .menu-toggle:hover::after,
+    .menu-toggle.active::after {
+      transform: scaleX(1);
+    }
+
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 22px;
+    }
+
+    .hamburger span {
+      display: block;
+      height: 1.5px;
+      background: white;
+      border-radius: 1px;
+    }
+
+    .hamburger span:nth-child(1) {
+      width: 22px;
+    }
+
+    .hamburger span:nth-child(2) {
+      width: 16px;
+    }
+
+    .hamburger span:nth-child(3) {
+      width: 10px;
+    }
+
+
+    .hdiv {
+      width: 1px;
+      background: var(--dv);
+      align-self: stretch;
+      flex-shrink: 0;
+    }
+
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      padding: 0 52px;
+      flex-shrink: 0;
+    }
+
+    .logo-wm {
+      font-size: 26px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: .02em;
+      text-decoration: none;
+      display: block;
+    }
+
+    .logo-wm span {
+      color: #23bcf2;
+    }
+
+
+    .header-right {
+      display: flex;
+      align-items: stretch;
+      margin-left: auto;
+    }
+
+
+    .header-nav {
+      display: flex;
+      align-items: stretch;
+    }
+
+    .header-nav a,
+    .header-nav button {
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      color: rgba(255, 255, 255, .9);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 400;
+      position: relative;
+      white-space: nowrap;
+      transition: color .15s;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .header-nav a::after,
+    .header-nav button::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease;
+    }
+
+    .header-nav a:hover,
+    .header-nav button:hover {
+      color: #23bcf2;
+    }
+
+    .header-nav a:hover::after,
+    .header-nav button:hover::after {
+      transform: scaleX(1);
+    }
+
+
+    .nav-signup {
+      background: rgba(35, 188, 242, .18) !important;
+      color: white !important;
+    }
+
+    .nav-signup:hover {
+      background: rgba(35, 188, 242, .30) !important;
+    }
+
+
+    /* "My Account" active state */
+    .header-nav a.nav-active {
+      color: #23bcf2 !important;
+    }
+
+    .header-nav a.nav-active::after {
+      transform: scaleX(1);
+    }
+
+
+    .search-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 72px 0 22px;
+      color: rgba(255, 255, 255, .9);
+      background: none;
+      border: none;
+      border-left: 1px solid var(--dv);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 400;
+      position: relative;
+      white-space: nowrap;
+      transition: color .15s;
+    }
+
+    .search-btn::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease;
+    }
+
+    .search-btn:hover {
+      color: #23bcf2;
+    }
+
+    .search-btn:hover::after {
+      transform: scaleX(1);
+    }
+
+    .search-btn svg {
+      display: block;
+      width: 20px;
+      height: 20px;
+    }
+
+
+
+
+    /* ══════════════════════════════════════════════
+   PAGE BODY — below fixed header
+══════════════════════════════════════════════ */
+    .page-wrap {
+      padding-top: var(--hh);
+      min-height: 100vh;
+    }
+
+
+    /* Page hero strip — tight banner under header */
+    .page-banner {
+      background: var(--ab-d);
+      padding: 28px 56px 24px;
+      border-bottom: 1px solid rgba(35, 188, 242, .18);
+    }
+
+
+    .page-banner-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+
+    .page-banner-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+
+    .page-eyebrow {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .12em;
+      color: rgba(210, 244, 255, .5);
+    }
+
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: -.01em;
+    }
+
+
+    .page-title span {
+      color: #23bcf2;
+    }
+
+
+    .page-banner-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+
+    .banner-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background .18s;
+    }
+
+
+    .banner-btn-outline {
+      background: transparent;
+      border: 1.5px solid rgba(35, 188, 242, .45);
+      color: rgba(210, 244, 255, .8);
+    }
+
+    .banner-btn-outline:hover {
+      border-color: #23bcf2;
+      color: white;
+    }
+
+
+    .banner-btn-fill {
+      background: #23bcf2;
+      border: 1.5px solid #23bcf2;
+      color: white;
+    }
+
+    .banner-btn-fill:hover {
+      background: #1aa6d4;
+      border-color: #1aa6d4;
+    }
+
+
+    .banner-btn [data-lucide] {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+
+
+
+    /* ══════════════════════════════════════════════
+   LAYOUT — sidebar + main
+══════════════════════════════════════════════ */
+    .container {
+      max-width: 1400px;
+      margin: 32px auto;
+      display: flex;
+      gap: 24px;
+      padding: 0 56px;
+    }
+
+
+    /* ── SIDEBAR ── blends with page background ── */
+    .sidebar {
+      width: 230px;
+      flex-shrink: 0;
+    }
+
+
+    .sidebar-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--muted);
+      padding: 0 10px 12px;
+      margin-bottom: 4px;
+      border-bottom: 2px solid var(--ab);
+    }
+
+
+    .sidebar-menu {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+
+    .sidebar-menu li {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13.5px;
+      font-weight: 400;
+      border-left: 3px solid transparent;
+      transition: background .16s, color .16s;
+      user-select: none;
+    }
+
+
+    .sidebar-menu li [data-lucide] {
+      width: 15px;
+      height: 15px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+
+    .sidebar-menu li:hover {
+      background: rgba(35, 188, 242, .09);
+      color: var(--ab);
+    }
+
+
+    .sidebar-menu li.active {
+      background: white;
+      color: var(--ab);
+      border-left-color: var(--ab);
+      font-weight: 600;
+      box-shadow: var(--shadow);
+    }
+
+
+    .sidebar-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 10px 4px;
+    }
+
+
+    /* verification badge in sidebar */
+    .kyc-pill {
+      margin-left: auto;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 10px;
+      background: rgba(40, 167, 69, .14);
+      color: #1a7a30;
+      white-space: nowrap;
+    }
+
+    .kyc-pill.pending {
+      background: rgba(255, 153, 0, .14);
+      color: #8a5a00;
+    }
+
+
+
+
+    /* ── MAIN CONTENT ── */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+
+    /* breadcrumb */
+    .breadcrumb {
+      font-size: 12px;
+      color: var(--light);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .breadcrumb a {
+      color: var(--muted);
+      text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+      color: var(--ab);
+    }
+
+    .breadcrumb [data-lucide] {
+      width: 11px;
+      height: 11px;
+      stroke: var(--light);
+    }
+
+
+
+
+    /* ════════════════════════════════════════════
+   DIVISION 1 — Tabs + Search bar
+════════════════════════════════════════════ */
+    .div-controls {
+      background: white;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+
+    .order-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      gap: 2px;
+    }
+
+
+    .order-tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 14px 16px;
+      cursor: pointer;
+      border-bottom: 2.5px solid transparent;
+      font-size: 13px;
+      color: var(--muted);
+      white-space: nowrap;
+      transition: color .18s, border-color .18s;
+      user-select: none;
+    }
+
+    .order-tab [data-lucide] {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+    .order-tab:hover {
+      color: var(--ab);
+    }
+
+    .order-tab.active {
+      color: var(--ab);
+      border-bottom-color: var(--ab);
+      font-weight: 600;
+    }
+
+
+    .tab-count {
+      background: #d8f4ff;
+      color: var(--ab);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 8px;
+      line-height: 1.6;
+    }
+
+
+    .search-bar {
+      display: flex;
+      gap: 10px;
+      padding: 16px 20px;
+    }
+
+
+    .search-input-group {
+      display: flex;
+      flex: 1;
+      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      transition: border-color .18s;
+    }
+
+    .search-input-group:focus-within {
+      border-color: var(--ab);
+    }
+
+
+    .search-select {
+      padding: 9px 14px;
+      border: none;
+      border-right: 1px solid var(--border);
+      background: #f0faff;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      outline: none;
+      font-family: inherit;
+    }
+
+
+    .search-inner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex: 1;
+      padding: 0 12px;
+      background: white;
+    }
+
+    .search-inner [data-lucide] {
+      width: 14px;
+      height: 14px;
+      stroke: var(--border);
+      flex-shrink: 0;
+    }
+
+
+    .search-input {
+      flex: 1;
+      border: none;
+      outline: none;
+      font-size: 13px;
+      color: var(--text);
+      padding: 9px 0;
+      background: transparent;
+      font-family: inherit;
+    }
+
+    .search-input::placeholder {
+      color: var(--light);
+    }
+
+
+    .search-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 22px;
+      background: var(--ab);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background .15s;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+
+    .search-btn [data-lucide] {
+      width: 14px;
+      height: 14px;
+      stroke: currentColor;
+    }
+
+    .search-btn:hover {
+      background: #1aa6d4;
+    }
+
+
+    .filter-select {
+      padding: 9px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      background: white;
+      font-size: 13px;
+      color: var(--muted);
+      cursor: pointer;
+      outline: none;
+      min-width: 160px;
+      transition: border-color .18s;
+      font-family: inherit;
+    }
+
+    .filter-select:focus {
+      border-color: var(--ab);
+    }
+
+
+
+
+    /* ════════════════════════════════════════════
+   DIVISION 2 — Empty / Welcome state
+════════════════════════════════════════════ */
+    .div-empty {
+      background: white;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 64px 24px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+
+    /* subtle dot grid matching CarryLink footer */
+    .div-empty::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(35, 188, 242, .06) 1px, transparent 1px);
+      background-size: 22px 22px;
+      pointer-events: none;
+    }
+
+
+    .empty-icon-wrap {
+      width: 88px;
+      height: 88px;
+      background: #d8f4ff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      position: relative;
+    }
+
+    .empty-icon-wrap [data-lucide] {
+      width: 38px;
+      height: 38px;
+      stroke: var(--ab);
+      stroke-width: 1.5;
+    }
+
+
+    .empty-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+
+    .empty-text {
+      font-size: 13.5px;
+      color: var(--muted);
+      line-height: 1.65;
+      max-width: 360px;
+      position: relative;
+    }
+
+    .empty-text a {
+      color: var(--ab);
+      text-decoration: none;
+    }
+
+    .empty-text a:hover {
+      text-decoration: underline;
+    }
+
+
+    .empty-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 24px;
+      position: relative;
+    }
+
+
+    .btn-ghost {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 20px;
+      border: 1.5px solid var(--border);
+      border-radius: 4px;
+      background: white;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: inherit;
+      transition: border-color .15s, color .15s;
+    }
+
+    .btn-ghost [data-lucide] {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--ab);
+      color: var(--ab);
+    }
+
+
+    .btn-fill {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 20px;
+      border: none;
+      border-radius: 4px;
+      background: var(--ab);
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      font-family: inherit;
+      transition: background .15s;
+    }
+
+    .btn-fill [data-lucide] {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+    }
+
+    .btn-fill:hover {
+      background: #1aa6d4;
+    }
+
+
+
+
+    /* ════════════════════════════════════════════
+   DIVISION 3 — Available Travelers cards
+════════════════════════════════════════════ */
+    .div-recs {
+      background: white;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      padding: 24px 24px 28px;
+    }
+
+
+    .recs-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+
+    .recs-title {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .recs-title [data-lucide] {
+      width: 17px;
+      height: 17px;
+      stroke: var(--ab);
+    }
+
+
+    .recs-link {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12.5px;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color .15s;
+    }
+
+    .recs-link [data-lucide] {
+      width: 13px;
+      height: 13px;
+      stroke: currentColor;
+    }
+
+    .recs-link:hover {
+      color: var(--ab);
+    }
+
+
+    .traveler-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 14px;
+    }
+
+
+    .traveler-card {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow .2s, transform .2s, border-color .2s;
+    }
+
+    .traveler-card:hover {
+      box-shadow: 0 6px 20px rgba(35, 188, 242, .13);
+      transform: translateY(-2px);
+      border-color: rgba(35, 188, 242, .4);
+    }
+
+
+    .tc-img-wrap {
+      position: relative;
+      height: 168px;
+      overflow: hidden;
+    }
+
+
+    .tc-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform .4s ease;
+    }
+
+    .traveler-card:hover .tc-img {
+      transform: scale(1.05);
+    }
+
+
+    .tc-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(35, 188, 242, .9);
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      padding: 3px 9px;
+      border-radius: 12px;
+    }
+
+
+    .tc-body {
+      padding: 12px 14px 14px;
+    }
+
+
+    .tc-name {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 3px;
+    }
+
+
+    .tc-route {
+      font-size: 11.5px;
+      color: var(--ab);
+      font-weight: 500;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .tc-route [data-lucide] {
+      width: 11px;
+      height: 11px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+
+    .tc-sep {
+      border: none;
+      border-top: 1px solid #d8f4ff;
+      margin-bottom: 10px;
+    }
+
+
+    .tc-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+
+    .tc-date {
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .tc-date [data-lucide] {
+      width: 11px;
+      height: 11px;
+      stroke: currentColor;
+      flex-shrink: 0;
+    }
+
+
+    .tc-price {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--ab);
+    }
+
+
+    .tc-rating {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 11px;
+      color: #f59e0b;
+      font-weight: 600;
+    }
+
+    .tc-rating [data-lucide] {
+      width: 11px;
+      height: 11px;
+      stroke: #f59e0b;
+      fill: #f59e0b;
+    }
+
+
+
+
+    /* ══════════════════════════════════════════════
+   CARRYLINK FOOTER — exact from homepage
+══════════════════════════════════════════════ */
+    .site-footer {
+      position: relative;
+      background-color: var(--ab-d);
+      color: rgb(210, 244, 255);
+      border-top: 1px solid rgba(35, 188, 242, .2);
+      overflow: hidden;
+      margin-top: 60px;
+    }
+
+    .site-footer::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(35, 188, 242, .052) 1px, transparent 1px);
+      background-size: 22px 22px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .ft-bg-img {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 100%;
+      display: block;
+      opacity: .45;
+      pointer-events: none;
+      z-index: 0;
+      object-fit: cover;
+    }
+
+    .ft-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 72px 56px 48px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ft-main {
+      display: grid;
+      grid-template-columns: 320px 1fr 1fr;
+      gap: 72px;
+    }
+
+    .ft-brand {
+      padding-top: 4px;
+    }
+
+    .ft-logo {
+      font-size: 28px;
+      font-weight: 700;
+      color: white;
+      line-height: 1;
+      display: inline-block;
+      margin-bottom: 38px;
+    }
+
+    .ft-logo span {
+      color: #23bcf2;
+    }
+
+    .ft-touch {
+      font-size: 20px;
+      font-weight: 400;
+      color: rgb(210, 244, 255);
+      margin-bottom: 22px;
+    }
+
+    .ft-social {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 38px;
+    }
+
+    .si {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      max-width: 44px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(35, 188, 242, .28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-decoration: none;
+      transition: background .2s, border-color .2s;
+      flex-shrink: 0;
+      flex-grow: 0;
+    }
+
+    .si:hover {
+      background: rgba(35, 188, 242, .15);
+      border-color: rgba(35, 188, 242, .7);
+    }
+
+    .si svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block;
+    }
+
+    .si.sk svg {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .ft-contact {
+      display: inline-block;
+      background: #23bcf2;
+      color: white;
+      padding: 14px 32px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background .2s;
+      border-radius: 2px;
+    }
+
+    .ft-contact:hover {
+      background: #1aa6d4;
+    }
+
+    .ft-col {
+      padding-top: 4px;
+    }
+
+    .ft-col-h {
+      font-size: 18px;
+      font-weight: 500;
+      color: white;
+      margin-bottom: 22px;
+    }
+
+    .ft-list {
+      list-style: none;
+      margin-bottom: 48px;
+    }
+
+    .ft-list li {
+      margin-bottom: 14px;
+    }
+
+    .ft-list a {
+      color: rgba(210, 244, 255, .8);
+      text-decoration: none;
+      font-size: 15px;
+      line-height: 1.5;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: color .2s;
+    }
+
+    .ft-list a:hover {
+      color: #23bcf2;
+    }
+
+    .ei {
+      display: inline-flex;
+      align-items: center;
+      width: 13px;
+      height: 13px;
+      flex-shrink: 0;
+      opacity: .55;
+    }
+
+    .ei svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .ft-closure {
+      position: relative;
+      z-index: 1;
+    }
+
+    .ft-cbar {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 30px 56px 36px;
+      border-top: 1px solid rgba(35, 188, 242, .15);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .ft-legal {
+      display: flex;
+      gap: 26px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .ft-legal a,
+    .ft-legal button {
+      color: rgba(210, 244, 255, .5);
+      text-decoration: none;
+      font-size: 13px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 0;
+      transition: color .2s;
+    }
+
+    .ft-legal a:hover,
+    .ft-legal button:hover {
+      color: #23bcf2;
+    }
+
+    .ft-copy {
+      font-size: 13px;
+      color: rgba(210, 244, 255, .4);
+    }
+
+
+    /* Modal (CarryLink sign-up) */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 32, 48, .48);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .28s ease;
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 16px;
+      width: 420px;
+      max-width: calc(100vw - 32px);
+      padding: 40px 36px 32px;
+      position: relative;
+      transform: translateY(18px) scale(.97);
+      transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+      box-shadow: 0 24px 64px rgba(4, 32, 48, .28);
+    }
+
+    .modal-backdrop.open .modal {
+      transform: translateY(0) scale(1);
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #f0faff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .18s;
+    }
+
+    .modal-close:hover {
+      background: #d8f4ff;
+    }
+
+    .modal-close svg {
+      width: 16px;
+      height: 16px;
+      stroke: #2d7a96;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .modal-shield {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #2d7a96;
+      margin-bottom: 24px;
+    }
+
+    .modal-shield svg {
+      width: 14px;
+      height: 14px;
+      stroke: #23bcf2;
+      stroke-width: 2;
+      fill: none;
+      flex-shrink: 0;
+    }
+
+    .modal-screen {
+      display: none;
+    }
+
+    .modal-screen.active {
+      display: block;
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      color: #0d1a1f;
+      margin-bottom: 6px;
+    }
+
+    .modal-sub {
+      font-size: 13px;
+      color: #757575;
+      text-align: center;
+      margin-bottom: 28px;
+      line-height: 1.5;
+    }
+
+    .modal-input-wrap {
+      position: relative;
+      margin-bottom: 16px;
+    }
+
+    .modal-input-wrap input {
+      width: 100%;
+      padding: 18px 16px 6px;
+      border: 1.5px solid #b8eaf5;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s;
+      background: white;
+      color: #0d1a1f;
+    }
+
+    .modal-input-wrap input:focus {
+      border-color: #23bcf2;
+    }
+
+    .modal-input-wrap label {
+      position: absolute;
+      top: 50%;
+      left: 16px;
+      transform: translateY(-50%);
+      font-size: 15px;
+      color: #aaa;
+      pointer-events: none;
+      transition: all .18s ease;
+    }
+
+    .modal-input-wrap input:focus~label,
+    .modal-input-wrap input:not(:placeholder-shown)~label {
+      top: 10px;
+      font-size: 11px;
+      color: #23bcf2;
+      transform: translateY(0);
+    }
+
+    .modal-btn {
+      width: 100%;
+      padding: 16px;
+      background: #23bcf2;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+      margin-bottom: 14px;
+    }
+
+    .modal-btn:disabled {
+      background: #b8eaf5;
+      cursor: default;
+      color: #6ab8cc;
+    }
+
+    .modal-btn:not(:disabled):hover {
+      background: #1aa6d4;
+    }
+
+    .modal-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+    }
+
+    .modal-divider::before,
+    .modal-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e0f5ff;
+    }
+
+    .modal-divider span {
+      font-size: 12px;
+      color: #aaa;
+      white-space: nowrap;
+    }
+
+    .modal-socials {
+      display: flex;
+      gap: 12px;
+    }
+
+    .modal-soc {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 13px 10px;
+      border: 1.5px solid #b8eaf5;
+      border-radius: 10px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #0d1a1f;
+      transition: border-color .18s, background .18s;
+    }
+
+    .modal-soc:hover {
+      border-color: #23bcf2;
+      background: #f0faff;
+    }
+
+    .modal-fine {
+      font-size: 11px;
+      color: #aaa;
+      text-align: center;
+      line-height: 1.55;
+      margin-top: 20px;
+    }
+
+    .modal-fine a {
+      color: #2d7a96;
+      text-decoration: underline;
+    }
+
+    .modal-trouble {
+      text-align: center;
+      margin-top: 12px;
+    }
+
+    .modal-trouble button {
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: #2d7a96;
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .otp-back {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      color: #2d7a96;
+      margin-bottom: 20px;
+      padding: 0;
+    }
+
+    .otp-back svg {
+      width: 16px;
+      height: 16px;
+      stroke: #2d7a96;
+      stroke-width: 2;
+      fill: none;
+    }
+
+    .otp-email-hint {
+      font-size: 13px;
+      color: #2d7a96;
+      text-align: center;
+      line-height: 1.55;
+      margin-bottom: 4px;
+    }
+
+    .otp-email-val {
+      font-weight: 600;
+      color: #23bcf2;
+      word-break: break-all;
+    }
+
+    .otp-modify {
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .otp-modify button {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #2d7a96;
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    .otp-boxes {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .otp-box {
+      width: 64px;
+      height: 68px;
+      border: 2px solid #b8eaf5;
+      border-radius: 12px;
+      font-size: 26px;
+      font-weight: 700;
+      text-align: center;
+      font-family: inherit;
+      color: #23bcf2;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s;
+      caret-color: #23bcf2;
+    }
+
+    .otp-box:focus {
+      border-color: #23bcf2;
+      box-shadow: 0 0 0 3px rgba(35, 188, 242, .15);
+    }
+
+    .otp-box.filled {
+      border-color: #23bcf2;
+    }
+
+    .otp-resend {
+      text-align: center;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px;
+    }
+
+    .otp-resend .resend-link {
+      color: #23bcf2;
+      cursor: pointer;
+      text-decoration: underline;
+      display: none;
+    }
+
+    .otp-resend .resend-timer {
+      color: #aaa;
+    }
+
+    .otp-have-account {
+      text-align: center;
+      font-size: 12px;
+      color: #757575;
+      margin-top: 14px;
+    }
+
+    .otp-have-account button {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #23bcf2;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 0;
+    }
+
+
+    @media (max-width: 1100px) {
+      .header-nav {
+        display: none;
+      }
+
+      .ft-main {
+        grid-template-columns: 260px 1fr;
+      }
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        padding: 0 20px;
+      }
+
+      .menu-toggle {
+        padding: 0 20px 0 24px;
+      }
+
+      .search-btn {
+        padding: 0 24px 0 20px;
+      }
+
+      .page-banner {
+        padding: 20px 28px;
+      }
+
+      .ft-inner {
+        padding: 48px 28px 40px;
+      }
+
+      .ft-cbar {
+        padding: 24px 28px 32px;
+      }
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+      }
+
+      .sidebar {
+        width: 100%;
+      }
+
+      .traveler-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .ft-main {
+        grid-template-columns: 1fr;
+        gap: 40px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+
+  <!-- ── MODAL (CarryLink sign-up — identical to homepage) ── -->
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-label="Sign Up">
+    <div class="modal" id="modalBox">
+      <button class="modal-close" id="modalClose" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <div class="modal-screen active" id="screenEmail">
+        <div class="modal-shield"><svg viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>Your information is protected</div>
+        <h2 class="modal-title">Join CarryLink</h2>
+        <p class="modal-sub">Ship smarter or earn from your spare luggage. Enter your email to get started.</p>
+        <div class="modal-input-wrap">
+          <input type="email" id="emailInput" placeholder=" " autocomplete="email"><label for="emailInput">Email address</label>
+        </div>
+        <button class="modal-btn" id="continueBtn" disabled>Continue</button>
+        <div class="modal-trouble"><button type="button">Trouble signing in?</button></div>
+        <div class="modal-divider"><span>Or continue with</span></div>
+        <div class="modal-socials">
+          <button class="modal-soc" aria-label="Continue with Google">
+          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v8.51h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.14z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/></svg>
+          Google
+        </button>
+          <button class="modal-soc" aria-label="Continue with Apple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#0d1a1f"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Apple
+        </button>
+        </div>
+        <p class="modal-fine">By continuing, you confirm that you are an adult and have read and accepted our <a
+            href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>.</p>
+      </div>
+      <div class="modal-screen" id="screenOtp">
+        <button class="otp-back" id="otpBack"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>Back</button>
+        <div class="modal-shield" style="margin-bottom:16px"><svg viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>Your information is protected</div>
+        <h2 class="modal-title" style="margin-bottom:16px">Verify your email</h2>
+        <div class="otp-email-hint">Please enter the 4-digit code sent to</div>
+        <div class="otp-email-val" id="otpEmailDisplay" style="text-align:center;font-size:13px;margin-bottom:8px">
+        </div>
+        <div class="otp-modify"><button type="button" id="modifyEmail">Modify email address</button></div>
+        <div class="otp-boxes">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="Digit 1">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 2">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 3">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 4">
+        </div>
+        <div class="otp-resend">
+          <span class="resend-timer" id="resendTimer">(60s) Resend code</span><span class="resend-link" id="resendLink">Resend code</span>
+        </div>
+        <button class="modal-btn" id="registerBtn" disabled style="margin-top:24px">Create Account</button>
+        <div class="otp-have-account">
+          <span style="padding-right:4px">Have an account?</span><button type="button">Sign in</button></div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ══ CARRYLINK HEADER ══════════════════════════════════ -->
+  <header class="site-header" id="siteHeader">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle" id="menuToggle">Menu
+        <div class="hamburger" aria-hidden="true"><span></span><span></span><span></span></div>
+      </button>
+        <div class="hdiv"></div>
+        <div class="header-logo"><a href="#" class="logo-wm">Carry<span>Link</span></a></div>
+      </div>
+      <div class="header-right">
+        <nav class="header-nav">
+          <a href="#">How It Works</a>
+          <a href="#">Travelers</a>
+          <a href="#">Senders</a>
+          <a href="#" class="nav-active">My Account</a>
+          <button class="nav-signup" id="openModal">Sign Up</button>
+        </nav>
+        <button class="search-btn">Search
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7.5"/><line x1="17.5" y1="17.5" x2="22" y2="22"/></svg>
+      </button>
+      </div>
+    </div>
+  </header>
+
+
+  <div class="page-wrap">
+
+
+    <!-- ── PAGE BANNER ── -->
+    <div class="page-banner">
+      <div class="page-banner-inner">
+        <div class="page-banner-left">
+          <span class="page-eyebrow">Peer-to-Peer Delivery</span>
+          <h1 class="page-title">My <span>CarryLink</span> Account</h1>
+        </div>
+        <div class="page-banner-right">
+          <a href="#" class="banner-btn banner-btn-outline">
+            <i data-lucide="plane"></i> Post a Trip
+          </a>
+          <a href="#" class="banner-btn banner-btn-fill">
+            <i data-lucide="send"></i> Send a Package
+          </a>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- ── MAIN CONTAINER ── -->
+    <div class="container">
+
+
+      <!-- ══ SIDEBAR ══ -->
+      <aside class="sidebar">
+        <div class="sidebar-title">My Account</div>
+        <ul class="sidebar-menu">
+          <li><i data-lucide="layout-dashboard"></i> Overview</li>
+          <li class="active"><i data-lucide="package"></i> My Shipments</li>
+          <li><i data-lucide="plane"></i> My Trips</li>
+          <li><i data-lucide="credit-card"></i> Payments &amp; Escrow</li>
+          <li>
+            <i data-lucide="shield-check"></i> KYC Verification
+            <span class="kyc-pill pending">Pending</span>
+          </li>
+          <li><i data-lucide="star"></i> Reputation Score</li>
+          <li><i data-lucide="mail"></i> Messages</li>
+          <li><i data-lucide="settings"></i> Settings</li>
+          <div class="sidebar-divider"></div>
+          <li><i data-lucide="gift"></i> Refer &amp; Earn</li>
+          <li><i data-lucide="life-buoy"></i> Help &amp; Disputes</li>
+        </ul>
+      </aside>
+
+
+      <!-- ══ MAIN CONTENT ══ -->
+      <main class="main-content">
+
+
+        <!-- Breadcrumb -->
+        <div class="breadcrumb">
+          <a href="#">Home</a>
+          <i data-lucide="chevron-right"></i>
+          <a href="#">Account</a>
+          <i data-lucide="chevron-right"></i>
+          My Shipments
+        </div>
+
+
+        <!-- ════ DIVISION 1 — Tabs + Search ════ -->
+        <div class="div-controls">
+
+
+          <div class="order-tabs">
+            <div class="order-tab active">
+              <i data-lucide="list"></i> All Shipments
+            </div>
+            <div class="order-tab">
+              <i data-lucide="clock"></i> Pending
+              <span class="tab-count">2</span>
+            </div>
+            <div class="order-tab">
+              <i data-lucide="truck"></i> In Transit
+            </div>
+            <div class="order-tab">
+              <i data-lucide="package-check"></i> Delivered
+            </div>
+            <div class="order-tab">
+              <i data-lucide="alert-circle"></i> Disputed
+            </div>
+          </div>
+
+
+          <div class="search-bar">
+            <div class="search-input-group">
+              <select class="search-select">
+              <option>Shipment</option>
+              <option>Traveler</option>
+              <option>Corridor</option>
+            </select>
+              <div class="search-inner">
+                <i data-lucide="search"></i>
+                <input type="text" class="search-input" placeholder="Tracking ID, traveler name or route…">
+              </div>
+            </div>
+            <button class="search-btn">
+            <i data-lucide="search"></i> Search
+          </button>
+            <select class="filter-select">
+            <option>All time</option>
+            <option>Last 30 days</option>
+            <option>Last 6 months</option>
+            <option>2025</option>
+          </select>
+          </div>
+
+
+        </div>
+
+
+        <!-- ════ DIVISION 2 — Empty state ════ -->
+        <div class="div-empty">
+          <div class="empty-icon-wrap">
+            <i data-lucide="package-open"></i>
+          </div>
+          <div class="empty-title">No shipments yet</div>
+          <p class="empty-text">
+            You haven't sent anything yet. Post your first item request and get matched with a verified traveler heading
+            your way — for up to 68% less than DHL.
+          </p>
+          <div class="empty-actions">
+            <a href="#" class="btn-ghost"><i data-lucide="arrow-left-right"></i> Switch account</a>
+            <a href="#" class="btn-fill"><i data-lucide="send"></i> Send a Package</a>
+          </div>
+        </div>
+
+
+        <!-- ════ DIVISION 3 — Available Travelers ════ -->
+        <div class="div-recs">
+          <div class="recs-header">
+            <div class="recs-title">
+              <i data-lucide="users"></i> Verified Travelers on Your Routes
+            </div>
+            <a href="#" class="recs-link">Browse all travelers <i data-lucide="arrow-right"></i></a>
+          </div>
+
+
+          <div class="traveler-grid">
+
+
+            <div class="traveler-card">
+              <div class="tc-img-wrap">
+                <img class="tc-img"
+                src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=300&fit=crop&q=80"
+                alt="Amaka Osei">
+                <span class="tc-badge">Verified</span>
+              </div>
+              <div class="tc-body">
+                <div class="tc-name">Amaka Osei</div>
+                <div class="tc-route">
+                  <i data-lucide="map-pin"></i> Lagos &rarr; Toronto
+                </div>
+                <hr class="tc-sep">
+                <div class="tc-meta">
+                  <div class="tc-date"><i data-lucide="calendar"></i> 18 Mar 2026</div>
+                  <div class="tc-price">$9/kg</div>
+                </div>
+                <div class="tc-rating" style="margin-top:6px">
+                  <i data-lucide="star"></i> 4.9 &nbsp;·&nbsp; 38 deliveries
+                </div>
+              </div>
+            </div>
+
+
+            <div class="traveler-card">
+              <div class="tc-img-wrap">
+                <img class="tc-img"
+                src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=300&fit=crop&q=80"
+                alt="Emeka Nwosu">
+                <span class="tc-badge">Verified</span>
+              </div>
+              <div class="tc-body">
+                <div class="tc-name">Emeka Nwosu</div>
+                <div class="tc-route"><i data-lucide="map-pin"></i> Abuja &rarr; London</div>
+                <hr class="tc-sep">
+                <div class="tc-meta">
+                  <div class="tc-date"><i data-lucide="calendar"></i> 21 Mar 2026</div>
+                  <div class="tc-price">$11/kg</div>
+                </div>
+                <div class="tc-rating" style="margin-top:6px">
+                  <i data-lucide="star"></i> 4.8 &nbsp;·&nbsp; 22 deliveries
+                </div>
+              </div>
+            </div>
+
+
+            <div class="traveler-card">
+              <div class="tc-img-wrap">
+                <img class="tc-img"
+                src="https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&h=300&fit=crop&q=80"
+                alt="Fatima Al-Hassan">
+                <span class="tc-badge">Verified</span>
+              </div>
+              <div class="tc-body">
+                <div class="tc-name">Fatima Al-Hassan</div>
+                <div class="tc-route"><i data-lucide="map-pin"></i> Lagos &rarr; Houston</div>
+                <hr class="tc-sep">
+                <div class="tc-meta">
+                  <div class="tc-date"><i data-lucide="calendar"></i> 25 Mar 2026</div>
+                  <div class="tc-price">$10/kg</div>
+                </div>
+                <div class="tc-rating" style="margin-top:6px">
+                  <i data-lucide="star"></i> 5.0 &nbsp;·&nbsp; 47 deliveries
+                </div>
+              </div>
+            </div>
+
+
+            <div class="traveler-card">
+              <div class="tc-img-wrap">
+                <img class="tc-img"
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=300&fit=crop&q=80"
+                alt="Taiwo Adeyemi">
+                <span class="tc-badge">Verified</span>
+              </div>
+              <div class="tc-body">
+                <div class="tc-name">Taiwo Adeyemi</div>
+                <div class="tc-route"><i data-lucide="map-pin"></i> Ibadan &rarr; Manchester</div>
+                <hr class="tc-sep">
+                <div class="tc-meta">
+                  <div class="tc-date"><i data-lucide="calendar"></i> 29 Mar 2026</div>
+                  <div class="tc-price">$12/kg</div>
+                </div>
+                <div class="tc-rating" style="margin-top:6px">
+                  <i data-lucide="star"></i> 4.7 &nbsp;·&nbsp; 15 deliveries
+                </div>
+              </div>
+            </div>
+
+
+          </div>
+        </div>
+
+
+      </main>
+    </div><!-- /container -->
+
+
+  </div><!-- /page-wrap -->
+
+
+
+
+  <!-- ══ CARRYLINK FOOTER ══════════════════════════════════ -->
+  <footer class="site-footer">
+    <img class="ft-bg-img"
+       src="https://www.airbus.com/themes/custom/airbus_web_experience_ui/assets/images/airbus-carbon-grid-cropped-lg.png"
+       alt="">
+    <div class="ft-inner">
+      <div class="ft-main">
+        <div class="ft-brand">
+          <div class="ft-logo">Carry<span>Link</span></div>
+          <h2 class="ft-touch">Stay in the loop</h2>
+          <div class="ft-social">
+            <a href="#" class="si" aria-label="LinkedIn"><svg viewBox="0 0 24 24">
+                <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                <rect x="2" y="9" width="4" height="12" />
+                <circle cx="4" cy="4" r="2" />
+              </svg></a>
+            <a href="#" class="si" aria-label="X"><svg viewBox="0 0 24 24">
+                <path
+                  d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg></a>
+            <a href="#" class="si sk" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg></a>
+            <a href="#" class="si" aria-label="TikTok"><svg viewBox="0 0 24 24">
+                <path
+                  d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.63z" />
+              </svg></a>
+          </div>
+          <a href="#" class="ft-contact">Contact us</a>
+        </div>
+        <div class="ft-col">
+          <h3 class="ft-col-h">Platform</h3>
+          <ul class="ft-list">
+            <li><a href="#">How It Works</a></li>
+            <li><a href="#">For Senders</a></li>
+            <li><a href="#">For Travelers</a></li>
+            <li><a href="#">Prohibited Items Policy</a></li>
+            <li><a href="#">Escrow &amp; Payments</a></li>
+            <li><a href="#">Dispute Resolution</a></li>
+          </ul>
+          <h3 class="ft-col-h">Trust &amp; Safety</h3>
+          <ul class="ft-list">
+            <li><a href="#">KYC Verification</a></li>
+            <li><a href="#">Reputation Scores</a></li>
+            <li><a href="#">Insurance</a></li>
+            <li><a href="#">Report a Problem</a></li>
+          </ul>
+        </div>
+        <div class="ft-col">
+          <h3 class="ft-col-h">Company</h3>
+          <ul class="ft-list">
+            <li><a href="#">About CarryLink</a></li>
+            <li><a href="#">Blog &amp; Updates</a></li>
+            <li><a href="#">Press Kit
+                <span class="ei"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span></a>
+            </li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Investors</a></li>
+          </ul>
+          <h3 class="ft-col-h">Active Corridors</h3>
+          <ul class="ft-list">
+            <li><a href="#">Nigeria &#8596; Canada</a></li>
+            <li><a href="#">Nigeria &#8596; United Kingdom</a></li>
+            <li><a href="#">Nigeria &#8596; United States</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="ft-closure">
+      <div class="ft-cbar">
+        <nav class="ft-legal">
+          <a href="#">Privacy Policy</a><a href="#">Terms of Use</a><a href="#">Cookie Policy</a><a
+            href="#">Compliance</a><button type="button">Cookie Settings</button>
+        </nav>
+        <p class="ft-copy">&copy; CarryLink 2026. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+
+
+
+  <script>
+    lucide.createIcons();
+
+
+  /* ── Header scroll behaviour (from homepage) ── */
+  const header = document.getElementById('siteHeader');
+  let last = window.scrollY, tick = false;
+  function onScroll() {
+    const cur = window.scrollY, d = cur - last;
+    header.classList.toggle('scrolled', cur > 80);
+    if (d > 5 && cur > 120) header.classList.add('hidden');
+    else if (d < -5) header.classList.remove('hidden');
+    last = cur; tick = false;
+  }
+  window.addEventListener('scroll', () => { if (!tick) { requestAnimationFrame(onScroll); tick = true; } }, { passive: true });
+
+
+  document.getElementById('menuToggle').addEventListener('click', function () { this.classList.toggle('active'); });
+
+
+  /* ── Tab switching ── */
+  document.querySelectorAll('.order-tab').forEach(tab => {
+    tab.addEventListener('click', function () {
+      document.querySelectorAll('.order-tab').forEach(t => t.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+
+  /* ── Sidebar switching ── */
+  document.querySelectorAll('.sidebar-menu li').forEach(item => {
+    item.addEventListener('click', function () {
+      document.querySelectorAll('.sidebar-menu li').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+
+  /* ── Modal (identical to homepage) ── */
+  (function () {
+    const backdrop = document.getElementById('modalBackdrop'),
+          closeBtn = document.getElementById('modalClose'),
+          openBtn  = document.getElementById('openModal'),
+          screenEmail = document.getElementById('screenEmail'),
+          screenOtp   = document.getElementById('screenOtp'),
+          emailInput  = document.getElementById('emailInput'),
+          continueBtn = document.getElementById('continueBtn'),
+          otpEmailDisplay = document.getElementById('otpEmailDisplay'),
+          otpBack = document.getElementById('otpBack'),
+          modifyEmail = document.getElementById('modifyEmail'),
+          otpBoxes = Array.from(document.querySelectorAll('.otp-box')),
+          registerBtn = document.getElementById('registerBtn'),
+          resendTimer = document.getElementById('resendTimer'),
+          resendLink  = document.getElementById('resendLink');
+
+
+    function openModal()  { backdrop.classList.add('open'); document.body.style.overflow = 'hidden'; showScreen('email'); setTimeout(() => emailInput.focus(), 320); }
+    function closeModal() { backdrop.classList.remove('open'); document.body.style.overflow = ''; }
+    function showScreen(n) { screenEmail.classList.toggle('active', n === 'email'); screenOtp.classList.toggle('active', n === 'otp'); }
+
+
+    openBtn.addEventListener('click', openModal);
+    closeBtn.addEventListener('click', closeModal);
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) closeModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+
+    emailInput.addEventListener('input', () => { continueBtn.disabled = !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.value.trim()); });
+    continueBtn.addEventListener('click', () => { if (continueBtn.disabled) return; otpEmailDisplay.textContent = emailInput.value.trim(); showScreen('otp'); startResendTimer(); otpBoxes[0].focus(); });
+    otpBack.addEventListener('click', () => showScreen('email'));
+    modifyEmail.addEventListener('click', () => showScreen('email'));
+
+
+    otpBoxes.forEach((box, i) => {
+      box.addEventListener('input', () => { box.value = box.value.replace(/[^0-9]/g, '').slice(0, 1); if (box.value && i < otpBoxes.length - 1) otpBoxes[i + 1].focus(); updateRegisterBtn(); });
+      box.addEventListener('keydown', e => { if (e.key === 'Backspace' && !box.value && i > 0) { otpBoxes[i - 1].focus(); otpBoxes[i - 1].value = ''; } });
+      box.addEventListener('paste', e => { e.preventDefault(); const p = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, ''); p.split('').slice(0, 4).forEach((ch, j) => { if (otpBoxes[j]) otpBoxes[j].value = ch; }); otpBoxes[Math.min(p.length, 3)].focus(); updateRegisterBtn(); });
+    });
+
+
+    function updateRegisterBtn() { const filled = otpBoxes.every(b => b.value.length === 1); registerBtn.disabled = !filled; otpBoxes.forEach(b => b.classList.toggle('filled', b.value.length === 1)); }
+
+
+    let countInterval = null;
+    function startResendTimer(sec = 60) { clearInterval(countInterval); resendTimer.style.display = 'inline'; resendLink.style.display = 'none'; let s = sec; resendTimer.textContent = `(${s}s) Resend code`; countInterval = setInterval(() => { s--; if (s <= 0) { clearInterval(countInterval); resendTimer.style.display = 'none'; resendLink.style.display = 'inline'; } else { resendTimer.textContent = `(${s}s) Resend code`; } }, 1000); }
+    resendLink.addEventListener('click', () => startResendTimer());
+  })();
+  </script>
+</body>
+
+</html>

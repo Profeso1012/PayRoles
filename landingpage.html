@@ -1,0 +1,2573 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>CarryLink — Peer-to-Peer International Delivery</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;1,700&display=swap');
+
+    :root {
+      --ab: #23bcf2;
+      --ab-d: rgb(4, 55, 75);
+      --ab-dk: #032b38;
+      --wh: #fff;
+      --gl: #f0faff;
+      --gt: #2d7a96;
+      --dv: rgba(255, 255, 255, 0.2);
+      --hh: 79px
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      overflow-x: hidden;
+      color: #0d1a1f
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #90d8ee;
+      border-radius: 4px
+    }
+
+    .site-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--hh);
+      background: rgba(3, 43, 56, 0.26);
+      backdrop-filter: blur(20px) saturate(1.5);
+      -webkit-backdrop-filter: blur(20px) saturate(1.5);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.13);
+      z-index: 1000;
+      display: flex;
+      align-items: stretch;
+      transition: transform .38s cubic-bezier(.4, 0, .2, 1), background .3s ease;
+      will-change: transform
+    }
+
+    .site-header.scrolled {
+      background: rgba(2, 38, 52, 0.82)
+    }
+
+    .site-header.hidden {
+      transform: translateY(-100%)
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: stretch;
+      width: 100%
+    }
+
+    .header-left {
+      display: flex;
+      align-items: stretch;
+      flex-shrink: 0
+    }
+
+    .menu-toggle {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 0 28px 0 72px;
+      color: white;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: .02em;
+      position: relative
+    }
+
+    .menu-toggle::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease
+    }
+
+    .menu-toggle:hover::after,
+    .menu-toggle.active::after {
+      transform: scaleX(1)
+    }
+
+    .hamburger {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      width: 22px
+    }
+
+    .hamburger span {
+      display: block;
+      height: 1.5px;
+      background: white;
+      border-radius: 1px
+    }
+
+    .hamburger span:nth-child(1) {
+      width: 22px
+    }
+
+    .hamburger span:nth-child(2) {
+      width: 16px
+    }
+
+    .hamburger span:nth-child(3) {
+      width: 10px
+    }
+
+    .hdiv {
+      width: 1px;
+      background: var(--dv);
+      align-self: stretch;
+      flex-shrink: 0
+    }
+
+    .header-logo {
+      display: flex;
+      align-items: center;
+      padding: 0 52px;
+      flex-shrink: 0
+    }
+
+    .logo-wm {
+      font-size: 26px;
+      font-weight: 700;
+      color: white;
+      letter-spacing: .02em;
+      text-decoration: none;
+      display: block
+    }
+
+    .logo-wm span {
+      color: #23bcf2
+    }
+
+    .header-right {
+      display: flex;
+      align-items: stretch;
+      margin-left: auto
+    }
+
+    .header-nav {
+      display: flex;
+      align-items: stretch
+    }
+
+    .header-nav a,
+    .header-nav button {
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      color: rgba(255, 255, 255, .9);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 400;
+      position: relative;
+      white-space: nowrap;
+      transition: color .15s;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit
+    }
+
+    .header-nav a::after,
+    .header-nav button::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease
+    }
+
+    .header-nav a:hover,
+    .header-nav button:hover {
+      color: #23bcf2
+    }
+
+    .header-nav a:hover::after,
+    .header-nav button:hover::after {
+      transform: scaleX(1)
+    }
+
+    .nav-signup {
+      background: rgba(35, 188, 242, .18) !important;
+      color: white !important
+    }
+
+    .nav-signup:hover {
+      background: rgba(35, 188, 242, .30) !important
+    }
+
+    .search-btn {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 72px 0 22px;
+      color: rgba(255, 255, 255, .9);
+      background: none;
+      border: none;
+      border-left: 1px solid var(--dv);
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 400;
+      position: relative;
+      white-space: nowrap;
+      transition: color .15s
+    }
+
+    .search-btn::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: #23bcf2;
+      transform: scaleX(0);
+      transform-origin: left;
+      transition: transform .22s ease
+    }
+
+    .search-btn:hover {
+      color: #23bcf2
+    }
+
+    .search-btn:hover::after {
+      transform: scaleX(1)
+    }
+
+    .search-btn svg {
+      display: block;
+      width: 20px;
+      height: 20px
+    }
+
+
+    /* ── HERO (video version  in from Airbus) ── */
+    .hero {
+      position: relative;
+      height: 100vh;
+      min-height: 700px;
+      overflow: hidden;
+      display: flex;
+      align-items: center
+    }
+
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      z-index: 1
+    }
+
+    .hero-bg video,
+    .hero-bg img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block
+    }
+
+    .hero-ov {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      background: linear-gradient(105deg, rgba(3, 43, 56, .82) 0%, rgba(3, 43, 56, .46) 55%, rgba(3, 43, 56, .12) 100%)
+    }
+
+    .hero-cnt {
+      position: relative;
+      z-index: 3;
+      max-width: 600px;
+      padding: 0 80px;
+      color: white;
+      margin-top: 40px
+    }
+
+    .hero-eyebrow {
+      display: inline-block;
+      background: #23bcf2;
+      color: white;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 20px
+    }
+
+    .hero-title {
+      font-size: 52px;
+      font-weight: 700;
+      line-height: 1.06
+    }
+
+    .hero-title em {
+      color: #23bcf2;
+      font-style: normal
+    }
+
+    .hero-sub {
+      font-size: 18px;
+      line-height: 1.6;
+      opacity: .85;
+      margin-top: 16px;
+      font-weight: 400
+    }
+
+    .hero-card {
+      position: absolute;
+      right: 80px;
+      bottom: 110px;
+      background: rgba(3, 28, 40, .86);
+      backdrop-filter: blur(10px);
+      padding: 28px 32px;
+      max-width: 340px;
+      color: white;
+      z-index: 3
+    }
+
+    .hero-tag {
+      display: inline-block;
+      background: #23bcf2;
+      color: white;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: .06em
+    }
+
+    .hero-date {
+      font-size: 12px;
+      opacity: .7;
+      margin-bottom: 9px
+    }
+
+    .hero-htitle {
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1.35;
+      margin-bottom: 18px
+    }
+
+    .hero-link {
+      color: #23bcf2;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 500;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px
+    }
+
+    .hero-link:hover {
+      text-decoration: underline
+    }
+
+    .scroll-ind {
+      position: absolute;
+      bottom: 38px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 3;
+      width: 38px;
+      height: 38px;
+      border: 1.5px solid rgba(35, 188, 242, .65);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      animation: bounce 2.4s ease-in-out infinite
+    }
+
+    @keyframes bounce {
+
+      0%,
+      80%,
+      100% {
+        transform: translateX(-50%) translateY(0)
+      }
+
+      40% {
+        transform: translateX(-50%) translateY(-9px)
+      }
+    }
+
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 56px
+    }
+
+    .lbl {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+      color: var(--gt);
+      margin-bottom: 10px
+    }
+
+    .sec-title {
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--ab);
+      line-height: 1.08;
+      position: relative;
+      padding-bottom: 20px
+    }
+
+    .sec-title::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 36px;
+      height: 3px;
+      background: var(--ab)
+    }
+
+    .arrows {
+      display: flex;
+      gap: 10px;
+      margin-top: 28px
+    }
+
+    .arr {
+      width: 48px;
+      height: 48px;
+      border: 1.5px solid #90d8ee;
+      border-radius: 50%;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s
+    }
+
+    .arr:hover {
+      background: var(--ab);
+      border-color: var(--ab)
+    }
+
+    .arr:hover svg {
+      stroke: white
+    }
+
+    .arr svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--ab);
+      stroke-width: 2;
+      fill: none
+    }
+
+    .arr:disabled {
+      opacity: .35;
+      cursor: default;
+      pointer-events: none
+    }
+
+    .btn-w {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: white;
+      color: var(--ab);
+      padding: 13px 26px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      transition: background .2s;
+      border: none;
+      cursor: pointer
+    }
+
+    .btn-w:hover {
+      background: #d8f4ff
+    }
+
+    .art-sec {
+      background: var(--ab-d);
+      padding: 80px 0
+    }
+
+    .art-inner {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 72px;
+      align-items: center;
+      padding: 0 56px
+    }
+
+    .art-img img {
+      width: 100%;
+      border-radius: 3px;
+      display: block
+    }
+
+    .art-cnt {
+      color: white
+    }
+
+    .art-h {
+      font-size: 36px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 16px
+    }
+
+    .art-t {
+      font-size: 16px;
+      line-height: 1.65;
+      margin-bottom: 32px;
+      opacity: .88
+    }
+
+    .purp-sec {
+      padding: 80px 0;
+      background: white;
+      overflow: hidden
+    }
+
+    .purp-outer {
+      display: flex;
+      align-items: flex-start;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding-left: 56px
+    }
+
+    .purp-sidebar {
+      flex: 0 0 280px;
+      padding-right: 44px;
+      padding-top: 4px
+    }
+
+    .purp-sidebar .sec-title {
+      font-size: 38px
+    }
+
+    .purp-desc {
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--gt);
+      margin-top: 14px
+    }
+
+    .purp-clip {
+      flex: 1;
+      overflow: hidden;
+      min-width: 0
+    }
+
+    .purp-track {
+      display: flex;
+      gap: 16px;
+      list-style: none;
+      padding-right: 56px
+    }
+
+    .p-card {
+      background: white;
+      border-radius: 3px;
+      overflow: hidden;
+      cursor: pointer;
+      transition: box-shadow .3s, transform .3s, opacity .25s
+    }
+
+    .p-card:hover {
+      box-shadow: 0 10px 28px rgba(35, 188, 242, .15);
+      transform: translateY(-3px)
+    }
+
+    .p-card--feat {
+      flex: 0 0 340px
+    }
+
+    .p-card--feat .p-card-img {
+      height: 256px
+    }
+
+    .p-card--reg {
+      flex: 0 0 230px
+    }
+
+    .p-card--reg .p-card-img {
+      height: 172px
+    }
+
+    .p-card-img {
+      overflow: hidden
+    }
+
+    .p-card-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform .45s ease;
+      display: block
+    }
+
+    .p-card:hover .p-card-img img {
+      transform: scale(1.06)
+    }
+
+    .p-card-body {
+      padding: 14px 16px 18px;
+      background: white
+    }
+
+    .p-card-tags {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+      flex-wrap: wrap
+    }
+
+    .p-tag-dark {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      background: var(--ab);
+      color: white
+    }
+
+    .p-tag-light {
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border: 1px solid #90d8ee;
+      color: var(--gt)
+    }
+
+    .p-card-title {
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #0d1a1f;
+      margin-bottom: 12px
+    }
+
+    .p-card-sep {
+      border: none;
+      border-top: 1px solid #d8f4ff;
+      margin-bottom: 12px
+    }
+
+    .p-card-meta {
+      font-size: 11px;
+      color: #7d7d7d;
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    .p-card-dot {
+      width: 3px;
+      height: 3px;
+      background: #90d8ee;
+      border-radius: 50%;
+      flex-shrink: 0
+    }
+
+    .p-card.fading {
+      opacity: 0
+    }
+
+    .mis-sec {
+      padding: 80px 0;
+      background: white
+    }
+
+    .mis-grid {
+      display: flex;
+      height: 520px
+    }
+
+    .mp {
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      flex: 1;
+      transition: flex .45s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    .mp:hover {
+      flex: 1.8
+    }
+
+    .mp img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform .45s ease
+    }
+
+    .mp:hover img {
+      transform: scale(1.06)
+    }
+
+    .mp-ov {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 50, 70, .38);
+      transition: background .3s
+    }
+
+    .mp:hover .mp-ov {
+      background: rgba(0, 50, 70, .18)
+    }
+
+    .mp-lbl {
+      position: absolute;
+      bottom: 28px;
+      left: 24px;
+      color: white;
+      font-size: 18px;
+      font-weight: 600;
+      z-index: 2
+    }
+
+    .mp-plus {
+      position: absolute;
+      top: 22px;
+      right: 18px;
+      width: 26px;
+      height: 26px;
+      z-index: 2
+    }
+
+    .mp-plus::before,
+    .mp-plus::after {
+      content: '';
+      position: absolute;
+      background: #23bcf2;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%)
+    }
+
+    .mp-plus::before {
+      width: 14px;
+      height: 1.5px
+    }
+
+    .mp-plus::after {
+      width: 1.5px;
+      height: 14px
+    }
+
+    .news-sec {
+      padding: 80px 0;
+      background: var(--gl)
+    }
+
+    .news-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 28px
+    }
+
+    .news-hdr-left .sec-title {
+      white-space: nowrap
+    }
+
+    .news-top {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      margin-bottom: 16px;
+      height: 460px
+    }
+
+    .news-bottom {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      height: 460px
+    }
+
+    .nc {
+      position: relative;
+      overflow: hidden;
+      cursor: pointer;
+      border-radius: 2px;
+      height: 100%;
+      display: block
+    }
+
+    .nc img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform .45s ease
+    }
+
+    .nc:hover img {
+      transform: scale(1.05)
+    }
+
+    .nc-ov {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(4, 32, 48, .06) 0%, rgba(4, 32, 48, .16) 32%, rgba(4, 32, 48, .68) 66%, rgba(4, 32, 48, .92) 100%);
+      transition: background .3s
+    }
+
+    .nc:hover .nc-ov {
+      background: linear-gradient(to bottom, rgba(4, 32, 48, .10) 0%, rgba(4, 32, 48, .26) 32%, rgba(4, 32, 48, .78) 66%, rgba(4, 32, 48, .97) 100%)
+    }
+
+    .nc-body {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 22px 24px 24px;
+      color: white;
+      z-index: 2
+    }
+
+    .nc-tags {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 9px;
+      flex-wrap: wrap
+    }
+
+    .nc-tag {
+      padding: 4px 11px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      background: rgba(35, 188, 242, .88);
+      color: white
+    }
+
+    .nc-tag-outline {
+      padding: 4px 11px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      border: 1.5px solid rgba(255, 255, 255, .55);
+      color: rgba(255, 255, 255, .9)
+    }
+
+    .nc--feat .nc-title {
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.24;
+      margin-bottom: 8px
+    }
+
+    .nc--sm .nc-title,
+    .nc--bt .nc-title {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.3;
+      margin-bottom: 6px
+    }
+
+    .nc-desc {
+      font-size: 14px;
+      line-height: 1.55;
+      opacity: .84;
+      margin-bottom: 9px
+    }
+
+    .nc-meta {
+      font-size: 12px;
+      opacity: .62
+    }
+
+    .nc--feat img {
+      transition: transform .45s ease, opacity .32s ease
+    }
+
+    .nc--feat.fading img {
+      opacity: 0;
+      transform: scale(1.04)
+    }
+
+    .fin-bar {
+      background: white;
+      padding: 44px 0;
+      border-bottom: 1px solid #b8eaf5
+    }
+
+    .fin-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0 56px
+    }
+
+    .fi {
+      text-align: center;
+      padding: 0 28px;
+      border-right: 1px solid #b8eaf5
+    }
+
+    .fi:last-child {
+      border-right: none
+    }
+
+    .fi-l {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--gt);
+      margin-bottom: 8px
+    }
+
+    .fi-v {
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--ab);
+      line-height: 1
+    }
+
+    .fi-u {
+      font-size: 13px;
+      color: var(--gt);
+      margin-top: 4px
+    }
+
+    .fi-c {
+      font-size: 13px;
+      color: #28a745;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      margin-top: 4px
+    }
+
+    .car-sec {
+      background: var(--ab-d);
+      padding: 96px 0;
+      color: white
+    }
+
+    .car-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 72px;
+      align-items: start
+    }
+
+    .car-t {
+      font-size: 44px;
+      font-weight: 700;
+      line-height: 1.1;
+      margin: 14px 0 22px;
+      position: relative;
+      padding-bottom: 20px
+    }
+
+    .car-t::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 36px;
+      height: 3px;
+      background: #23bcf2
+    }
+
+    .car-tx {
+      font-size: 17px;
+      line-height: 1.6;
+      margin-bottom: 32px;
+      opacity: .88
+    }
+
+    .car-stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px
+    }
+
+    .sc-card {
+      padding: 32px 28px;
+      background: rgba(255, 255, 255, .06);
+      border: 1px solid rgba(35, 188, 242, .18);
+      border-radius: 2px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-start;
+      min-height: 180px;
+      position: relative
+    }
+
+    .sc-ic {
+      position: absolute;
+      top: 24px;
+      right: 24px;
+      width: 38px;
+      height: 38px;
+      opacity: .55
+    }
+
+    .sc-ic svg {
+      width: 38px;
+      height: 38px;
+      stroke: #23bcf2;
+      stroke-width: 1.5;
+      fill: none
+    }
+
+    .sc-n {
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 8px;
+      font-variant-numeric: tabular-nums;
+      color: #23bcf2
+    }
+
+    .sc-lb {
+      font-size: 13px;
+      opacity: .65;
+      font-weight: 400
+    }
+
+    .fac-sec {
+      background: var(--ab-dk);
+      padding: 60px 0
+    }
+
+    .fac-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 32px
+    }
+
+    .fac-t {
+      font-size: 36px;
+      font-weight: 700;
+      color: white;
+      position: relative;
+      padding-bottom: 16px
+    }
+
+    .fac-t::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 36px;
+      height: 3px;
+      background: #23bcf2
+    }
+
+    .fac-clip {
+      overflow: hidden
+    }
+
+    .fac-track {
+      display: flex;
+      gap: 16px;
+      transition: transform .45s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    .fc {
+      position: relative;
+      aspect-ratio: 3/4;
+      overflow: hidden;
+      border-radius: 2px;
+      cursor: pointer;
+      flex-shrink: 0
+    }
+
+    .fc img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transition: transform .45s ease;
+      display: block
+    }
+
+    .fc:hover img {
+      transform: scale(1.06)
+    }
+
+    .fc-ov {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(4, 32, 48, .92) 0%, rgba(4, 32, 48, .2) 50%, transparent 80%);
+      transition: background .45s ease;
+      pointer-events: none
+    }
+
+    .fc:hover .fc-ov {
+      background: linear-gradient(to bottom, rgba(4, 32, 48, .72) 0%, rgba(4, 32, 48, .82) 45%, rgba(4, 32, 48, .97) 100%)
+    }
+
+    .fc-info {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      right: 20px;
+      color: white;
+      transition: bottom .45s cubic-bezier(.4, 0, .2, 1)
+    }
+
+    .fc:hover .fc-info {
+      bottom: calc(100% - 115px)
+    }
+
+    .fc-name {
+      font-size: 16px;
+      font-weight: 600;
+      line-height: 1.3
+    }
+
+    .fc-role {
+      font-size: 12px;
+      opacity: .9;
+      margin-top: 3px;
+      color: #23bcf2
+    }
+
+    .fc-meet {
+      display: block;
+      width: 100%;
+      border: 1.5px solid rgba(35, 188, 242, .7);
+      color: white;
+      background: transparent;
+      padding: 7px 14px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      font-family: inherit;
+      margin-top: 11px;
+      text-align: center;
+      opacity: 0;
+      transform: translateY(7px);
+      transition: opacity .3s .1s, transform .3s .1s, border-color .2s, background .2s
+    }
+
+    .fc:hover .fc-meet {
+      opacity: 1;
+      transform: translateY(0)
+    }
+
+    .fc-meet:hover {
+      border-color: #23bcf2;
+      background: rgba(35, 188, 242, .14)
+    }
+
+    .fac-arrows {
+      display: flex;
+      gap: 10px
+    }
+
+    .fac-arr {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(35, 188, 242, .4);
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .2s, border-color .2s
+    }
+
+    .fac-arr:hover {
+      background: var(--ab)
+    }
+
+    .fac-arr:hover svg {
+      stroke: white
+    }
+
+    .fac-arr svg {
+      width: 17px;
+      height: 17px;
+      stroke: #23bcf2;
+      stroke-width: 2;
+      fill: none
+    }
+
+    .fac-arr:disabled {
+      opacity: .35;
+      cursor: default;
+      pointer-events: none
+    }
+
+
+    /* ── FOOTER: Airbus background treatment, CarryLink colours ── */
+    .site-footer {
+      position: relative;
+      background-color: var(--ab-d);
+      color: rgb(210, 244, 255);
+      border-top: 1px solid rgba(35, 188, 242, .2);
+      overflow: hidden;
+    }
+
+    /* Dot grid — from Airbus footer, tinted CarryLink cyan */
+    .site-footer::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(35, 188, 242, .052) 1px, transparent 1px);
+      background-size: 22px 22px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Carbon-grid image — straight from Airbus footer */
+    .ft-bg-img {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 100%;
+      display: block;
+      opacity: .45;
+      /* slightly lighter so CarryLink cyan pops */
+      pointer-events: none;
+      z-index: 0;
+      object-fit: cover;
+    }
+
+    .ft-inner {
+      position: relative;
+      z-index: 1;
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 72px 56px 48px;
+      display: flex;
+      flex-direction: column
+    }
+
+    .ft-main {
+      display: grid;
+      grid-template-columns: 320px 1fr 1fr;
+      gap: 72px
+    }
+
+    .ft-brand {
+      padding-top: 4px
+    }
+
+    .ft-logo {
+      font-size: 28px;
+      font-weight: 700;
+      color: white;
+      line-height: 1;
+      display: inline-block;
+      margin-bottom: 38px
+    }
+
+    .ft-logo span {
+      color: #23bcf2
+    }
+
+    .ft-touch {
+      font-size: 20px;
+      font-weight: 400;
+      color: rgb(210, 244, 255);
+      margin-bottom: 22px
+    }
+
+    .ft-social {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 38px
+    }
+
+    .si {
+      width: 44px;
+      height: 44px;
+      min-width: 44px;
+      max-width: 44px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(35, 188, 242, .28);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      text-decoration: none;
+      transition: background .2s, border-color .2s;
+      flex-shrink: 0;
+      flex-grow: 0
+    }
+
+    .si:hover {
+      background: rgba(35, 188, 242, .15);
+      border-color: rgba(35, 188, 242, .7)
+    }
+
+    .si svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+      display: block
+    }
+
+    .si.sk svg {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .ft-contact {
+      display: inline-block;
+      background: #23bcf2;
+      color: white;
+      padding: 14px 32px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background .2s;
+      border-radius: 2px
+    }
+
+    .ft-contact:hover {
+      background: #1aa6d4
+    }
+
+    .ft-col {
+      padding-top: 4px
+    }
+
+    .ft-col-h {
+      font-size: 18px;
+      font-weight: 500;
+      color: white;
+      margin-bottom: 22px
+    }
+
+    .ft-list {
+      list-style: none;
+      margin-bottom: 48px
+    }
+
+    .ft-list li {
+      margin-bottom: 14px
+    }
+
+    .ft-list a {
+      color: rgba(210, 244, 255, .8);
+      text-decoration: none;
+      font-size: 15px;
+      line-height: 1.5;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      transition: color .2s
+    }
+
+    .ft-list a:hover {
+      color: #23bcf2
+    }
+
+    .ei {
+      display: inline-flex;
+      align-items: center;
+      width: 13px;
+      height: 13px;
+      flex-shrink: 0;
+      opacity: .55
+    }
+
+    .ei svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round
+    }
+
+    .ft-closure {
+      position: relative;
+      z-index: 1
+    }
+
+    .ft-cbar {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 30px 56px 36px;
+      border-top: 1px solid rgba(35, 188, 242, .15);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px
+    }
+
+    .ft-legal {
+      display: flex;
+      gap: 26px;
+      flex-wrap: wrap;
+      align-items: center
+    }
+
+    .ft-legal a,
+    .ft-legal button {
+      color: rgba(210, 244, 255, .5);
+      text-decoration: none;
+      font-size: 13px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 0;
+      transition: color .2s
+    }
+
+    .ft-legal a:hover,
+    .ft-legal button:hover {
+      color: #23bcf2
+    }
+
+    .ft-copy {
+      font-size: 13px;
+      color: rgba(210, 244, 255, .4)
+    }
+
+
+    /* Modal */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 9000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(4, 32, 48, .48);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .28s ease
+    }
+
+    .modal-backdrop.open {
+      opacity: 1;
+      pointer-events: all
+    }
+
+    .modal {
+      background: white;
+      border-radius: 16px;
+      width: 420px;
+      max-width: calc(100vw - 32px);
+      padding: 40px 36px 32px;
+      position: relative;
+      transform: translateY(18px) scale(.97);
+      transition: transform .3s cubic-bezier(.4, 0, .2, 1);
+      box-shadow: 0 24px 64px rgba(4, 32, 48, .28)
+    }
+
+    .modal-backdrop.open .modal {
+      transform: translateY(0) scale(1)
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: #f0faff;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background .18s
+    }
+
+    .modal-close:hover {
+      background: #d8f4ff
+    }
+
+    .modal-close svg {
+      width: 16px;
+      height: 16px;
+      stroke: #2d7a96;
+      stroke-width: 2;
+      fill: none
+    }
+
+    .modal-shield {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #2d7a96;
+      margin-bottom: 24px
+    }
+
+    .modal-shield svg {
+      width: 14px;
+      height: 14px;
+      stroke: #23bcf2;
+      stroke-width: 2;
+      fill: none;
+      flex-shrink: 0
+    }
+
+    .modal-screen {
+      display: none
+    }
+
+    .modal-screen.active {
+      display: block
+    }
+
+    .modal-title {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      color: #0d1a1f;
+      margin-bottom: 6px
+    }
+
+    .modal-sub {
+      font-size: 13px;
+      color: #757575;
+      text-align: center;
+      margin-bottom: 28px;
+      line-height: 1.5
+    }
+
+    .modal-input-wrap {
+      position: relative;
+      margin-bottom: 16px
+    }
+
+    .modal-input-wrap input {
+      width: 100%;
+      padding: 18px 16px 6px;
+      border: 1.5px solid #b8eaf5;
+      border-radius: 10px;
+      font-size: 15px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s;
+      background: white;
+      color: #0d1a1f
+    }
+
+    .modal-input-wrap input:focus {
+      border-color: #23bcf2
+    }
+
+    .modal-input-wrap label {
+      position: absolute;
+      top: 50%;
+      left: 16px;
+      transform: translateY(-50%);
+      font-size: 15px;
+      color: #aaa;
+      pointer-events: none;
+      transition: all .18s ease
+    }
+
+    .modal-input-wrap input:focus~label,
+    .modal-input-wrap input:not(:placeholder-shown)~label {
+      top: 10px;
+      font-size: 11px;
+      color: #23bcf2;
+      transform: translateY(0)
+    }
+
+    .modal-btn {
+      width: 100%;
+      padding: 16px;
+      background: #23bcf2;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background .2s, opacity .2s;
+      margin-bottom: 14px
+    }
+
+    .modal-btn:disabled {
+      background: #b8eaf5;
+      cursor: default;
+      color: #6ab8cc
+    }
+
+    .modal-btn:not(:disabled):hover {
+      background: #1aa6d4
+    }
+
+    .modal-divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0
+    }
+
+    .modal-divider::before,
+    .modal-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: #e0f5ff
+    }
+
+    .modal-divider span {
+      font-size: 12px;
+      color: #aaa;
+      white-space: nowrap
+    }
+
+    .modal-socials {
+      display: flex;
+      gap: 12px
+    }
+
+    .modal-soc {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 13px 10px;
+      border: 1.5px solid #b8eaf5;
+      border-radius: 10px;
+      background: white;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: inherit;
+      color: #0d1a1f;
+      transition: border-color .18s, background .18s
+    }
+
+    .modal-soc:hover {
+      border-color: #23bcf2;
+      background: #f0faff
+    }
+
+    .modal-soc img {
+      width: 20px;
+      height: 20px;
+      object-fit: contain
+    }
+
+    .modal-fine {
+      font-size: 11px;
+      color: #aaa;
+      text-align: center;
+      line-height: 1.55;
+      margin-top: 20px
+    }
+
+    .modal-fine a {
+      color: #2d7a96;
+      text-decoration: underline
+    }
+
+    .modal-trouble {
+      text-align: center;
+      margin-top: 12px
+    }
+
+    .modal-trouble button {
+      background: none;
+      border: none;
+      font-size: 13px;
+      color: #2d7a96;
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit
+    }
+
+    .otp-back {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      color: #2d7a96;
+      margin-bottom: 20px;
+      padding: 0
+    }
+
+    .otp-back svg {
+      width: 16px;
+      height: 16px;
+      stroke: #2d7a96;
+      stroke-width: 2;
+      fill: none
+    }
+
+    .otp-email-hint {
+      font-size: 13px;
+      color: #2d7a96;
+      text-align: center;
+      line-height: 1.55;
+      margin-bottom: 4px
+    }
+
+    .otp-email-val {
+      font-weight: 600;
+      color: #23bcf2;
+      word-break: break-all
+    }
+
+    .otp-modify {
+      text-align: center;
+      margin-bottom: 28px
+    }
+
+    .otp-modify button {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #2d7a96;
+      text-decoration: underline;
+      cursor: pointer;
+      font-family: inherit
+    }
+
+    .otp-boxes {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      margin-bottom: 16px
+    }
+
+    .otp-box {
+      width: 64px;
+      height: 68px;
+      border: 2px solid #b8eaf5;
+      border-radius: 12px;
+      font-size: 26px;
+      font-weight: 700;
+      text-align: center;
+      font-family: inherit;
+      color: #23bcf2;
+      outline: none;
+      transition: border-color .18s, box-shadow .18s;
+      caret-color: #23bcf2
+    }
+
+    .otp-box:focus {
+      border-color: #23bcf2;
+      box-shadow: 0 0 0 3px rgba(35, 188, 242, .15)
+    }
+
+    .otp-box.filled {
+      border-color: #23bcf2
+    }
+
+    .otp-resend {
+      text-align: center;
+      font-size: 13px;
+      color: #aaa;
+      margin-bottom: 8px
+    }
+
+    .otp-resend .resend-link {
+      color: #23bcf2;
+      cursor: pointer;
+      text-decoration: underline;
+      display: none
+    }
+
+    .otp-resend .resend-timer {
+      color: #aaa
+    }
+
+    .otp-have-account {
+      text-align: center;
+      font-size: 12px;
+      color: #757575;
+      margin-top: 14px
+    }
+
+    .otp-have-account button {
+      background: none;
+      border: none;
+      font-size: 12px;
+      color: #23bcf2;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+      padding: 0
+    }
+
+    @media(max-width:1100px) {
+      .header-nav {
+        display: none
+      }
+
+      .ft-main {
+        grid-template-columns: 260px 1fr
+      }
+    }
+
+    @media(max-width:900px) {
+      .ft-main {
+        grid-template-columns: 1fr;
+        gap: 40px
+      }
+
+      .ft-inner {
+        padding: 48px 28px 40px
+      }
+
+      .ft-cbar {
+        padding: 24px 28px 32px
+      }
+
+      .container {
+        padding: 0 28px
+      }
+
+      .menu-toggle {
+        padding: 0 20px 0 24px
+      }
+
+      .search-btn {
+        padding: 0 24px 0 20px
+      }
+
+      .hero-cnt {
+        padding: 0 32px
+      }
+
+      .hero-card {
+        right: 32px;
+        bottom: 70px;
+        max-width: calc(100% - 64px)
+      }
+    }
+
+    @media(max-width:768px) {
+      .hero-title {
+        font-size: 34px
+      }
+
+      .sec-title {
+        font-size: 32px
+      }
+
+      .mis-grid {
+        flex-direction: column;
+        height: auto
+      }
+
+      .mp {
+        height: 200px;
+        flex: none
+      }
+
+      .car-grid {
+        grid-template-columns: 1fr
+      }
+
+      .car-stats {
+        grid-template-columns: 1fr
+      }
+
+      .news-top {
+        grid-template-columns: 1fr;
+        height: 380px
+      }
+
+      .news-bottom {
+        grid-template-columns: 1fr;
+        height: auto
+      }
+
+      .news-bottom .nc {
+        height: 300px
+      }
+
+      .fin-grid {
+        grid-template-columns: repeat(2, 1fr)
+      }
+
+      .art-inner {
+        grid-template-columns: 1fr
+      }
+
+      .otp-box {
+        width: 54px;
+        height: 60px;
+        font-size: 22px
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+
+  <div class="modal-backdrop" id="modalBackdrop" role="dialog" aria-modal="true" aria-label="Sign Up">
+    <div class="modal" id="modalBox">
+      <button class="modal-close" id="modalClose" aria-label="Close"><svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+      <div class="modal-screen active" id="screenEmail">
+        <div class="modal-shield"><svg viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>Your information is protected</div>
+        <h2 class="modal-title">Join CarryLink</h2>
+        <p class="modal-sub">Ship smarter or earn from your spare luggage. Enter your email to get started.</p>
+        <div class="modal-input-wrap">
+          <input type="email" id="emailInput" placeholder=" " autocomplete="email"><label for="emailInput">Email address</label>
+        </div>
+        <button class="modal-btn" id="continueBtn" disabled>Continue</button>
+        <div class="modal-trouble"><button type="button">Trouble signing in?</button></div>
+        <div class="modal-divider"><span>Or continue with</span></div>
+        <div class="modal-socials">
+          <button class="modal-soc" aria-label="Continue with Google">
+          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v8.51h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.14z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/></svg>
+          Google
+        </button>
+          <button class="modal-soc" aria-label="Continue with Apple">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#0d1a1f"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/></svg>
+          Apple
+        </button>
+        </div>
+        <p class="modal-fine">By continuing, you confirm that you are an adult and have read and accepted our <a
+            href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>.</p>
+      </div>
+      <div class="modal-screen" id="screenOtp">
+        <button class="otp-back" id="otpBack"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>Back</button>
+        <div class="modal-shield" style="margin-bottom:16px"><svg viewBox="0 0 24 24">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+          </svg>Your information is protected</div>
+        <h2 class="modal-title" style="margin-bottom:16px">Verify your email</h2>
+        <div class="otp-email-hint">Please enter the 4-digit code sent to</div>
+        <div class="otp-email-val" id="otpEmailDisplay" style="text-align:center;font-size:13px;margin-bottom:8px">
+        </div>
+        <div class="otp-modify"><button type="button" id="modifyEmail">Modify email address</button></div>
+        <div class="otp-boxes">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="Digit 1">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 2">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 3">
+          <input class="otp-box" type="text" maxlength="1" inputmode="numeric" pattern="[0-9]*" aria-label="Digit 4">
+        </div>
+        <div class="otp-resend">
+          <span class="resend-timer" id="resendTimer">(60s) Resend code</span><span class="resend-link" id="resendLink">Resend code</span>
+        </div>
+        <button class="modal-btn" id="registerBtn" disabled style="margin-top:24px">Create Account</button>
+        <div class="otp-have-account">
+          <span style="padding-right:4px">Have an account?</span><button type="button">Sign in</button></div>
+      </div>
+    </div>
+  </div>
+
+
+  <header class="site-header" id="siteHeader">
+    <div class="header-inner">
+      <div class="header-left">
+        <button class="menu-toggle" id="menuToggle">Menu<div class="hamburger" aria-hidden="true"><span></span><span></span><span></span></div></button>
+        <div class="hdiv"></div>
+        <div class="header-logo"><a href="#" class="logo-wm">Carry<span>Link</span></a></div>
+      </div>
+      <div class="header-right">
+        <nav class="header-nav">
+          <a href="#">How It Works</a><a href="#">Travelers</a><a href="#">Senders</a>
+          <button class="nav-signup" id="openModal">Sign Up</button>
+        </nav>
+        <button class="search-btn">Search<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7.5"/><line x1="17.5" y1="17.5" x2="22" y2="22"/></svg></button>
+      </div>
+    </div>
+  </header>
+
+
+  <!-- ── HERO with autoplay video (from Airbus), CarryLink content ── -->
+  <section class="hero">
+    <div class="hero-bg">
+      <video autoplay muted loop playsinline
+        poster="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1920&h=1080&fit=crop">
+        <source src="https://videos.pexels.com/video-files/856917/856917-hd_1920_1080_25fps.mp4" type="video/mp4">
+        <img src="https://images.unsplash.com/photo-1436491865332-7a61a109cc05?w=1920&h=1080&fit=crop" alt="Airport traveler">
+      </video>
+    </div>
+    <div class="hero-ov"></div>
+    <div class="hero-cnt">
+      <div class="hero-eyebrow">Peer-to-Peer International Delivery</div>
+      <h1 class="hero-title">Ship Smarter.<br><em>Travel Better.</em><br>Earn More.</h1>
+      <p class="hero-sub">CarryLink connects verified travelers with unused luggage space to people who need items
+        delivered cross-border — securely, affordably, and fast.</p>
+    </div>
+    <div class="hero-card">
+      <span class="hero-tag">Now Live</span>
+      <div class="hero-date">Phase 1 Corridors Open</div>
+      <h3 class="hero-htitle">Nigeria &#8596; Canada, UK &amp; USA now accepting shipment requests</h3>
+      <a href="#" class="hero-link">Start shipping <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <polyline points="9 18 15 12 9 6" />
+        </svg></a>
+    </div>
+    <div class="scroll-ind" aria-hidden="true"><svg width="14" height="14" viewBox="0 0 24 24" fill="white">
+        <path d="M7 10l5 5 5-5z" />
+      </svg></div>
+  </section>
+
+
+  <section class="art-sec">
+    <div class="art-inner">
+      <div class="art-img"><img src="https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=800&h=500&fit=crop" alt="Secure payment">
+      </div>
+      <div class="art-cnt">
+        <p class="lbl" style="color:rgba(210,244,255,.55)">Trust &amp; Safety</p>
+        <h2 class="art-h">Your money is protected until delivery is confirmed</h2>
+        <p class="art-t">CarryLink's escrow system holds your payment securely. Funds are only released to the traveler
+          after the recipient confirms delivery — giving both sides complete peace of mind. No upfront risk. No fraud.
+        </p>
+        <a href="#" class="btn-w">How escrow works</a>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="purp-sec">
+    <div class="purp-outer">
+      <div class="purp-sidebar">
+        <div class="lbl">Platform Features</div>
+        <h2 class="sec-title">Built for<br>trust at<br>every step</h2>
+        <p class="purp-desc">From KYC verification to dispute resolution, every feature is designed to make cross-border
+          peer delivery safe, structured, and monetized.</p>
+        <div class="arrows">
+          <button class="arr" id="purpPrev"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="arr" id="purpNext"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+      <div class="purp-clip" id="purpClip">
+        <ul class="purp-track" id="purpTrack">
+          <li class="p-card p-card--feat" id="purp-s0">
+            <div class="p-card-img"><img src="" alt=""></div>
+            <div class="p-card-body">
+              <div class="p-card-tags"></div>
+              <h3 class="p-card-title"></h3>
+              <hr class="p-card-sep">
+              <div class="p-card-meta"></div>
+            </div>
+          </li>
+          <li class="p-card p-card--reg" id="purp-s1">
+            <div class="p-card-img"><img src="" alt=""></div>
+            <div class="p-card-body">
+              <div class="p-card-tags"></div>
+              <h3 class="p-card-title"></h3>
+              <hr class="p-card-sep">
+              <div class="p-card-meta"></div>
+            </div>
+          </li>
+          <li class="p-card p-card--reg" id="purp-s2">
+            <div class="p-card-img"><img src="" alt=""></div>
+            <div class="p-card-body">
+              <div class="p-card-tags"></div>
+              <h3 class="p-card-title"></h3>
+              <hr class="p-card-sep">
+              <div class="p-card-meta"></div>
+            </div>
+          </li>
+          <li class="p-card p-card--reg" id="purp-s3">
+            <div class="p-card-img"><img src="" alt=""></div>
+            <div class="p-card-body">
+              <div class="p-card-tags"></div>
+              <h3 class="p-card-title"></h3>
+              <hr class="p-card-sep">
+              <div class="p-card-meta"></div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="mis-sec">
+    <div class="container">
+      <div style="margin-bottom:36px">
+        <div class="lbl">Active Corridors</div>
+        <h2 class="sec-title">Delivering across the<br>diaspora's most-used routes</h2>
+      </div>
+      <div class="mis-grid">
+        <div class="mp"><img src="https://images.unsplash.com/photo-1517935706615-2717063c2225?w=400&h=600&fit=crop" alt="Nigeria Canada">
+          <div class="mp-ov"></div>
+          <div class="mp-lbl">Nigeria &#8594; Canada</div>
+          <div class="mp-plus"></div>
+        </div>
+        <div class="mp"><img src="https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?w=400&h=600&fit=crop" alt="Nigeria UK">
+          <div class="mp-ov"></div>
+          <div class="mp-lbl">Nigeria &#8594; UK</div>
+          <div class="mp-plus"></div>
+        </div>
+        <div class="mp"><img src="https://images.unsplash.com/photo-1485738422979-f5c462d49f74?w=400&h=600&fit=crop" alt="Nigeria USA">
+          <div class="mp-ov"></div>
+          <div class="mp-lbl">Nigeria &#8594; USA</div>
+          <div class="mp-plus"></div>
+        </div>
+        <div class="mp"><img src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?w=400&h=600&fit=crop" alt="Diaspora Families">
+          <div class="mp-ov"></div>
+          <div class="mp-lbl">Diaspora Families</div>
+          <div class="mp-plus"></div>
+        </div>
+        <div class="mp"><img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=400&h=600&fit=crop" alt="Small Businesses">
+          <div class="mp-ov"></div>
+          <div class="mp-lbl">Small Businesses</div>
+          <div class="mp-plus"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="news-sec">
+    <div class="container">
+      <div class="news-hdr">
+        <div class="news-hdr-left">
+          <div class="lbl">CarryLink News</div>
+          <h2 class="sec-title">Updates, stories &amp; insights</h2>
+        </div>
+        <div class="arrows" style="margin-top:0;align-self:flex-end">
+          <button class="arr" id="newsPrev"><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <button class="arr" id="newsNext"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+        </div>
+      </div>
+      <div class="news-top">
+        <div class="nc nc--feat" id="ncFeat">
+          <img id="featImg" src="https://images.unsplash.com/photo-1611915387288-fd8d2f5f928b?w=1200&h=680&fit=crop" alt="">
+          <div class="nc-ov"></div>
+          <div class="nc-body">
+            <div class="nc-tags" id="featTags">
+              <span class="nc-tag">Launch</span><span class="nc-tag-outline">Nigeria</span></div>
+            <h3 class="nc-title" id="featTitle">CarryLink Phase 1 corridors go live: Nigeria, Canada, UK and USA</h3>
+            <p class="nc-desc" id="featDesc">After months of private beta testing with 400+ verified travelers,
+              CarryLink opens its Phase 1 corridors to the public — giving senders escrow-protected delivery starting at
+              just $8/kg.</p>
+            <div class="nc-meta" id="featMeta">03 March 2026 &mdash; 4 min read</div>
+          </div>
+        </div>
+        <div class="nc nc--sm">
+          <img src="https://images.unsplash.com/photo-1521791136064-7986c2920216?w=600&h=920&fit=crop" alt="">
+          <div class="nc-ov"></div>
+          <div class="nc-body">
+            <div class="nc-tags"><span class="nc-tag">Feature</span><span class="nc-tag-outline">Trust</span></div>
+            <h3 class="nc-title">How CarryLink's KYC verification keeps every delivery safe</h3>
+            <div class="nc-meta">24 February 2026 &mdash; 5 min read</div>
+          </div>
+        </div>
+      </div>
+      <div class="news-bottom">
+        <div class="nc nc--bt"><img src="https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=600&h=680&fit=crop" alt="">
+          <div class="nc-ov"></div>
+          <div class="nc-body">
+            <div class="nc-tags"><span class="nc-tag">Traveler</span><span class="nc-tag-outline">Earning</span></div>
+            <h3 class="nc-title">How verified travelers are earning $200&ndash;$500 per trip</h3>
+            <div class="nc-meta">18 February 2026 &mdash; 4 min read</div>
+          </div>
+        </div>
+        <div class="nc nc--bt"><img src="https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=600&h=680&fit=crop" alt="">
+          <div class="nc-ov"></div>
+          <div class="nc-body">
+            <div class="nc-tags"><span class="nc-tag">Guide</span><span class="nc-tag-outline">Senders</span></div>
+            <h3 class="nc-title">Step-by-step: How to send your first package with CarryLink</h3>
+            <div class="nc-meta">11 February 2026 &mdash; 3 min read</div>
+          </div>
+        </div>
+        <div class="nc nc--bt"><img src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=600&h=680&fit=crop" alt="">
+          <div class="nc-ov"></div>
+          <div class="nc-body">
+            <div class="nc-tags"><span class="nc-tag">Safety</span><span class="nc-tag-outline">Policy</span></div>
+            <h3 class="nc-title">Prohibited items, dispute resolution, and how we protect all parties</h3>
+            <div class="nc-meta">4 February 2026 &mdash; 5 min read</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="fin-bar">
+    <div class="fin-grid">
+      <div class="fi">
+        <div class="fi-l">Active Travelers</div>
+        <div class="fi-v">2,400+</div>
+        <div class="fi-u">verified &amp; KYC-approved</div>
+      </div>
+      <div class="fi">
+        <div class="fi-l">Deliveries Completed</div>
+        <div class="fi-v">12,000+</div>
+        <div class="fi-u">across Phase 1 corridors</div>
+      </div>
+      <div class="fi">
+        <div class="fi-l">Avg. Savings vs DHL</div>
+        <div class="fi-v">68%</div>
+        <div class="fi-u">cheaper per kilogram</div>
+      </div>
+      <div class="fi">
+        <div class="fi-l">Platform Rating</div>
+        <div class="fi-v">4.9/5</div>
+        <div class="fi-c"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="3">
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+            <polyline points="17 6 23 6 23 12" />
+          </svg>from 3,800+ reviews</div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="car-sec">
+    <div class="container">
+      <div class="car-grid">
+        <div>
+          <div class="lbl" style="color:rgba(210,244,255,.55)">Join Our Community</div>
+          <h2 class="car-t">Start earning<br>from your next<br>flight</h2>
+          <p class="car-tx">Flying internationally? Earn $200&ndash;$500 per trip with your unused luggage space. Verify
+            your identity, post your trip, and get matched with senders heading your way. Flexible, safe, rewarding.</p>
+          <a href="#" class="btn-w" style="background:#23bcf2;color:white;border-radius:2px">Become a Traveler</a>
+        </div>
+        <div class="car-stats">
+          <div class="sc-card">
+            <div class="sc-ic"><svg viewBox="0 0 24 24">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg></div>
+            <div class="sc-n" data-target="40" data-suffix="+">0</div>
+            <div class="sc-lb">Countries active</div>
+          </div>
+          <div class="sc-card">
+            <div class="sc-ic"><svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M2 12h20" />
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+              </svg></div>
+            <div class="sc-n" data-target="180" data-suffix="+">0</div>
+            <div class="sc-lb">Routes covered</div>
+          </div>
+          <div class="sc-card">
+            <div class="sc-ic"><svg viewBox="0 0 24 24">
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg></div>
+            <div class="sc-n" data-target="350" data-suffix="">0</div>
+            <div class="sc-lb">Avg. earning per trip ($)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="fac-sec">
+    <div class="container">
+      <div class="fac-hdr">
+        <div>
+          <div class="lbl" style="color:rgba(210,244,255,.5)">Real People, Real Deliveries</div>
+          <h2 class="fac-t">Meet our travelers</h2>
+        </div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div class="fac-arrows">
+            <button class="fac-arr" id="facPrev" disabled><svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <button class="fac-arr" id="facNext"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+          <a href="#" class="btn-w" style="background:#23bcf2;color:white;border-radius:2px">Join as Traveler</a>
+        </div>
+      </div>
+      <div class="fac-clip" id="facClip">
+        <div class="fac-track" id="facTrack">
+          <div class="fc"><img src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&h=530&fit=crop" alt="">
+            <div class="fc-ov"></div>
+            <div class="fc-info">
+              <div class="fc-name">Amaka Osei</div>
+              <div class="fc-role">Lagos &#8594; Toronto &middot; Earned $420</div>
+              <button class="fc-meet">View Profile</button>
+            </div>
+          </div>
+          <div class="fc"><img src="https://images.unsplash.com/photo-1560250097-0b93528c311a?w=400&h=530&fit=crop" alt="">
+            <div class="fc-ov"></div>
+            <div class="fc-info">
+              <div class="fc-name">Emeka Nwosu</div>
+              <div class="fc-role">Abuja &#8594; London &middot; Earned $310</div>
+              <button class="fc-meet">View Profile</button>
+            </div>
+          </div>
+          <div class="fc"><img src="https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?w=400&h=530&fit=crop" alt="">
+            <div class="fc-ov"></div>
+            <div class="fc-info">
+              <div class="fc-name">Fatima Al-Hassan</div>
+              <div class="fc-role">Lagos &#8594; Houston &middot; Earned $290</div>
+              <button class="fc-meet">View Profile</button>
+            </div>
+          </div>
+          <div class="fc"><img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&h=530&fit=crop" alt="">
+            <div class="fc-ov"></div>
+            <div class="fc-info">
+              <div class="fc-name">Taiwo Adeyemi</div>
+              <div class="fc-role">Ibadan &#8594; Manchester &middot; Earned $480</div>
+              <button class="fc-meet">View Profile</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ── FOOTER: Airbus carbon-grid + dot background, CarryLink colours & content ── -->
+  <footer class="site-footer">
+    <!-- Carbon-grid image from Airbus (same URL) -->
+    <img class="ft-bg-img"
+       src="https://www.airbus.com/themes/custom/airbus_web_experience_ui/assets/images/airbus-carbon-grid-cropped-lg.png"
+       alt="">
+
+
+    <div class="ft-inner">
+      <div class="ft-main">
+        <div class="ft-brand">
+          <div class="ft-logo">Carry<span>Link</span></div>
+          <h2 class="ft-touch">Stay in the loop</h2>
+          <div class="ft-social">
+            <a href="#" class="si" aria-label="LinkedIn"><svg viewBox="0 0 24 24">
+                <path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z" />
+                <rect x="2" y="9" width="4" height="12" />
+                <circle cx="4" cy="4" r="2" />
+              </svg></a>
+            <a href="#" class="si" aria-label="X"><svg viewBox="0 0 24 24">
+                <path
+                  d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+              </svg></a>
+            <a href="#" class="si sk" aria-label="Instagram"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg></a>
+            <a href="#" class="si" aria-label="TikTok"><svg viewBox="0 0 24 24">
+                <path
+                  d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-2.88 2.5 2.89 2.89 0 0 1-2.89-2.89 2.89 2.89 0 0 1 2.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 0 0-.79-.05 6.34 6.34 0 0 0-6.34 6.34 6.34 6.34 0 0 0 6.34 6.34 6.34 6.34 0 0 0 6.33-6.34v-7a8.16 8.16 0 0 0 4.77 1.52v-3.4a4.85 4.85 0 0 1-1-.63z" />
+              </svg></a>
+          </div>
+          <a href="#" class="ft-contact">Contact us</a>
+        </div>
+        <div class="ft-col">
+          <h3 class="ft-col-h">Platform</h3>
+          <ul class="ft-list">
+            <li><a href="#">How It Works</a></li>
+            <li><a href="#">For Senders</a></li>
+            <li><a href="#">For Travelers</a></li>
+            <li><a href="#">Prohibited Items Policy</a></li>
+            <li><a href="#">Escrow &amp; Payments</a></li>
+            <li><a href="#">Dispute Resolution</a></li>
+          </ul>
+          <h3 class="ft-col-h">Trust &amp; Safety</h3>
+          <ul class="ft-list">
+            <li><a href="#">KYC Verification</a></li>
+            <li><a href="#">Reputation Scores</a></li>
+            <li><a href="#">Insurance</a></li>
+            <li><a href="#">Report a Problem</a></li>
+          </ul>
+        </div>
+        <div class="ft-col">
+          <h3 class="ft-col-h">Company</h3>
+          <ul class="ft-list">
+            <li><a href="#">About CarryLink</a></li>
+            <li><a href="#">Blog &amp; Updates</a></li>
+            <li><a href="#">Press Kit
+                <span class="ei"><svg viewBox="0 0 24 24"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></span></a>
+            </li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Investors</a></li>
+          </ul>
+          <h3 class="ft-col-h">Active Corridors</h3>
+          <ul class="ft-list">
+            <li><a href="#">Nigeria &#8596; Canada</a></li>
+            <li><a href="#">Nigeria &#8596; United Kingdom</a></li>
+            <li><a href="#">Nigeria &#8596; United States</a></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="ft-closure">
+      <div class="ft-cbar">
+        <nav class="ft-legal">
+          <a href="#">Privacy Policy</a><a href="#">Terms of Use</a><a href="#">Cookie Policy</a><a
+            href="#">Compliance</a><button type="button">Cookie Settings</button>
+        </nav>
+        <p class="ft-copy">&copy; CarryLink 2026. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+
+  <script>
+    const header=document.getElementById('siteHeader');
+let last=window.scrollY,tick=false;
+function onScroll(){const cur=window.scrollY,d=cur-last;header.classList.toggle('scrolled',cur>80);if(d>5&&cur>120)header.classList.add('hidden');else if(d<-5)header.classList.remove('hidden');last=cur;tick=false;}
+window.addEventListener('scroll',()=>{if(!tick){requestAnimationFrame(onScroll);tick=true;}},{passive:true});
+document.getElementById('menuToggle').addEventListener('click',function(){this.classList.toggle('active');});
+
+
+(function(){
+  const data=[
+    {img:'https://images.unsplash.com/photo-1590856029826-c7a73142bbf1?w=640&h=480&fit=crop',tags:[{dark:'Escrow'},{light:'Payments'}],title:'Funds held securely in escrow — released only when the recipient confirms delivery',date:'Core Platform Feature',read:'Learn more'},
+    {img:'https://images.unsplash.com/photo-1614064641938-3bbee52942c7?w=512&h=384&fit=crop',tags:[{dark:'KYC'},{light:'Verification'}],title:'Government ID + selfie verification gives every user a trusted verified badge',date:'Identity System',read:'Learn more'},
+    {img:'https://images.unsplash.com/photo-1512428813834-c702c7702b78?w=512&h=384&fit=crop',tags:[{dark:'Matching'},{light:'AI Engine'}],title:'Smart matching connects senders to travelers by route, weight, price and trust score',date:'Matching Engine',read:'Learn more'},
+    {img:'https://images.unsplash.com/photo-1535320903710-d993d3d77d29?w=512&h=384&fit=crop',tags:[{dark:'Reputation'},{light:'Reviews'}],title:'Two-way rating after every delivery keeps bad actors off the platform automatically',date:'Reputation Engine',read:'Learn more'},
+    {img:'https://images.unsplash.com/photo-1450101499163-c8848c66ca85?w=512&h=384&fit=crop',tags:[{dark:'Disputes'},{light:'Resolution'}],title:'Dedicated admin panel handles evidence, escrow freezes and full or partial refunds',date:'Dispute Resolution',read:'Learn more'},
+    {img:'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=512&h=384&fit=crop',tags:[{dark:'Listings'},{light:'Travelers'}],title:'Travelers post flight details, available capacity in kg, item types and price per kg',date:'Travel Listing Module',read:'Learn more'},
+  ];
+  let queue=[...data];
+  const slots=[document.getElementById('purp-s0'),document.getElementById('purp-s1'),document.getElementById('purp-s2'),document.getElementById('purp-s3')];
+  function tagsHTML(tags){return tags.map(t=>t.dark?`<span class="p-tag-dark">${t.dark}</span>`:`<span class="p-tag-light">${t.light}</span>`).join('');}
+  function fillSlot(slot,item){slot.querySelector('.p-card-img img').src=item.img;slot.querySelector('.p-card-tags').innerHTML=tagsHTML(item.tags);slot.querySelector('.p-card-title').textContent=item.title;slot.querySelector('.p-card-meta').innerHTML=`<time>${item.date}</time><span class="p-card-dot"></span><span>${item.read}</span>`;}
+  function render(animate){if(animate){slots.forEach(s=>s.classList.add('fading'));setTimeout(()=>{slots.forEach((s,i)=>fillSlot(s,queue[i]));slots.forEach(s=>s.classList.remove('fading'));},220);}else{slots.forEach((s,i)=>fillSlot(s,queue[i]));}}
+  document.getElementById('purpNext').addEventListener('click',()=>{queue.push(queue.shift());render(true);});
+  document.getElementById('purpPrev').addEventListener('click',()=>{queue.unshift(queue.pop());render(true);});
+  document.getElementById('purpPrev').disabled=false;document.getElementById('purpNext').disabled=false;
+  render(false);
+})();
+
+
+(function(){
+  const items=[
+    {img:'https://images.unsplash.com/photo-1611915387288-fd8d2f5f928b?w=1200&h=680&fit=crop',tags:['Launch','Nigeria'],title:'CarryLink Phase 1 corridors go live: Nigeria, Canada, UK and USA',desc:'After months of private beta testing with 400+ verified travelers, CarryLink opens its Phase 1 corridors — giving senders escrow-protected delivery starting at just $8/kg.',meta:'03 March 2026 &mdash; 4 min read'},
+    {img:'https://images.unsplash.com/photo-1521791136064-7986c2920216?w=1200&h=680&fit=crop',tags:['Feature','Trust'],title:"How CarryLink's KYC verification keeps every delivery safe",desc:'We walk through exactly how our identity verification pipeline works — from government ID upload to selfie matching — and why it is the backbone of trust on the platform.',meta:'24 February 2026 &mdash; 5 min read'},
+    {img:'https://images.unsplash.com/photo-1580519542036-c47de6196ba5?w=1200&h=680&fit=crop',tags:['Traveler','Earning'],title:'How verified travelers are earning $200\u2013$500 per trip on CarryLink',desc:'Real stories from our earliest travelers \u2014 how they found shipment requests, what items they carried, and how CarryLink changed their travel economics.',meta:'18 February 2026 &mdash; 4 min read'},
+    {img:'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=1200&h=680&fit=crop',tags:['Guide','Senders'],title:'Step-by-step: How to send your first package with CarryLink',desc:'A complete walkthrough for first-time senders \u2014 from posting an item request to selecting a traveler and tracking your delivery in real time.',meta:'11 February 2026 &mdash; 3 min read'},
+  ];
+  let cur=0;
+  const feat=document.getElementById('ncFeat'),img=document.getElementById('featImg'),tagsEl=document.getElementById('featTags'),titleEl=document.getElementById('featTitle'),descEl=document.getElementById('featDesc'),metaEl=document.getElementById('featMeta'),prev=document.getElementById('newsPrev'),next=document.getElementById('newsNext');
+  function setItem(i,animate){
+    if(animate){feat.classList.add('fading');setTimeout(()=>{img.src=items[i].img;tagsEl.innerHTML=items[i].tags.map((t,j)=>`<span class="${j===0?'nc-tag':'nc-tag-outline'}">${t}</span>`).join('');titleEl.textContent=items[i].title;descEl.textContent=items[i].desc;metaEl.innerHTML=items[i].meta;feat.classList.remove('fading');},300);}
+    else{img.src=items[i].img;tagsEl.innerHTML=items[i].tags.map((t,j)=>`<span class="${j===0?'nc-tag':'nc-tag-outline'}">${t}</span>`).join('');titleEl.textContent=items[i].title;descEl.textContent=items[i].desc;metaEl.innerHTML=items[i].meta;}
+    prev.disabled=i===0;next.disabled=i===items.length-1;
+  }
+  prev.addEventListener('click',()=>{if(cur>0){cur--;setItem(cur,true);}});
+  next.addEventListener('click',()=>{if(cur<items.length-1){cur++;setItem(cur,true);}});
+  setItem(0,false);
+})();
+
+
+(function(){
+  const clip=document.getElementById('facClip'),track=document.getElementById('facTrack'),cards=Array.from(track.querySelectorAll('.fc')),prev=document.getElementById('facPrev'),next=document.getElementById('facNext');
+  const VIS=3,GAP=16;let idx=0;
+  function layout(){const cw=(clip.offsetWidth-GAP*(VIS-1))/VIS;cards.forEach(c=>{c.style.width=cw+'px';c.style.flexShrink='0';});}
+  function slide(){const cw=cards[0].offsetWidth;track.style.transform=`translateX(-${idx*(cw+GAP)}px)`;prev.disabled=idx===0;next.disabled=idx>=cards.length-VIS;}
+  prev.addEventListener('click',()=>{if(idx>0){idx--;slide();}});
+  next.addEventListener('click',()=>{if(idx<cards.length-VIS){idx++;slide();}});
+  layout();slide();
+  window.addEventListener('resize',()=>{layout();slide();});
+})();
+
+
+(function(){
+  const statEls=document.querySelectorAll('.sc-n[data-target]');
+  function formatNum(n,target){if(target>=1000)return n.toLocaleString('en-US');return String(Math.round(n));}
+  function animateStat(el){
+    if(el.dataset.animated)return;el.dataset.animated='1';
+    const target=parseInt(el.dataset.target),suffix=el.dataset.suffix||'',duration=1800,start=performance.now();
+    function step(now){const elapsed=now-start,progress=Math.min(elapsed/duration,1),ease=1-Math.pow(1-progress,3),val=Math.round(ease*target);el.textContent=formatNum(val,target)+suffix;if(progress<1)requestAnimationFrame(step);else el.textContent=formatNum(target,target)+suffix;}
+    requestAnimationFrame(step);
+  }
+  const obs=new IntersectionObserver(entries=>{entries.forEach(e=>{if(e.isIntersecting)animateStat(e.target);});},{threshold:0.4});
+  statEls.forEach(el=>obs.observe(el));
+})();
+
+
+(function(){
+  const backdrop=document.getElementById('modalBackdrop'),closeBtn=document.getElementById('modalClose'),openBtn=document.getElementById('openModal'),screenEmail=document.getElementById('screenEmail'),screenOtp=document.getElementById('screenOtp'),emailInput=document.getElementById('emailInput'),continueBtn=document.getElementById('continueBtn'),otpEmailDisplay=document.getElementById('otpEmailDisplay'),otpBack=document.getElementById('otpBack'),modifyEmail=document.getElementById('modifyEmail'),otpBoxes=Array.from(document.querySelectorAll('.otp-box')),registerBtn=document.getElementById('registerBtn'),resendTimer=document.getElementById('resendTimer'),resendLink=document.getElementById('resendLink');
+  function openModal(){backdrop.classList.add('open');document.body.style.overflow='hidden';showScreen('email');setTimeout(()=>emailInput.focus(),320);}
+  function closeModal(){backdrop.classList.remove('open');document.body.style.overflow='';}
+  function showScreen(n){screenEmail.classList.toggle('active',n==='email');screenOtp.classList.toggle('active',n==='otp');}
+  openBtn.addEventListener('click',openModal);closeBtn.addEventListener('click',closeModal);
+  backdrop.addEventListener('click',e=>{if(e.target===backdrop)closeModal();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
+  function isValidEmail(v){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);}
+  emailInput.addEventListener('input',()=>{continueBtn.disabled=!isValidEmail(emailInput.value.trim());});
+  continueBtn.addEventListener('click',()=>{if(continueBtn.disabled)return;otpEmailDisplay.textContent=emailInput.value.trim();showScreen('otp');startResendTimer();otpBoxes[0].focus();});
+  otpBack.addEventListener('click',()=>showScreen('email'));modifyEmail.addEventListener('click',()=>showScreen('email'));
+  otpBoxes.forEach((box,i)=>{
+    box.addEventListener('input',()=>{box.value=box.value.replace(/[^0-9]/g,'').slice(0,1);if(box.value&&i<otpBoxes.length-1)otpBoxes[i+1].focus();updateRegisterBtn();});
+    box.addEventListener('keydown',e=>{if(e.key==='Backspace'&&!box.value&&i>0){otpBoxes[i-1].focus();otpBoxes[i-1].value='';}});
+    box.addEventListener('paste',e=>{e.preventDefault();const paste=(e.clipboardData||window.clipboardData).getData('text').replace(/[^0-9]/g,'');paste.split('').slice(0,4).forEach((ch,j)=>{if(otpBoxes[j])otpBoxes[j].value=ch;});otpBoxes[Math.min(paste.length,3)].focus();updateRegisterBtn();});
+  });
+  function updateRegisterBtn(){const filled=otpBoxes.every(b=>b.value.length===1);registerBtn.disabled=!filled;otpBoxes.forEach(b=>b.classList.toggle('filled',b.value.length===1));}
+  let countInterval=null;
+  function startResendTimer(sec=60){clearInterval(countInterval);resendTimer.style.display='inline';resendLink.style.display='none';let s=sec;resendTimer.textContent=`(${s}s) Resend code`;countInterval=setInterval(()=>{s--;if(s<=0){clearInterval(countInterval);resendTimer.style.display='none';resendLink.style.display='inline';}else{resendTimer.textContent=`(${s}s) Resend code`;}},1000);}
+  resendLink.addEventListener('click',()=>startResendTimer());
+})();
+  </script>
+</body>
+
+</html>

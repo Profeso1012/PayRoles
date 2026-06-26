@@ -1,0 +1,370 @@
+# PART 1
+Great questions. Let me answer each one properly because these are exactly the right things to understand before touching any code.
+
+---
+
+## Who can log in and what do they see?
+
+There are **two completely separate worlds** of users in this system.
+
+**World 1: The company staff (tenant-scoped users)**
+These are people *inside* Zenith Logistics, Dangote, or whatever company is using the app. They log in and see *only their company's data*. Within their company, they have different roles:
+
+- **HR Manager** — can add/edit employees, update salaries, manage records
+- **Payroll Manager** — can run and review payroll calculations
+- **Finance Director** — can approve and authorize payments
+- **Regular Employee** — can only see their own payslips and personal info
+
+Nobody at Dangote can see Zenith's data. Nobody at Zenith can see Dangote's. Same app, different sealed universes.
+
+**World 2: The platform owner (super admin)**
+This is whoever built and sells the software. They have a god-mode dashboard where they can create new company accounts (onboard a new tenant), manage subscriptions, handle support issues. They never touch payroll data — they just manage which companies exist on the platform.
+
+**Who sets the roles?** When a company first signs up, the platform owner creates their account and assigns one person as the company's **Super Admin** (usually the IT lead or Head of HR). That Super Admin then logs in and creates all other users — assigns Amaka as HR Manager, Emeka as Payroll Manager, Mrs. Okonkwo as Finance Director. They can also deactivate users who leave the company. So role assignment flows downward: platform owner → company super admin → everyone else.
+
+**Can regular employees log in?** Yes, but to a very stripped-down view — basically just "my payslips" and "my personal details." Some companies enable this, some don't. It's a permission toggle the company super admin controls.
+
+---
+
+## How does the actual money move? Does it leave from inside the app?
+
+This is one of the most important things to understand. There are **two models** and the PRD hints at both.
+
+**Model A: The app generates a payment file, the bank does the actual transfer**
+
+This is the most common model, especially in Nigeria and many markets. Here's the flow:
+
+1. Mrs. Okonkwo approves payroll inside the app
+2. The app generates a **bulk payment file** — essentially a structured list saying "pay Chidi ₦227,800 to GTBank account 0123456789, pay Ada ₦310,000 to Access Bank account 9876543210..." for all 87 employees
+3. That file gets uploaded to the company's **corporate banking portal** (GTBank Business, Zenith Bank Corporate, etc.) by the finance team
+4. The bank processes it and moves the money
+
+The file format depends on the bank. Most Nigerian banks accept a specific Excel or CSV template. Some accept XML. There's no universal standard — it varies bank to bank, which is why the PRD mentions this is something to figure out. In the UK, there's a standard called **BACS** (a specific file format all UK banks accept for bulk payroll). In the US it's **ACH**. The app would need to know which format to generate based on the country.
+
+**Model B: The app connects directly to a payment API and pushes money itself**
+
+This is more advanced. Instead of generating a file, the app calls something like Monnify, Flutterwave, or a bank's direct API and says "transfer ₦227,800 to account 0123456789 right now." The money moves without anyone downloading a file and logging into a banking portal.
+
+You've actually worked on something adjacent to this — Signum uses Monnify's API for transfers. Same concept here, just at bulk payroll scale.
+
+**Which model does this PRD use?** Reading it carefully, the PRD says "payments" as a module but doesn't lock in either approach. This is one of those **joint decisions** the doc says to make early. For a first version (Phase 1), Model A (generate a file) is simpler and safer. Model B is the premium feature you add later.
+
+---
+
+## What about payslips — when are they sent, to whom, in what format?
+
+Payslips serve two audiences with different needs.
+
+**The employee** wants to know: what did I get paid and why. Payslips are typically:
+- Generated automatically every time a payroll run is approved
+- Sent to the employee's work email immediately after approval, as a **PDF attachment**
+- Also available to view/download anytime they log into the employee portal
+- Some companies only do the portal (no email) to reduce clutter
+
+PDF is the universal standard for payslips because it's non-editable, printable, and looks professional. Nobody sends payslips as Word docs — that would let people edit them, which is a legal problem.
+
+**The company/finance team** wants different reports:
+- **Payroll register** — the full table of every employee, every line item, for a given run. This is usually exported as Excel because finance people need to manipulate numbers, cross-reference with budgets, etc.
+- **Statutory reports** — what you owe FIRS (tax authority), what you owe pension fund administrators, what you owe NHF. These have specific government-mandated formats, sometimes a specific Excel template FIRS publishes, sometimes an online portal where you upload a CSV
+- **Management summaries** — monthly/annual cost summaries for the MD or CFO. Usually PDF or Excel depending on audience
+
+**How often?** The trigger is always the payroll run approval, not a calendar. When Mrs. Okonkwo clicks Approve:
+- Employee payslips are generated and distributed immediately
+- Statutory remittance reports are generated for the HR/finance team to file
+- The payroll register is available for download
+
+Employees can also request old payslips anytime — banks ask for 3 or 6 months of payslips when processing loan applications. That's why the system keeps them forever and makes them accessible on demand.
+
+---
+
+## Pulling it all together — the full picture of who does what
+
+Let me map every actor to their actions cleanly:
+
+| Who | What they do in the app |
+|---|---|
+| **Platform Super Admin** | Creates company accounts, manages subscriptions |
+| **Company Super Admin** | Creates users, assigns roles, configures company settings, links bank details |
+| **HR Manager** | Adds/edits employees, manages salaries, assignments, org structure |
+| **Payroll Manager** | Runs payroll calculations, reviews results, flags issues, submits for approval |
+| **Finance Director** | Reviews final register, approves payroll, downloads payment file for the bank |
+| **Finance Team** | Takes payment file to corporate banking portal, uploads it, confirms transfers |
+| **Employee** | Views own payslips, updates personal/bank details |
+
+Notice the Finance Team step — that's a human action *outside the app* (for Model A). The app's job ends at generating the file. The human carries it to the bank.
+
+---
+
+## The one thing to nail before any of this
+
+The thing the PRD is most serious about — and which will make or break everything else — is **who can do what, enforced in code, not just in the UI**. 
+
+Emeka should not be able to approve his own payroll even if he finds the API endpoint. Mrs. Okonkwo should not be able to edit Chidi's salary. These rules live in the backend and get checked on every single request. The frontend just *reflects* the rules by hiding buttons — but the backend *enforces* them by rejecting unauthorized requests. That's the RBAC system the PRD keeps mentioning.
+
+Once you understand that mental model — roles, permissions, tenant isolation, and the payroll lifecycle from draft to paid — every module in the PRD has an obvious reason for existing. Does this fill the gaps? What's still fuzzy?
+
+---
+
+# PART 2
+
+Good. Let me walk you through every screen, every click, and every data handshake — using apps you already know as reference points.
+
+---
+
+## First, the mental model for login/signup
+
+Think of how **Paystack** works for businesses. When a merchant signs up, they create a *business account* — not just a personal account. Then inside that business, they can invite team members. Each team member logs in with their own email/password but lands inside the merchant's dashboard. That's exactly how this works.
+
+Now layer in **Cowrywise** — when you open the app, it just asks for email and password. No "which company are you?" question. The system already knows which company you belong to based on your email and account record. Same principle here.
+
+---
+
+## World 1: Platform Super Admin
+
+This person works at the company that *built and sells* the payroll software. Think of them like a Paystack internal operations staff.
+
+**How they got their account:** It was created directly in the database during deployment. No signup page. Like how the first admin of any system is seeded. They have a separate login URL entirely — something like `admin.payrollapp.com` versus `app.payrollapp.com` for everyone else.
+
+**Their screen flow:**
+
+They visit `admin.payrollapp.com/login`. They see a plain, minimal login screen — just email and password. No branding, no signup link. This portal is not meant to be found by random people.
+
+They log in. They land on a **super admin dashboard** that looks like a CRM or a Flutterwave merchant list — a table of all companies using the platform. Company name, number of employees, subscription plan, date joined, status (active/suspended).
+
+From here they can:
+- Click **"Onboard New Company"** — a form where they enter the company's name, country, subscription plan, and the email of the person who will be that company's Super Admin. They submit. The system creates the tenant record in the database and fires an **email invitation** to that person.
+- Click into any company row to see their details — but NOT their payroll data. Just account-level info: billing, user count, which country packs are active.
+- Suspend or deactivate a company account.
+
+That's largely their entire world. Simple but powerful.
+
+---
+
+## World 2: Company Super Admin (first time — onboarding)
+
+This is the IT lead or Head of HR at say, **Dangote Cement**. The Platform Admin just sent them an invite email.
+
+**Step 1 — The invitation email**
+
+They receive an email that looks like a **Piggyvest referral link** or a **Notion workspace invite** — a branded email saying "You've been invited to set up Dangote Cement on [App Name]. Click to get started." There's a single button. The link has a **token** embedded in it — a one-time code that expires in 48 hours. Something like `app.payrollapp.com/accept-invite?token=xK9f2...`. This token carries the company ID and their email address encoded inside it.
+
+**Step 2 — Accept invite screen**
+
+They click the link. The app reads the token, decodes it, and shows a screen that says "Welcome. You're setting up the account for **Dangote Cement**. Please create your password." They set their password, maybe confirm their name and phone number. They submit. Their user account is now created and linked to Dangote's tenant. They're redirected to login.
+
+No "which company do you work for?" question. No company code. The token already told the system everything.
+
+**Step 3 — First login and company setup wizard**
+
+They log in with their email and new password. Because this is their first login and the company is freshly created, the system detects that setup is incomplete and redirects them to an **onboarding wizard** — think of how **Zoho** or **Slack** walks you through setup the first time.
+
+The wizard has steps:
+1. **Company profile** — full legal name, RC number, address, industry
+2. **Country/jurisdiction** — "Which countries do you operate in?" They select Nigeria. This activates the Nigeria country pack (PAYE rules, pension rules, NHF rules). If they also select UK, the UK pack activates too.
+3. **Pay groups** — "How often do you pay staff?" Monthly, bi-weekly, weekly. They might set up "Lagos Monthly Staff" and "Abuja Monthly Staff" as separate groups
+4. **Bank details** — company bank account that salaries will be paid from. Account number, bank name. This is where the payment file will reference when generated.
+
+After the wizard, they land on the main dashboard.
+
+**Step 4 — Inviting internal users**
+
+Their first real action is usually going to **Settings → Users & Roles** and inviting their team. This screen looks like **Slack's invite members page** or **Google Workspace admin console** — a list of current users and an "Invite User" button.
+
+They click Invite User. A modal/form appears:
+- Email address
+- Full name
+- Role (dropdown: HR Manager, Payroll Manager, Finance Director, Employee)
+
+They submit. That person gets an invite email exactly like the one the Super Admin received. Same token flow. They click the link, set their password, log in — and land directly in Dangote's dashboard with their assigned role's permissions.
+
+This is how every internal user gets access. **Nobody self-registers.** There's no public signup page that says "Join your company." You only get in if someone with authority invites you. This is a security requirement for financial software.
+
+---
+
+## World 2: Regular Tenant Users (HR, Payroll, Finance, Employee)
+
+Once they've accepted their invite and set their password, every subsequent login is identical regardless of role.
+
+**Login screen** — `app.payrollapp.com/login`
+
+Just like the **GTBank mobile app** login or **Carbon loan app** — email field, password field, Login button. Maybe a "Forgot password?" link. No company name field. No tenant code. The system looks up their email in the database, finds which company they belong to, and routes them in.
+
+What if someone from Zenith and someone from Dangote have the same email? That shouldn't happen — email is unique across the entire platform. One person, one account. If someone genuinely works for two companies (a consultant for instance), they'd need two separate email addresses for each company account.
+
+**After login — what each person sees:**
+
+This is where it diverges completely based on role.
+
+---
+
+### HR Manager (Amaka's flow)
+
+She logs in and lands on a **dashboard** that looks like the main screen of **Workday** or a simplified **BambooHR** — her primary concern is people.
+
+Her dashboard shows:
+- Total headcount
+- New joiners this month
+- Upcoming contract end dates
+- Employees with incomplete records (missing bank details etc.)
+
+Her navigation menu has:
+- **Employees** — the main area she lives in
+- **Organisation** — legal entities, departments, locations
+- **Reports** — HR-specific reports
+
+She clicks **Employees**. She sees a data table — think of the **Flutterwave transactions list** but for people. Search bar at top, filter by department/location/status, paginated list of employees. Each row: name, employee ID, job title, department, status (active/on leave/exited).
+
+She clicks **Add Employee**. A multi-step form opens — like filling a **NIN enrollment form** or a **NYSC portal form**. Step 1 is personal details (name, DOB, gender, contact). Step 2 is employment details (start date, department, job title, employment type). Step 3 is compensation (salary amount, currency, effective from date — this is that effective-dating field). Step 4 is bank details (for salary payment). Step 5 is review and submit.
+
+She submits. The employee record is created. If the employee portal is enabled, an invite email goes to that employee automatically.
+
+When she needs to give Chidi a raise in October, she goes to his profile, clicks **Compensation**, sees a timeline of his salary history (this looks like a **Cowrywise savings history** — entries with dates), and clicks **Add New Entry**. She enters ₦350,000 and "effective from October 1st." The old ₦280,000 record stays untouched. The system now knows: before October, use ₦280,000. October onwards, use ₦350,000. When October payroll runs, it automatically picks the right figure.
+
+---
+
+### Payroll Manager (Emeka's flow)
+
+He logs in and lands on a **payroll-focused dashboard**. His primary concern is runs and deadlines.
+
+His dashboard shows:
+- Upcoming pay dates (like a calendar widget)
+- Status of current pay runs (Draft / In Review / Approved / Paid)
+- Any flagged issues from the last calculation
+
+His navigation has:
+- **Pay Runs** — main area
+- **Pay Elements** — tax rules, allowances, deductions setup
+- **Reports** — payroll register, statutory reports
+
+He clicks **Pay Runs → New Run**. A setup screen appears — think of initiating a **transfer on the GTBank app** but for payroll. He selects:
+- Pay group: Lagos Monthly Staff
+- Pay period: July 2026
+
+He clicks **Create**. The run is created in **Draft** state. He sees a run detail screen showing the 87 employees who will be included, their basic salary figures pulled from their records. He hasn't calculated yet — this is just the preview.
+
+He clicks **Calculate**. This triggers the backend engine. A **progress indicator** appears — like the spinning/loading state on a **Flutterwave bulk transfer** or how **Kuda** shows "processing" for transfers. The calculation runs in the background. The page either polls for updates or receives a live signal when it's done.
+
+When calculation finishes, the run moves to **Calculated** state. The page refreshes to show the full register — a detailed table of every employee, every element (basic salary, transport allowance, PAYE tax, pension, net pay). He can click into any employee row to see their individual breakdown.
+
+He spots Bola's ₦0 issue. He flags it via a comment or goes to HR to fix the record. Once fixed, he clicks **Recalculate** — which reruns just Bola's calculation (or the whole run depending on implementation).
+
+Satisfied, he clicks **Submit for Approval**. The run moves to **In Review** state. His approve button disappears — he can no longer touch it. A notification goes to Mrs. Okonkwo.
+
+---
+
+### Finance Director (Mrs. Okonkwo's flow)
+
+She logs in and lands on a **finance-focused dashboard** — her concern is money leaving the company and compliance.
+
+She sees:
+- Payroll runs awaiting her approval (highlighted, with urgency indicator if pay date is close)
+- Total payroll cost this month vs last month vs budget
+- Upcoming statutory filing deadlines (PAYE remittance to FIRS is due by the 10th of every month)
+
+She clicks the notification/alert for July Lagos payroll. She lands on the run detail screen in **read-only mode** — she can see everything Emeka saw but cannot edit anything. Her available action is just the **Approve** button (and a **Reject/Send Back** button with a comment box if something is wrong).
+
+She reviews. She clicks **Approve**. A **confirmation modal** appears — think of how **Kuda or Opay** asks "Are you sure you want to send ₦24.3M?" with a summary. She confirms.
+
+The run moves to **Approved** state. Several things happen automatically in the background:
+- All 87 payslips are generated as PDFs and stored
+- Employees who have portal access get email notifications "Your July payslip is ready"
+- The payroll register is available for download as Excel
+- Statutory remittance reports are available for download
+
+She then goes to the **Payments** section. She sees the approved run. She clicks **Download Payment File**. The system generates the bulk payment file in the format configured for the company's bank (e.g., GTBank bulk transfer Excel template). She downloads it, logs into GTBank Business Internet Banking separately (outside this app), uploads the file there, and authorizes the transfers. That's the money moving.
+
+---
+
+### Employee (Chidi's flow)
+
+Chidi got an invite email when Amaka added him. He set his password. He logs in.
+
+His dashboard is the most minimal of all — like the **PiggyVest** or **Carbon** home screen but with almost nothing to do except view. He sees:
+
+- His name and employee ID
+- His current salary (if the company has enabled this visibility)
+- His latest payslip with a quick summary
+- A notification if a new payslip is available
+
+His navigation is tiny:
+- **My Payslips** — list of all his payslips, click any to view the PDF or see it rendered on screen. He can download any one as PDF for bank loan applications.
+- **My Profile** — his personal details. He can update his home address, phone number, next of kin. He *cannot* update his salary or job title — that's HR's job.
+- **My Bank Details** — he can view and update his bank account number. Some companies lock this so only HR can change it (to prevent fraud).
+
+That's his entire world. Clean, simple, nothing he doesn't need.
+
+---
+
+## The shared flows that cut across everyone
+
+**Forgot password** — same on every role. They click "Forgot password" on the login screen, enter their email, receive a reset link (token-based, expires in 1 hour), click it, set a new password, get redirected to login. Exactly like **Cowrywise** or any Nigerian fintech app's reset flow.
+
+**Session expiry** — after say 30 minutes of inactivity, their session expires. Next time they click anything, the app quietly redirects them to login. When they log back in, they land back where they were trying to go. Like how **GTBank mobile** kicks you out after idle time.
+
+**Two-Factor Authentication** — for Finance Director and Super Admin roles especially, after entering password they get an OTP to their phone (SMS) or email. They enter the OTP. Then they're in. Like how **Paystack dashboard** requires 2FA for high-permission accounts. This is a financial app — the Finance Director approving ₦24.3M transfers should definitely have a second factor.
+
+---
+
+## The complete page map, summarized
+
+```
+PUBLIC (no login)
+└── /login
+└── /forgot-password
+└── /reset-password?token=...
+└── /accept-invite?token=...
+
+PLATFORM ADMIN (admin.payrollapp.com)
+└── /dashboard → company list
+└── /companies/new → onboard form
+└── /companies/:id → company detail
+
+COMPANY SUPER ADMIN
+└── /dashboard
+└── /settings/company → company profile, jurisdiction
+└── /settings/users → invite, assign roles, deactivate
+└── /settings/pay-groups → pay frequency setup
+└── /settings/bank → company bank account
+
+HR MANAGER
+└── /employees → list
+└── /employees/new → add employee wizard
+└── /employees/:id → profile, compensation history, assignments
+└── /organisation → departments, legal entities
+
+PAYROLL MANAGER
+└── /pay-runs → list of all runs and their states
+└── /pay-runs/new → create run
+└── /pay-runs/:id → run detail, calculate, review register
+└── /pay-elements → configure salary components, tax rules
+
+FINANCE DIRECTOR
+└── /dashboard → approvals queue, cost summary
+└── /pay-runs/:id → read-only review + approve button
+└── /payments → download payment files, disbursement history
+└── /reports → statutory reports, PAYE remittance, pension schedule
+
+EMPLOYEE
+└── /my-payslips → list + download
+└── /my-profile → personal details
+└── /my-bank-details → bank account
+```
+
+This is your entire application in plain words. Every screen has a clear owner, a clear purpose, and a clear data transaction. When you now look at the PRD's technical terms, you can map each one to a specific screen or action in this flow.
+
+
+# PART 3 - PROMPT
+
+You missed out how Amaka the HR has to first manage organizations (create groups, departments, set or edit stuff, etc before she can add employess under them for cases where there is a bulk similarity btw a group of employees that certian events or data be added to or processed from). I guess this goes for other user's flows too. So dont forget to incorporate that in your build plan and phases.
+
+So there is a name and brand to follow for the app (PayRole) as seen in the images uploaded, along with some images of mockup to go into landing page and dashboard pages for users. Notice the UI theme and all.
+So in the claude code window, i have already clone the repo and added some sample page (in html css though) that the AI agent should follow for the landing page, dashboard layout, and auth screens, but change the words, colors, and images to match that of which you see for the PayRole brand and uses the favicon.png, payrole-logo.png, mockups1-3.png, person1 and 2.png, etc for these pages. No use of emoji is allowed at any point, or any screen. Only use lucide react icons or svg for icons when needed.
+
+Three CSS tricks to make any layout responsive with minimum effort. Text. Instead of defining grid columns or every screen size, use auto-fit with minimum and maximum values using minmax. This way, the grid automatically adapts to the screen size using just one line of code. Second, instead of applying fixed widths everywhere, set the width to 100% and limit it with a max-width or ensure, use the minimum method. Third, instead of hardcoding sizes, use clamp. It lets spacing and font sizes scale smoothly between a minimum and a maximum.
+
+lastly, to later make connecting to the backend easier, dont build any screen with static state for any data that will be dynamic (changes, will be fetched from db or returned from backed). For such cases, always mock api response to return json of lists, or appropriate objects, so the only thing that needs to change is the base url the apis are being called to (as the mock base url is handled by the app and returns the dummy data to process or render).
+Use custom select drop downs, pop up modals, and toasts that match the theme. No default browser ui. For multiple selects, use pills with x icon whenever each item is picked.
+
+these rules must be always referenced for each tasks i.e with every tasks, claude must read this to ensure it is following everything as planned
+
+So give me a detailed Build-Execution.md document which contains the system design for project structure, all folder with their files to be built, and what functions to go into those files business logic, what they import, read, return,  and the phases broken down into smaller tasks in batch based on dependencies i can use for chain of prompting.
