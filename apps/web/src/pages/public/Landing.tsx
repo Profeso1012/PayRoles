@@ -77,6 +77,7 @@ const FEATURES = [
 export default function Landing() {
   const navigate = useNavigate()
   const [scrolled, setScrolled] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [cardOffset, setCardOffset] = useState(0)
   const cardTrackRef = useRef<HTMLDivElement>(null)
 
@@ -107,7 +108,13 @@ export default function Landing() {
           0%, 80%, 100% { transform: translateX(-50%) translateY(0); }
           40%            { transform: translateX(-50%) translateY(-9px); }
         }
-        @media (max-width: 767px) {
+        @keyframes menuSlideDown {
+          from { opacity: 0; transform: translateY(-12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .mobile-menu { animation: menuSlideDown 0.22s ease forwards; }
+        @media (min-width: 768px) { .nav-links-desktop { display: flex !important; } .hamburger-btn { display: none !important; } }
+        @media (max-width: 767px) { .nav-links-desktop { display: none !important; } }
           .hero-card { right: 32px !important; bottom: 70px !important; max-width: calc(100% - 64px) !important; }
           .hero-content { padding: 0 32px !important; }
           .art-grid { grid-template-columns: 1fr !important; }
@@ -143,7 +150,9 @@ export default function Landing() {
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
           {/* Hamburger + divider */}
           <button
-            aria-label="Open menu"
+            className="hamburger-btn"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMenuOpen((v) => !v)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -153,13 +162,22 @@ export default function Landing() {
               border: 'none',
               cursor: 'pointer',
               color: 'white',
+              transition: 'opacity 0.2s',
             }}
           >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, width: 22 }}>
-              <span style={{ width: '100%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
-              <span style={{ width: '66%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
-              <span style={{ width: '50%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
-            </div>
+            {menuOpen ? (
+              /* X icon when open */
+              <div style={{ width: 22, height: 22, position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ position: 'absolute', width: '100%', height: 1.5, background: 'white', borderRadius: 2, transform: 'rotate(45deg)' }} />
+                <span style={{ position: 'absolute', width: '100%', height: 1.5, background: 'white', borderRadius: 2, transform: 'rotate(-45deg)' }} />
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5, width: 22 }}>
+                <span style={{ width: '100%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
+                <span style={{ width: '66%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
+                <span style={{ width: '50%', height: 1.5, background: 'white', borderRadius: 2, display: 'block' }} />
+              </div>
+            )}
           </button>
 
           {/* Divider */}
@@ -173,13 +191,13 @@ export default function Landing() {
 
         {/* Right side */}
         <div style={{ display: 'flex', alignItems: 'stretch', marginLeft: 'auto' }}>
-          {/* Nav links — hidden below lg via inline media hack; we use a hidden class */}
+          {/* Nav links — hidden on mobile via .nav-links-desktop class */}
           {['How It Works', 'Features', 'Pricing'].map((label) => (
             <a
               key={label}
               href={label === 'How It Works' ? '#how-it-works' : '#'}
+              className="nav-links-desktop"
               style={{
-                display: 'flex',
                 alignItems: 'center',
                 padding: '0 24px',
                 color: 'rgba(255,255,255,0.90)',
@@ -243,6 +261,104 @@ export default function Landing() {
           </button>
         </div>
       </nav>
+
+      {/* ═══════════════════════════════════════════════════════
+          MOBILE MENU PANEL
+      ═══════════════════════════════════════════════════════ */}
+      {menuOpen && (
+        <div
+          className="mobile-menu"
+          style={{
+            position: 'fixed',
+            top: 79,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 999,
+            background: 'rgba(10,30,20,0.97)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '40px 32px 48px',
+            overflowY: 'auto',
+          }}
+        >
+          {/* Nav links */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 40 }}>
+            {[
+              { label: 'How It Works', href: '#how-it-works' },
+              { label: 'Features', href: '#features' },
+              { label: 'Pricing', href: '#pricing' },
+            ].map(({ label, href }) => (
+              <a
+                key={label}
+                href={href}
+                onClick={() => setMenuOpen(false)}
+                style={{
+                  display: 'block',
+                  padding: '16px 0',
+                  fontSize: 'clamp(1.1rem, 4vw, 1.4rem)',
+                  fontWeight: 600,
+                  color: 'rgba(255,255,255,0.85)',
+                  textDecoration: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  transition: 'color 0.2s',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#4FAD72' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'rgba(255,255,255,0.85)' }}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+
+          {/* CTAs */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 'auto' }}>
+            <button
+              onClick={() => { setMenuOpen(false); navigate('/login') }}
+              style={{
+                width: '100%',
+                padding: '15px 24px',
+                background: '#1F6F4E',
+                border: 'none',
+                borderRadius: 10,
+                color: 'white',
+                fontSize: 15,
+                fontWeight: 600,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+              }}
+            >
+              Get Started <ArrowRight size={16} />
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); navigate('/login') }}
+              style={{
+                width: '100%',
+                padding: '15px 24px',
+                background: 'rgba(255,255,255,0.07)',
+                border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: 10,
+                color: 'rgba(255,255,255,0.80)',
+                fontSize: 15,
+                fontWeight: 500,
+                cursor: 'pointer',
+              }}
+            >
+              Sign in
+            </button>
+          </div>
+
+          {/* Footer note */}
+          <p style={{ marginTop: 32, fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>
+            PayRole — Payroll. People. Possibilities.
+          </p>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════
           2. HERO
