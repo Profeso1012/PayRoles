@@ -15,7 +15,7 @@ export class ApiError extends Error {
 
 export async function apiClient<T>(
   path: string,
-  options?: RequestInit,
+  options?: RequestInit & { skipAuthRedirect?: boolean },
 ): Promise<T> {
   const { token, clearSession } = useAuthStore.getState();
 
@@ -27,15 +27,17 @@ export async function apiClient<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  const { skipAuthRedirect, ...fetchOptions } = options ?? {};
+
   const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
+    ...fetchOptions,
     headers: {
       ...headers,
-      ...(options?.headers as Record<string, string> | undefined),
+      ...(fetchOptions?.headers as Record<string, string> | undefined),
     },
   });
 
-  if (response.status === 401) {
+  if (response.status === 401 && !skipAuthRedirect) {
     clearSession();
     window.location.href = '/login';
     throw new ApiError(401, 'Session expired. Please sign in again.');

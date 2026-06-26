@@ -25,6 +25,7 @@ export default function ForgotPassword() {
       await apiClient('/auth/forgot-password', {
         method: 'POST',
         body: JSON.stringify({ email }),
+        skipAuthRedirect: true,
       });
       setState('sent');
     } catch {

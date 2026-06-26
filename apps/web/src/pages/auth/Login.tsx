@@ -41,7 +41,7 @@ export default function Login() {
     try {
       const data = await apiClient<{ token: string; user: AuthUser; requiresOtp: boolean }>(
         '/auth/login',
-        { method: 'POST', body: JSON.stringify({ email, password }) },
+        { method: 'POST', body: JSON.stringify({ email, password }), skipAuthRedirect: true },
       );
       setSession(data.user, data.token);
       const role = data.user.role;

@@ -51,20 +51,15 @@ export default function AcceptInvite() {
     setLoading(true);
     setError('');
     try {
-      const res = await apiClient<{
-        success: boolean;
-        data: { token: string; user: AuthUser };
-      }>('/auth/accept-invite', {
-        method: 'POST',
-        body: JSON.stringify({ token, fullName, password }),
-      });
-      if (res.success) {
-        setSession(res.data.user, res.data.token);
-        const role = res.data.user.role;
-        if (role === 'PLATFORM_ADMIN') navigate('/admin');
-        else if (role === 'EMPLOYEE') navigate('/my-payslips');
-        else navigate('/dashboard');
-      }
+      const data = await apiClient<{ token: string; user: AuthUser }>(
+        '/auth/accept-invite',
+        { method: 'POST', body: JSON.stringify({ token, fullName, password }), skipAuthRedirect: true },
+      );
+      setSession(data.user, data.token);
+      const role = data.user.role;
+      if (role === 'PLATFORM_ADMIN') navigate('/admin');
+      else if (role === 'EMPLOYEE') navigate('/my-payslips');
+      else navigate('/dashboard');
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Something went wrong. Please try again.';
