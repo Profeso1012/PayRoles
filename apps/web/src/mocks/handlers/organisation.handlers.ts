@@ -169,4 +169,67 @@ export const organisationHandlers = [
     jobGrades = [...jobGrades, created as typeof jobGrades[0]];
     return HttpResponse.json({ success: true, data: created }, { status: 201 });
   }),
+
+  http.patch('/api/organisation/locations/:id', async ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const body = (await request.json()) as Record<string, unknown>;
+    const idx = locations.findIndex((l) => l.id === params.id);
+    if (idx === -1) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Location not found' } },
+        { status: 404 },
+      );
+    }
+    const updated = { ...locations[idx], ...body };
+    locations = locations.map((l) => (l.id === params.id ? updated : l));
+    return HttpResponse.json({ success: true, data: updated });
+  }),
+
+  http.delete('/api/organisation/locations/:id', ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    locations = locations.filter((l) => l.id !== params.id);
+    return HttpResponse.json({ success: true, data: null });
+  }),
+
+  http.patch('/api/organisation/legal-entities/:id', async ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const body = (await request.json()) as Record<string, unknown>;
+    const idx = legalEntities.findIndex((le) => le.id === params.id);
+    if (idx === -1) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Legal entity not found' } },
+        { status: 404 },
+      );
+    }
+    const updated = { ...legalEntities[idx], ...body };
+    legalEntities = legalEntities.map((le) => (le.id === params.id ? updated : le));
+    return HttpResponse.json({ success: true, data: updated });
+  }),
+
+  http.delete('/api/organisation/legal-entities/:id', ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    legalEntities = legalEntities.filter((le) => le.id !== params.id);
+    return HttpResponse.json({ success: true, data: null });
+  }),
+
+  http.patch('/api/organisation/job-grades/:id', async ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    const body = (await request.json()) as Record<string, unknown>;
+    const idx = jobGrades.findIndex((jg) => jg.id === params.id);
+    if (idx === -1) {
+      return HttpResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Job grade not found' } },
+        { status: 404 },
+      );
+    }
+    const updated = { ...jobGrades[idx], ...body };
+    jobGrades = jobGrades.map((jg) => (jg.id === params.id ? updated : jg));
+    return HttpResponse.json({ success: true, data: updated });
+  }),
+
+  http.delete('/api/organisation/job-grades/:id', ({ request, params }) => {
+    if (!getAuthUser(request)) return unauthorized();
+    jobGrades = jobGrades.filter((jg) => jg.id !== params.id);
+    return HttpResponse.json({ success: true, data: null });
+  }),
 ];
