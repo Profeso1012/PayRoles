@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, RefreshCw, AlertTriangle, ShieldOff } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
+import { transformPaginatedResponse } from '@/lib/api/transforms';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/utils';
@@ -72,35 +74,71 @@ export default function UsersAndRoles() {
   const [deactivateTarget, setDeactivateTarget] = useState<TenantUser | null>(null);
 
   const {
-    data: users,
+    data: usersResponse,
     isLoading: usersLoading,
     isError: usersError,
     refetch: refetchUsers,
-  } = useQuery<TenantUser[]>({
+  } = useQuery<any>({
     queryKey: ['settings-users'],
-    queryFn: () => apiClient('/settings/users'),
+    queryFn: async () => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/users');
+      }
+      const response = await apiClient<any>(ENDPOINTS.USERS.LIST);
+      return response;
+    },
     enabled: isSuperAdmin,
   });
 
+  // Transform users response
+  const users = usersResponse 
+    ? (Array.isArray(usersResponse) ? usersResponse : (usersResponse.data || []))
+    : [];
+
+  // Note: Invites endpoint may not be fully implemented in backend yet
   const {
-    data: invites,
+    data: invitesResponse,
     isLoading: invitesLoading,
     isError: invitesError,
     refetch: refetchInvites,
-  } = useQuery<Invite[]>({
+  } = useQuery<any>({
     queryKey: ['settings-invites'],
-    queryFn: () => apiClient('/settings/invites'),
+    queryFn: async () => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/invites');
+      }
+      // Backend may not have invites endpoint yet
+      try {
+        const response = await apiClient<any>(`${ENDPOINTS.USERS.LIST}?status=invited`);
+        return response;
+      } catch {
+        return []; // Return empty if endpoint doesn't exist
+      }
+    },
     enabled: isSuperAdmin,
   });
 
+  const invites = invitesResponse 
+    ? (Array.isArray(invitesResponse) ? invitesResponse : (invitesResponse.data || []))
+    : [];
+
   const sendInviteMutation = useMutation({
-    mutationFn: (body: { email: string; role: string }) =>
-      apiClient('/settings/invites', {
+    mutationFn: (body: { email: string; role: string }) => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/invites', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+      }
+      // Backend users endpoint
+      return apiClient(ENDPOINTS.USERS.CREATE, {
         method: 'POST',
         body: JSON.stringify(body),
-      }),
+      });
+    },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['settings-invites'] });
+      qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success(`Invite sent to ${vars.email}`);
       setInviteForm(blankInviteForm);
       setInviteOpen(false);
@@ -109,8 +147,13 @@ export default function UsersAndRoles() {
   });
 
   const resendMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiClient(`/settings/invites/${id}/resend`, { method: 'POST' }),
+    mutationFn: (id: string) => {
+      if (!USE_REAL_API) {
+        return apiClient(`/settings/invites/${id}/resend`, { method: 'POST' });
+      }
+      // Backend may not support resend yet
+      return apiClient(`${ENDPOINTS.USERS.DETAIL(id)}/resend-invite`, { method: 'POST' });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-invites'] });
       toast.success('Invite resent — expires in 7 days');
@@ -119,8 +162,12 @@ export default function UsersAndRoles() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (id: string) =>
-      apiClient(`/settings/users/${id}/deactivate`, { method: 'PATCH' }),
+    mutationFn: (id: string) => {
+      if (!USE_REAL_API) {
+        return apiClient(`/settings/users/${id}/deactivate`, { method: 'PATCH' });
+      }
+      return apiClient(ENDPOINTS.USERS.DEACTIVATE(id), { method: 'PATCH' });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success('User deactivated');

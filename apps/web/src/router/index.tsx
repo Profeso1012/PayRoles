@@ -26,6 +26,7 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 const Landing = lazy(() => import('@/pages/public/Landing'));
 const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
 const Login = lazy(() => import('@/pages/auth/Login'));
+const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
 const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
@@ -51,10 +52,11 @@ const EmployeeDashboard = lazy(() => import('@/pages/dashboard/EmployeeDashboard
 // Organisation
 const OrgOverview = lazy(() => import('@/pages/organisation/OrgOverview'));
 const LegalEntities = lazy(() => import('@/pages/organisation/LegalEntities'));
-const Departments = lazy(() => import('@/pages/organisation/Departments'));
-const Locations = lazy(() => import('@/pages/organisation/Locations'));
-const PayGroups = lazy(() => import('@/pages/organisation/PayGroups'));
-const JobGrades = lazy(() => import('@/pages/organisation/JobGrades'));
+// Deprecated: Departments, Locations, PayGroups, JobGrades (not in backend)
+// const Departments = lazy(() => import('@/pages/organisation/Departments'));
+// const Locations = lazy(() => import('@/pages/organisation/Locations'));
+// const PayGroups = lazy(() => import('@/pages/organisation/PayGroups'));
+// const JobGrades = lazy(() => import('@/pages/organisation/JobGrades'));
 
 // Employees
 const EmployeeList = lazy(() => import('@/pages/employees/EmployeeList'));
@@ -80,6 +82,10 @@ const CompanyProfile = lazy(() => import('@/pages/settings/CompanyProfile'));
 const UsersAndRoles = lazy(() => import('@/pages/settings/UsersAndRoles'));
 const BankDetails = lazy(() => import('@/pages/settings/BankDetails'));
 const Jurisdictions = lazy(() => import('@/pages/settings/Jurisdictions'));
+
+// Audit & Notifications
+const AuditLogs = lazy(() => import('@/pages/audit/AuditLogs'));
+const Notifications = lazy(() => import('@/pages/notifications/Notifications'));
 
 // Employee portal
 const MyPayslips = lazy(() => import('@/pages/employee-portal/MyPayslips'));
@@ -117,6 +123,7 @@ export const router = createBrowserRouter([
     element: <Suspense fallback={<Loading />}><AuthLayout /></Suspense>,
     children: [
       { path: PATHS.LOGIN, element: w(Login) },
+      { path: '/platform-login', element: w(PlatformLogin) },
       { path: PATHS.FORGOT_PASSWORD, element: w(ForgotPassword) },
       { path: PATHS.RESET_PASSWORD, element: w(ResetPassword) },
       { path: PATHS.ACCEPT_INVITE, element: w(AcceptInvite) },
@@ -169,10 +176,11 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: w(OrgOverview) },
           { path: 'legal-entities', element: w(LegalEntities) },
-          { path: 'departments', element: w(Departments) },
-          { path: 'locations', element: w(Locations) },
-          { path: 'pay-groups', element: w(PayGroups) },
-          { path: 'job-grades', element: w(JobGrades) },
+          // Deprecated routes (not in backend):
+          // { path: 'departments', element: w(Departments) },
+          // { path: 'locations', element: w(Locations) },
+          // { path: 'pay-groups', element: w(PayGroups) },
+          // { path: 'job-grades', element: w(JobGrades) },
         ],
       },
 
@@ -226,6 +234,10 @@ export const router = createBrowserRouter([
           { path: 'jurisdictions', element: w(Jurisdictions) },
         ],
       },
+
+      // Audit & Notifications
+      { path: 'audit', element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'FINANCE_DIRECTOR']}>{w(AuditLogs)}</RoleGuard> },
+      { path: 'notifications', element: w(Notifications) },
 
       // Employee self-service
       { path: 'my-payslips', element: <RoleGuard allowedRoles={['EMPLOYEE']}>{w(MyPayslips)}</RoleGuard> },

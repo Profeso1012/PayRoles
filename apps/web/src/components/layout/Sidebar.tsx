@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FolderTree, Users, Calculator,
   CreditCard, BarChart3, Settings, Receipt, User, Landmark,
   ChevronDown, ChevronRight, FileText, MapPin, Layers, Play,
-  TrendingUp, Shield,
+  TrendingUp, Shield, Bell, History,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -30,10 +30,7 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
       children: [
         { label: 'Overview', path: '/organisation', icon: FolderTree },
         { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
-        { label: 'Departments', path: '/organisation/departments', icon: Layers },
-        { label: 'Locations', path: '/organisation/locations', icon: MapPin },
-        { label: 'Pay Groups', path: '/organisation/pay-groups', icon: Users },
-        { label: 'Job Grades', path: '/organisation/job-grades', icon: TrendingUp },
+        // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
       ],
     },
     { label: 'Employees', path: '/employees', icon: Users },
@@ -62,6 +59,8 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
         { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
       ],
     },
+    { label: 'Audit Logs', path: '/audit', icon: History },
+    { label: 'Notifications', path: '/notifications', icon: Bell },
   ],
   HR_MANAGER: [
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -70,10 +69,7 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
       children: [
         { label: 'Overview', path: '/organisation', icon: FolderTree },
         { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
-        { label: 'Departments', path: '/organisation/departments', icon: Layers },
-        { label: 'Locations', path: '/organisation/locations', icon: MapPin },
-        { label: 'Pay Groups', path: '/organisation/pay-groups', icon: Users },
-        { label: 'Job Grades', path: '/organisation/job-grades', icon: TrendingUp },
+        // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
       ],
     },
     { label: 'Employees', path: '/employees', icon: Users },

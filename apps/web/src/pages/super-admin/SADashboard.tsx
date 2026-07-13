@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Users, CheckCircle, PauseCircle, Clock } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Badge from '@/components/ui/Badge';
@@ -25,8 +26,12 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 
 export default function SADashboard() {
   const { data: tenants, isLoading, isError, refetch } = useQuery({
-    queryKey: ['admin-tenants'],
-    queryFn: () => apiClient<Tenant[]>('/admin/tenants'),
+    queryKey: ['platform-tenants'],
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.PLATFORM_TENANTS.LIST);
+      const items = Array.isArray(response) ? response : (response.data || []);
+      return items;
+    },
   });
 
   if (isLoading) {

@@ -2,6 +2,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Building2, Mail, Globe, BadgeCheck, PauseCircle, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -39,21 +40,24 @@ export default function SACompanyDetail() {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const { data: tenant, isLoading, isError, refetch } = useQuery({
-    queryKey: ['admin-tenant', id],
-    queryFn: () => apiClient<Tenant>(`/admin/tenants/${id}`),
+    queryKey: ['platform-tenant', id],
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.PLATFORM_TENANTS.DETAIL(id!));
+      return response;
+    },
     enabled: !!id,
   });
 
-  // Super Admin invite for this tenant
+  // Note: Platform admin invites endpoint may not be implemented yet
   const { data: invites, refetch: refetchInvites } = useQuery({
-    queryKey: ['admin-tenant-invite', id],
-    queryFn: () => apiClient<AdminInvite[]>(`/admin/tenants/${id}/invites`),
-    enabled: !!id,
+    queryKey: ['platform-tenant-invites', id],
+    queryFn: () => apiClient<AdminInvite[]>(`/platform/tenants/${id}/invites`),
+    enabled: false, // Disable until backend implements this
   });
 
   const resendInvite = useMutation({
     mutationFn: (inviteId: string) =>
-      apiClient(`/admin/tenants/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
+      apiClient(`/platform/tenants/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
     onSuccess: () => {
       refetchInvites();
       toast.success('Invite resent', `A fresh invite link was sent to the Super Admin.`);
@@ -62,14 +66,16 @@ export default function SACompanyDetail() {
   });
 
   const toggleStatus = useMutation({
-    mutationFn: () =>
-      apiClient(`/admin/tenants/${id}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: tenant?.status === 'active' ? 'suspended' : 'active' }),
-      }),
+    mutationFn: () => {
+      const isSuspended = tenant?.status === 'suspended';
+      const endpoint = isSuspended 
+        ? ENDPOINTS.PLATFORM_TENANTS.ACTIVATE(id!)
+        : ENDPOINTS.PLATFORM_TENANTS.SUSPEND(id!);
+      return apiClient(endpoint, { method: 'PATCH' });
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-tenant', id] });
-      qc.invalidateQueries({ queryKey: ['admin-tenants'] });
+      qc.invalidateQueries({ queryKey: ['platform-tenant', id] });
+      qc.invalidateQueries({ queryKey: ['platform-tenants'] });
       const action = tenant?.status === 'active' ? 'suspended' : 'reactivated';
       toast.success(`Company ${action}`, `${tenant?.name} has been ${action}.`);
       setShowConfirm(false);

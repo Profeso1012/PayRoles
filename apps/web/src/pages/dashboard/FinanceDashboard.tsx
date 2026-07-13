@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, ArrowRight, ExternalLink } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapPayrollStatus, minorToMajor } from '@/lib/api/transforms';
 import { formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
@@ -28,12 +30,90 @@ interface FinanceDashboardData {
   approvalQueue: DashboardPayRun[];
 }
 
+// Helper function to build dashboard data from payroll runs API
+async function buildFinanceDashboard(): Promise<FinanceDashboardData> {
+  if (!USE_REAL_API) {
+    // Use mock endpoint
+    return apiClient<FinanceDashboardData>('/dashboard/finance');
+  }
+
+  // Build from payroll runs API
+  const params = buildPaginationParams({ page: 1, limit: 50 });
+  params.set('sortBy', 'createdAt');
+  params.set('sortDir', 'DESC');
+  
+  const response = await apiClient<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+  const { data: runs } = transformPaginatedResponse(response.data || response, response.meta);
+
+  // Calculate stats
+  const now = new Date();
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const awaitingApproval = runs.filter((r: any) => 
+    mapPayrollStatus(r.status, 'toFrontend') === 'in_review'
+  ).length;
+  
+  const approvedThisMonth = runs.filter((r: any) => {
+    const status = mapPayrollStatus(r.status, 'toFrontend');
+    const createdAt = new Date(r.createdAt);
+    return (status === 'approved' || status === 'paid') && createdAt >= firstDayOfMonth;
+  }).length;
+
+  // Calculate total payroll cost (approved + paid runs this month)
+  const totalPayrollCost = runs
+    .filter((r: any) => {
+      const status = mapPayrollStatus(r.status, 'toFrontend');
+      const createdAt = new Date(r.createdAt);
+      return (status === 'approved' || status === 'paid') && createdAt >= firstDayOfMonth;
+    })
+    .reduce((sum: number, r: any) => {
+      const netAmount = r.totalNetMinor ? minorToMajor(r.totalNetMinor, r.currency) : 0;
+      return sum + netAmount;
+    }, 0);
+
+  // Approval queue (pending approval only)
+  const approvalQueue = runs
+    .filter((r: any) => mapPayrollStatus(r.status, 'toFrontend') === 'in_review')
+    .slice(0, 10)
+    .map((r: any) => {
+      // Build period string from dates
+      let period = r.period;
+      if (!period && r.periodStart && r.periodEnd) {
+        const start = new Date(r.periodStart);
+        const end = new Date(r.periodEnd);
+        period = `${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+      }
+
+      return {
+        id: r.id,
+        period: period || 'N/A',
+        status: mapPayrollStatus(r.status, 'toFrontend'),
+        totalGross: r.totalGrossMinor ? minorToMajor(r.totalGrossMinor, r.currency) : 0,
+        totalNet: r.totalNetMinor ? minorToMajor(r.totalNetMinor, r.currency) : 0,
+        currency: r.currency || 'NGN',
+        payGroupName: r.legalEntity?.name || 'N/A',
+        employeeCount: r.employeeCount,
+      };
+    });
+
+  // Use NGN as default currency
+  const currency = runs.length > 0 ? (runs[0].currency || 'NGN') : 'NGN';
+
+  return {
+    awaitingApproval,
+    approvedThisMonth,
+    totalPayrollCost,
+    currency,
+    approvalQueue,
+  };
+}
+
 export default function FinanceDashboard() {
   const navigate = useNavigate();
 
   const { data, isLoading, isError, refetch } = useQuery<FinanceDashboardData>({
     queryKey: ['dashboard-finance'],
-    queryFn: () => apiClient<FinanceDashboardData>('/dashboard/finance'),
+    queryFn: buildFinanceDashboard,
   });
 
   if (isLoading) {

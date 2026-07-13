@@ -16,6 +16,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -97,30 +98,37 @@ export default function SACompanies() {
   const [formError, setFormError] = useState('');
 
   const { data: tenants, isLoading: tenantsLoading, isError: tenantsError, refetch: refetchTenants } = useQuery({
-    queryKey: ['admin-tenants'],
-    queryFn: () => apiClient<Tenant[]>('/admin/tenants'),
+    queryKey: ['platform-tenants'],
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.PLATFORM_TENANTS.LIST);
+      const items = Array.isArray(response) ? response : (response.data || []);
+      return items;
+    },
   });
 
+  // Note: Company requests endpoint not implemented in backend yet
+  // Keep the query disabled for now
   const { data: requests, isLoading: reqLoading, isError: reqError, refetch: refetchReq } = useQuery({
     queryKey: ['company-requests'],
-    queryFn: () => apiClient<CompanyRequest[]>('/admin/company-requests'),
-    enabled: activeTab === 'requests',
+    queryFn: () => apiClient<CompanyRequest[]>('/platform/company-requests'),
+    enabled: false, // Disabled until backend implements this endpoint
   });
 
   const onboard = useMutation({
     mutationFn: (payload: { name: string; adminEmail: string; plan: string; country: string }) =>
-      apiClient('/admin/tenants', { method: 'POST', body: JSON.stringify(payload) }),
+      apiClient(ENDPOINTS.PLATFORM_TENANTS.CREATE, { method: 'POST', body: JSON.stringify(payload) }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-tenants'] });
+      qc.invalidateQueries({ queryKey: ['platform-tenants'] });
       toast.success('Company onboarded', 'An invite has been sent to the admin email.');
       resetForm();
     },
     onError: () => toast.error('Failed to onboard company', 'Please try again.'),
   });
 
+  // Note: Company requests feature not implemented in backend yet
   const approveRequest = useMutation({
     mutationFn: (id: string) =>
-      apiClient(`/admin/company-requests/${id}/approve`, { method: 'PATCH' }),
+      apiClient(`/platform/company-requests/${id}/approve`, { method: 'PATCH' }),
     onSuccess: (_data, id) => {
       qc.invalidateQueries({ queryKey: ['company-requests'] });
       const req = requests?.find((r) => r.id === id);
@@ -132,7 +140,7 @@ export default function SACompanies() {
 
   const rejectRequest = useMutation({
     mutationFn: (id: string) =>
-      apiClient(`/admin/company-requests/${id}/reject`, { method: 'PATCH' }),
+      apiClient(`/platform/company-requests/${id}/reject`, { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['company-requests'] });
       toast.success('Request rejected', 'The request has been declined.');
@@ -144,7 +152,7 @@ export default function SACompanies() {
 
   const resendInvite = useMutation({
     mutationFn: (id: string) =>
-      apiClient(`/admin/company-requests/${id}/resend-invite`, { method: 'POST' }),
+      apiClient(`/platform/company-requests/${id}/resend-invite`, { method: 'POST' }),
     onSuccess: (_data, id) => {
       const req = requests?.find((r) => r.id === id);
       toast.success('Invite resent', `A new invite link was sent to ${req?.email ?? 'the contact'}.`);

@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
+import { mapWorkerFields } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Tabs from '@/components/ui/Tabs';
@@ -14,6 +16,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import Button from '@/components/ui/Button';
 import type { Employee, EmployeeAssignment, Compensation } from '@contracts/types/employee';
 import type { Payslip } from '@contracts/types/payroll';
+import type { BackendWorker, BackendCompensation } from '@/lib/api/types';
 
 const TAB_IDS = ['profile', 'assignments', 'compensation', 'payslips'];
 
@@ -24,16 +27,20 @@ const TABS = [
   { id: 'payslips', label: 'Payslips' },
 ];
 
-const statusVariant: Record<string, 'success' | 'warning' | 'error'> = {
+const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
+  inactive: 'info',
   on_leave: 'warning',
+  terminated: 'error',
   exited: 'error',
 };
 
 const statusLabel: Record<string, string> = {
   active: 'Active',
+  inactive: 'Inactive',
   on_leave: 'On Leave',
-  exited: 'Exited',
+  terminated: 'Terminated',
+  exited: 'Terminated',
 };
 
 export default function EmployeeDetail() {
@@ -42,26 +49,64 @@ export default function EmployeeDetail() {
   const [tab, setTab] = useState('profile');
 
   const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
-    queryKey: ['employee', id],
-    queryFn: () => apiClient<Employee>(`/employees/${id}`),
+    queryKey: ['worker', id],
+    queryFn: async () => {
+      const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
+      const mapped = mapWorkerFields(worker, 'toFrontend');
+      return {
+        ...mapped,
+        status: (mapped.status || '').toLowerCase(),
+        createdAt: mapped.createdAt || new Date().toISOString(),
+        // Provide default empty arrays for fields that might not exist
+        bankDetails: [], // Backend doesn't return bank details array in same format
+      } as Employee;
+    },
     enabled: !!id,
   });
 
+  // Note: Backend doesn't have assignments endpoint yet
+  // Using mock endpoint for now, will fallback gracefully
   const { data: assignments } = useQuery<EmployeeAssignment[]>({
-    queryKey: ['employee-assignments', id],
-    queryFn: () => apiClient<EmployeeAssignment[]>(`/employees/${id}/assignments`),
+    queryKey: ['worker-assignments', id],
+    queryFn: async () => {
+      try {
+        return await apiClient<EmployeeAssignment[]>(`/employees/${id}/assignments`);
+      } catch {
+        // Backend doesn't have this endpoint yet
+        return [];
+      }
+    },
     enabled: !!id && tab === 'assignments',
   });
 
   const { data: compensations } = useQuery<Compensation[]>({
-    queryKey: ['employee-compensations', id],
-    queryFn: () => apiClient<Compensation[]>(`/employees/${id}/compensations`),
+    queryKey: ['worker-compensations', id],
+    queryFn: async () => {
+      try {
+        const result = await apiClient<BackendCompensation[]>(
+          ENDPOINTS.COMPENSATION.LIST(id!)
+        );
+        // Transform backend compensation to frontend format
+        return result.map(comp => ({
+          id: comp.id,
+          workerId: comp.workerId,
+          effectiveFrom: comp.effectiveFrom,
+          effectiveTo: comp.effectiveTo,
+          grossSalary: parseInt(comp.baseSalaryMinor) / 100,  // Convert from minor units
+          currency: comp.currency,
+          createdAt: comp.createdAt,
+        })) as Compensation[];
+      } catch (error) {
+        console.error('Failed to fetch compensations:', error);
+        return [];
+      }
+    },
     enabled: !!id && tab === 'compensation',
   });
 
   const { data: payslips } = useQuery<Payslip[]>({
-    queryKey: ['employee-payslips', id],
-    queryFn: () => apiClient<Payslip[]>(`/employees/${id}/payslips`),
+    queryKey: ['worker-payslips', id],
+    queryFn: () => apiClient<Payslip[]>(ENDPOINTS.WORKERS.PAYSLIPS(id!)),
     enabled: !!id && tab === 'payslips',
   });
 
@@ -116,7 +161,7 @@ export default function EmployeeDetail() {
       </div>
 
       {/* No bank details warning */}
-      {employee.bankDetails.length === 0 && (
+      {!employee.bankName && (
         <div className="flex items-start gap-3 p-4 bg-cash-gold/10 border border-cash-gold/30 rounded-lg mb-6">
           <AlertCircle size={18} className="text-cash-gold shrink-0 mt-0.5" />
           <p className="text-sm text-deep-cash">
@@ -147,7 +192,9 @@ export default function EmployeeDetail() {
               <dt className="text-cash-green/60">Gender</dt>
               <dd className="text-deep-cash capitalize">{employee.gender.replace(/_/g, ' ')}</dd>
               <dt className="text-cash-green/60">National ID</dt>
-              <dd className="text-deep-cash font-mono text-xs">{employee.nationalId}</dd>
+              <dd className="text-deep-cash font-mono text-xs">
+                {employee.nationalId === '****' ? 'Protected' : employee.nationalId}
+              </dd>
             </dl>
           </div>
 
@@ -156,27 +203,19 @@ export default function EmployeeDetail() {
               <CreditCard size={16} className="text-cash-green" />
               <h3 className="text-sm font-semibold text-deep-cash">Bank Details</h3>
             </div>
-            {employee.bankDetails.length === 0 ? (
+            {!employee.bankName ? (
               <p className="text-sm text-cash-green/60">No bank details on file.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {employee.bankDetails.map((bd) => (
-                  <div
-                    key={bd.id}
-                    className={`flex items-center justify-between p-4 rounded-lg border ${
-                      bd.isPrimary ? 'border-fresh-cash/40 bg-mint-light/30' : 'border-mint-light'
-                    }`}
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-deep-cash">{bd.bankName}</p>
-                      <p className="text-xs text-cash-green font-mono mt-0.5">{bd.accountNumber}</p>
-                      <p className="text-xs text-cash-green/60">{bd.accountName}</p>
-                    </div>
-                    {bd.isPrimary && (
-                      <Badge variant="success" label="Primary" />
-                    )}
+                <div className="flex items-center justify-between p-4 rounded-lg border border-fresh-cash/40 bg-mint-light/30">
+                  <div>
+                    <p className="text-sm font-medium text-deep-cash">{employee.bankName}</p>
+                    <p className="text-xs text-cash-green font-mono mt-0.5">
+                      {employee.bankAccount === '****' ? 'Protected' : employee.bankAccount}
+                    </p>
                   </div>
-                ))}
+                  <Badge variant="success" label="Primary" />
+                </div>
               </div>
             )}
           </div>

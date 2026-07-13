@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Users, UserCheck, Clock, UserX, UserPlus, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapWorkerStatus } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
@@ -32,6 +34,71 @@ interface HRDashboardData {
   recentHires: RecentHire[];
 }
 
+// Build HR dashboard data from workers API
+async function buildHRDashboard(): Promise<HRDashboardData> {
+  if (!USE_REAL_API) {
+    return apiClient<HRDashboardData>('/dashboard/hr');
+  }
+
+  // Fetch all workers (or at least first 100 for stats)
+  const params = buildPaginationParams({ page: 1, limit: 100 });
+  params.set('sortBy', 'createdAt');
+  params.set('sortDir', 'DESC');
+  
+  const response = await apiClient<any>(`${ENDPOINTS.WORKERS.LIST}?${params}`);
+  const { data: workers, total } = transformPaginatedResponse(
+    response.data || response, 
+    response.meta
+  );
+
+  // Calculate stats
+  const now = new Date();
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const active = workers.filter((w: any) => 
+    mapWorkerStatus(w.status, 'toFrontend') === 'active'
+  ).length;
+  
+  const onLeave = workers.filter((w: any) => 
+    mapWorkerStatus(w.status, 'toFrontend') === 'on_leave'
+  ).length;
+  
+  const exited = workers.filter((w: any) => 
+    mapWorkerStatus(w.status, 'toFrontend') === 'terminated'
+  ).length;
+  
+  const newThisMonth = workers.filter((w: any) => {
+    const createdAt = new Date(w.createdAt);
+    return createdAt >= firstDayOfMonth;
+  }).length;
+  
+  const missingBankDetails = workers.filter((w: any) => 
+    !w.bankName || (!w.bankAccount && !w.bankAccountEncrypted)
+  ).length;
+
+  // Recent hires (last 10)
+  const recentHires = workers.slice(0, 10).map((w: any) => ({
+    id: w.id,
+    firstName: w.firstName,
+    lastName: w.lastName,
+    email: w.email || '',
+    department: w.department || 'N/A',
+    jobTitle: w.position || 'N/A',
+    createdAt: w.createdAt,
+    status: mapWorkerStatus(w.status, 'toFrontend'),
+  }));
+
+  return {
+    total,
+    active,
+    onLeave,
+    exited,
+    newThisMonth,
+    missingBankDetails,
+    recentHires,
+  };
+}
+
 const statusVariantMap: Record<string, 'active' | 'on_leave' | 'exited' | 'info'> = {
   active: 'active',
   on_leave: 'on_leave',
@@ -50,7 +117,7 @@ export default function HRDashboard() {
 
   const { data, isLoading, isError, refetch } = useQuery<HRDashboardData>({
     queryKey: ['dashboard-hr'],
-    queryFn: () => apiClient<HRDashboardData>('/dashboard/hr'),
+    queryFn: buildHRDashboard,
   });
 
   if (isLoading) {

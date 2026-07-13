@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { USE_REAL_API } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
@@ -37,15 +38,29 @@ export default function Jurisdictions() {
 
   const { data: jurisdictions, isLoading, isError, refetch } = useQuery<Jurisdiction[]>({
     queryKey: ['settings-jurisdictions'],
-    queryFn: () => apiClient('/settings/jurisdictions'),
+    queryFn: () => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/jurisdictions');
+      }
+      // Backend may not have this endpoint yet, fall back to mock
+      return apiClient('/settings/jurisdictions');
+    },
   });
 
   const toggleMutation = useMutation({
-    mutationFn: ({ code, active }: { code: string; active: boolean }) =>
-      apiClient(`/settings/jurisdictions/${code}`, {
+    mutationFn: ({ code, active }: { code: string; active: boolean }) => {
+      if (!USE_REAL_API) {
+        return apiClient(`/settings/jurisdictions/${code}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ active }),
+        });
+      }
+      // Backend may not have this endpoint yet, fall back to mock
+      return apiClient(`/settings/jurisdictions/${code}`, {
         method: 'PATCH',
         body: JSON.stringify({ active }),
-      }),
+      });
+    },
     onMutate: ({ code }) => setTogglingCode(code),
     onSuccess: (_, { code, active }) => {
       qc.invalidateQueries({ queryKey: ['settings-jurisdictions'] });

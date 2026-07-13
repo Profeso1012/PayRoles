@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
@@ -46,19 +47,23 @@ export default function PayElements() {
 
   const { data: elements, isLoading, isError, refetch } = useQuery<PayElement[]>({
     queryKey: ['pay-elements'],
-    queryFn: () => apiClient<PayElement[]>('/pay-elements'),
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.PAY_ELEMENTS.LIST);
+      const items = Array.isArray(response) ? response : (response.data || []);
+      return items;
+    },
   });
 
   const saveMutation = useMutation({
     mutationFn: () =>
       editing
-        ? apiClient<PayElement>(`/pay-elements/${editing.id}`, {
+        ? apiClient<PayElement>(ENDPOINTS.PAY_ELEMENTS.UPDATE(editing.id), {
             method: 'PATCH',
             body: JSON.stringify(form),
           })
-        : apiClient<PayElement>('/pay-elements', {
+        : apiClient<PayElement>(ENDPOINTS.PAY_ELEMENTS.CREATE, {
             method: 'POST',
-            body: JSON.stringify({ ...form, amount: 0, currency: 'NGN', isStatutory: false }),
+            body: JSON.stringify({ ...form, isStatutory: false }),
           }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-elements'] });
@@ -69,7 +74,7 @@ export default function PayElements() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient(`/pay-elements/${id}`, { method: 'DELETE' }),
+    mutationFn: (id: string) => apiClient(ENDPOINTS.PAY_ELEMENTS.DELETE(id), { method: 'DELETE' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-elements'] });
       toast.success('Pay element deleted');

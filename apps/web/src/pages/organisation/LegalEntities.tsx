@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/utils';
 import Button from '@/components/ui/Button';
@@ -53,7 +54,7 @@ export default function LegalEntities() {
 
   const addMutation = useMutation({
     mutationFn: (body: typeof blankForm) =>
-      apiClient('/organisation/legal-entities', {
+      apiClient(ENDPOINTS.LEGAL_ENTITIES.CREATE, {
         method: 'POST',
         body: JSON.stringify(body),
       }),
@@ -69,14 +70,14 @@ export default function LegalEntities() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
-      apiClient(`/organisation/legal-entities/${id}`, { method: 'DELETE' }),
+      apiClient(ENDPOINTS.LEGAL_ENTITIES.DEACTIVATE(id), { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['legal-entities'] });
       qc.invalidateQueries({ queryKey: ['org-overview'] });
-      toast.success('Legal entity deleted');
+      toast.success('Legal entity deactivated');
       setDeleteTarget(null);
     },
-    onError: () => toast.error('Failed to delete legal entity'),
+    onError: () => toast.error('Failed to deactivate legal entity'),
   });
 
   if (isLoading) {
@@ -294,9 +295,9 @@ export default function LegalEntities() {
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-        title="Delete Legal Entity"
-        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title="Deactivate Legal Entity"
+        message={`Are you sure you want to deactivate "${deleteTarget?.name}"? Workers assigned to this entity will need to be reassigned.`}
+        confirmLabel="Deactivate"
         variant="danger"
         isLoading={deleteMutation.isPending}
       />

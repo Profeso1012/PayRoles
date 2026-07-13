@@ -5,9 +5,11 @@ import {
   Clock, BarChart3, Users, ChevronRight,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
+import { mapPayrollRunFields, mapPayrollStatus } from '@/lib/api/transforms';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { formatPeriod, formatMoney, formatDate } from '@/lib/utils';
+import { formatMoney, formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -49,6 +51,15 @@ function displayStepIndex(s: PayRunStatus): number {
   return i === -1 ? 0 : i;
 }
 
+// Helper to format period from start/end dates or single period string
+function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
+  if (period) return period;
+  if (!periodStart) return '—';
+  const start = new Date(periodStart);
+  const month = start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  return month;
+}
+
 export default function PayRunDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -58,7 +69,27 @@ export default function PayRunDetail() {
 
   const { data: run, isLoading, isError, refetch } = useQuery<PayRun>({
     queryKey: ['pay-run', id],
-    queryFn: () => apiClient<PayRun>(`/pay-runs/${id}`),
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(id!));
+      const transformed = mapPayrollRunFields(response, 'toFrontend');
+      
+      // Build period string from dates if not present
+      if (!transformed.period && transformed.periodStart) {
+        transformed.period = formatPeriod(transformed.periodStart, transformed.periodEnd);
+      }
+      
+      // Map payGroupName to name if present
+      if (transformed.name && !transformed.payGroupName) {
+        transformed.payGroupName = transformed.name;
+      }
+      
+      // Backend uses PROCESSING status, map to calculating
+      if (transformed.status === 'processing') {
+        transformed.status = 'calculating';
+      }
+      
+      return transformed;
+    },
     enabled: !!id,
     refetchInterval: (query) => {
       return query.state.data?.status === 'calculating' ? 2000 : false;
@@ -68,18 +99,26 @@ export default function PayRunDetail() {
   const { data: register } = useQuery<PayRunEmployee[]>({
     queryKey: ['pay-run-register', id],
     queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch(`/api/pay-runs/${id}/register`, {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      const json = await res.json();
-      return json.data ?? [];
+      const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.PAYSLIPS(id!));
+      const payslips = Array.isArray(response) ? response : (response.data || []);
+      
+      // Transform payslips to employee register format
+      return payslips.map((payslip: any) => ({
+        employeeId: payslip.workerId,
+        employeeName: `${payslip.workerFirstName || ''} ${payslip.workerLastName || ''}`.trim(),
+        employeeNumber: payslip.workerEmployeeNumber || '—',
+        grossPay: payslip.totalGross || 0,
+        totalDeductions: payslip.totalDeductions || 0,
+        netPay: payslip.netPay || 0,
+        status: payslip.status || 'ok',
+        flagReason: payslip.flagReason || undefined,
+      }));
     },
     enabled: !!id && !!run && ['calculated', 'in_review', 'approved', 'paid'].includes(run.status),
   });
 
   const calculateMutation = useMutation({
-    mutationFn: () => apiClient(`/pay-runs/${id}/calculate`, { method: 'POST' }),
+    mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.SUBMIT(id!), { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Calculation started');
@@ -88,7 +127,7 @@ export default function PayRunDetail() {
   });
 
   const submitMutation = useMutation({
-    mutationFn: () => apiClient(`/pay-runs/${id}/submit`, { method: 'POST' }),
+    mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.SUBMIT(id!), { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Submitted for review');
@@ -97,7 +136,7 @@ export default function PayRunDetail() {
   });
 
   const approveMutation = useMutation({
-    mutationFn: () => apiClient(`/pay-runs/${id}/approve`, { method: 'POST' }),
+    mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.APPROVE(id!), { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Pay run approved');
@@ -106,7 +145,7 @@ export default function PayRunDetail() {
   });
 
   const rejectMutation = useMutation({
-    mutationFn: () => apiClient(`/pay-runs/${id}/reject`, { method: 'POST' }),
+    mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.REJECT(id!), { method: 'POST' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Pay run returned to payroll');
@@ -127,7 +166,7 @@ export default function PayRunDetail() {
   }
 
   const currentStep = displayStepIndex(run.status);
-  const period = formatPeriod(run.period);
+  const period = run.period || formatPeriod(run.periodStart, run.periodEnd);
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -188,9 +227,9 @@ export default function PayRunDetail() {
           }}
         >
           {[
-            { label: 'Employees', value: String(run.employeeCount), icon: Users },
+            ...(run.employeeCount ? [{ label: 'Employees', value: String(run.employeeCount), icon: Users }] : []),
             { label: 'Total Gross', value: formatMoney(run.totalGross, run.currency), icon: BarChart3 },
-            { label: 'Deductions', value: formatMoney(run.totalDeductions, run.currency), icon: BarChart3 },
+            { label: 'Deductions', value: formatMoney(run.totalDeductions || 0, run.currency), icon: BarChart3 },
             { label: 'Net Payable', value: formatMoney(run.totalNet, run.currency), icon: BarChart3 },
           ].map((card) => (
             <div key={card.label} className="bg-white rounded-xl border border-mint-light px-5 py-4">
@@ -389,3 +428,4 @@ export default function PayRunDetail() {
     </div>
   );
 }
+

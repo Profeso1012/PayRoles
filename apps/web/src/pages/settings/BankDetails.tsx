@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Info, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { USE_REAL_API } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
@@ -34,7 +35,13 @@ export default function BankDetails() {
 
   const { data, isLoading, isError, refetch } = useQuery<BankDetailsData>({
     queryKey: ['settings-bank'],
-    queryFn: () => apiClient('/settings/bank'),
+    queryFn: () => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/bank');
+      }
+      // Backend may not have this endpoint yet, fall back to mock
+      return apiClient('/settings/bank');
+    },
   });
 
   useEffect(() => {
@@ -44,11 +51,19 @@ export default function BankDetails() {
   }, [data]);
 
   const saveMutation = useMutation({
-    mutationFn: (body: BankDetailsData) =>
-      apiClient('/settings/bank', {
+    mutationFn: (body: BankDetailsData) => {
+      if (!USE_REAL_API) {
+        return apiClient('/settings/bank', {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+      }
+      // Backend may not have this endpoint yet
+      return apiClient('/settings/bank', {
         method: 'PATCH',
         body: JSON.stringify(body),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-bank'] });
       setSaveStatus('success');

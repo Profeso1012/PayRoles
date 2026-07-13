@@ -51,6 +51,10 @@ export const PATHS = {
   SETTINGS_BANK: '/settings/bank',
   SETTINGS_JURISDICTIONS: '/settings/jurisdictions',
 
+  // Audit & Notifications
+  AUDIT_LOGS: '/audit',
+  NOTIFICATIONS: '/notifications',
+
   // Employee portal
   MY_PAYSLIPS: '/my-payslips',
   MY_PROFILE: '/my-profile',

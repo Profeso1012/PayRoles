@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, FileText, Clock, CheckCircle, Plus, ArrowRight } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapPayrollStatus, minorToMajor } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
@@ -27,6 +29,81 @@ interface PayrollDashboardData {
   drafts: number;
   nextPayDate: string;
   recentRuns: DashboardPayRun[];
+}
+
+// Build payroll dashboard data from payroll runs API
+async function buildPayrollDashboard(): Promise<PayrollDashboardData> {
+  if (!USE_REAL_API) {
+    return apiClient<PayrollDashboardData>('/dashboard/payroll');
+  }
+
+  // Fetch payroll runs
+  const params = buildPaginationParams({ page: 1, limit: 50 });
+  params.set('sortBy', 'createdAt');
+  params.set('sortDir', 'DESC');
+  
+  const response = await apiClient<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+  const { data: runs } = transformPaginatedResponse(
+    response.data || response, 
+    response.meta
+  );
+
+  // Calculate stats
+  const now = new Date();
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  
+  const runsThisMonth = runs.filter((r: any) => {
+    const createdAt = new Date(r.createdAt);
+    return createdAt >= firstDayOfMonth;
+  }).length;
+  
+  const pendingApproval = runs.filter((r: any) => 
+    mapPayrollStatus(r.status, 'toFrontend') === 'in_review'
+  ).length;
+  
+  const drafts = runs.filter((r: any) => 
+    mapPayrollStatus(r.status, 'toFrontend') === 'draft'
+  ).length;
+
+  // Find next pay date (earliest upcoming payDate from non-draft runs)
+  const upcomingRuns = runs
+    .filter((r: any) => r.payDate && mapPayrollStatus(r.status, 'toFrontend') !== 'draft')
+    .map((r: any) => new Date(r.payDate))
+    .filter((d: Date) => d >= now)
+    .sort((a: Date, b: Date) => a.getTime() - b.getTime());
+  
+  const nextPayDate = upcomingRuns.length > 0 
+    ? upcomingRuns[0].toISOString() 
+    : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Recent runs (last 10, transform amounts)
+  const recentRuns = runs.slice(0, 10).map((r: any) => {
+    // Build period string from dates
+    let period = r.period;
+    if (!period && r.periodStart && r.periodEnd) {
+      const start = new Date(r.periodStart);
+      period = `${start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`;
+    }
+
+    return {
+      id: r.id,
+      period: period || 'N/A',
+      status: mapPayrollStatus(r.status, 'toFrontend'),
+      totalGross: r.totalGrossMinor ? minorToMajor(r.totalGrossMinor, r.currency) : 0,
+      totalNet: r.totalNetMinor ? minorToMajor(r.totalNetMinor, r.currency) : 0,
+      currency: r.currency || 'NGN',
+      payGroupName: r.legalEntity?.name || 'N/A',
+      employeeCount: r.employeeCount,
+    };
+  });
+
+  return {
+    runsThisMonth,
+    pendingApproval,
+    drafts,
+    nextPayDate,
+    recentRuns,
+  };
 }
 
 type BadgeVariantKey =
@@ -66,7 +143,7 @@ export default function PayrollDashboard() {
 
   const { data, isLoading, isError, refetch } = useQuery<PayrollDashboardData>({
     queryKey: ['dashboard-payroll'],
-    queryFn: () => apiClient<PayrollDashboardData>('/dashboard/payroll'),
+    queryFn: buildPayrollDashboard,
   });
 
   if (isLoading) {

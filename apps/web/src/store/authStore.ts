@@ -1,40 +1,82 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { AuthUser, Permission } from '@contracts/types/auth';
+import { parseTokenExpiry } from '@/lib/api/transforms';
 
 interface AuthState {
   user: AuthUser | null;
-  token: string | null;
+  accessToken: string | null;
+  refreshToken: string | null;
+  tokenExpiresAt: number | null;
   isAuthenticated: boolean;
-  setSession: (user: AuthUser, token: string) => void;
+  setSession: (data: {
+    user?: AuthUser;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: string;
+  }) => void;
   clearSession: () => void;
   hasPermission: (permission: Permission) => boolean;
+  isTokenExpired: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      token: null,
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiresAt: null,
       isAuthenticated: false,
 
-      setSession: (user, token) =>
-        set({ user, token, isAuthenticated: true }),
+      setSession: ({ user, accessToken, refreshToken, expiresIn }) => {
+        const currentState = get();
+        
+        // Calculate token expiry if provided
+        let tokenExpiresAt = currentState.tokenExpiresAt;
+        if (expiresIn) {
+          const expiryMs = parseTokenExpiry(expiresIn);
+          tokenExpiresAt = Date.now() + expiryMs;
+        }
+
+        set({
+          user: user || currentState.user,
+          accessToken: accessToken || currentState.accessToken,
+          refreshToken: refreshToken || currentState.refreshToken,
+          tokenExpiresAt,
+          isAuthenticated: true,
+        });
+      },
 
       clearSession: () =>
-        set({ user: null, token: null, isAuthenticated: false }),
+        set({
+          user: null,
+          accessToken: null,
+          refreshToken: null,
+          tokenExpiresAt: null,
+          isAuthenticated: false,
+        }),
 
       hasPermission: (permission) => {
         const { user } = get();
         if (!user) return false;
         return user.permissions.includes(permission);
       },
+
+      isTokenExpired: () => {
+        const { tokenExpiresAt } = get();
+        if (!tokenExpiresAt) return true;
+        // Add 60 second buffer
+        return Date.now() >= tokenExpiresAt - 60000;
+      },
     }),
     {
       name: 'payrole_auth',
       partialize: (state) => ({
         user: state.user,
-        token: state.token,
+        accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
+        tokenExpiresAt: state.tokenExpiresAt,
         isAuthenticated: state.isAuthenticated,
       }),
     },

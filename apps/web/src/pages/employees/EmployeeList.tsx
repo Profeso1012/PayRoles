@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapWorkerFields } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
@@ -11,52 +14,40 @@ import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
 import Avatar from '@/components/ui/Avatar';
 import type { Employee } from '@contracts/types/employee';
+import type { BackendWorker } from '@/lib/api/types';
 
 interface PaginatedResult<T> {
   data: T[];
   meta: { page: number; pageSize: number; total: number };
 }
 
-interface Department {
+interface LegalEntity {
   id: string;
   name: string;
-}
-
-async function fetchList<T>(path: string): Promise<PaginatedResult<T>> {
-  const { token, clearSession } = useAuthStore.getState();
-  const res = await fetch(`/api${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (res.status === 401) {
-    clearSession();
-    window.location.href = '/login';
-    throw new Error('Session expired');
-  }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error?.message ?? 'Request failed');
-  return { data: json.data, meta: json.meta ?? { page: 1, pageSize: 20, total: (json.data as unknown[])?.length ?? 0 } };
 }
 
 const statusOptions = [
   { value: '', label: 'All statuses' },
   { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
   { value: 'on_leave', label: 'On Leave' },
-  { value: 'exited', label: 'Exited' },
+  { value: 'terminated', label: 'Terminated' },
 ];
 
-const statusVariantMap: Record<string, 'success' | 'warning' | 'error'> = {
+const statusVariantMap: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
+  inactive: 'info',
   on_leave: 'warning',
-  exited: 'error',
+  terminated: 'error',
+  exited: 'error',  // Keep for backward compatibility
 };
 
 const statusLabelMap: Record<string, string> = {
   active: 'Active',
+  inactive: 'Inactive',
   on_leave: 'On Leave',
-  exited: 'Exited',
+  terminated: 'Terminated',
+  exited: 'Terminated',  // Keep for backward compatibility
 };
 
 export default function EmployeeList() {
@@ -67,33 +58,72 @@ export default function EmployeeList() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
+  const [legalEntityId, setLegalEntityId] = useState('');
 
-  const { data: departments } = useQuery<Department[]>({
-    queryKey: ['departments'],
+  // Fetch legal entities (replaces departments for filtering)
+  const { data: legalEntities } = useQuery<LegalEntity[]>({
+    queryKey: ['legal-entities'],
     queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch('/api/organisation/departments', {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      const json = await res.json();
-      return json.data ?? [];
+      try {
+        const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
+        // Handle both paginated and direct array responses
+        if (Array.isArray(response)) {
+          return response;
+        }
+        return response.data || [];
+      } catch (error) {
+        console.error('Failed to fetch legal entities:', error);
+        return [];
+      }
     },
   });
 
-  const deptOptions = [
-    { value: '', label: 'All departments' },
-    ...(departments ?? []).map((d) => ({ value: d.id, label: d.name })),
+  const entityOptions = [
+    { value: '', label: 'All entities' },
+    ...(legalEntities ?? []).map((e) => ({ value: e.id, label: e.name })),
   ];
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '20' });
+  // Build query params for backend
+  const params = new URLSearchParams({ 
+    page: String(page), 
+    limit: '20',  // Backend uses 'limit' not 'pageSize'
+    sortBy: 'createdAt',
+    sortDir: 'desc',
+  });
   if (search) params.set('search', search);
-  if (status) params.set('status', status);
-  if (departmentId) params.set('departmentId', departmentId);
+  if (status) params.set('status', status.toUpperCase());  // Backend expects uppercase
+  if (legalEntityId) params.set('legalEntityId', legalEntityId);
 
   const { data, isLoading, isError } = useQuery<PaginatedResult<Employee>>({
-    queryKey: ['employees-list', page, search, status, departmentId],
-    queryFn: () => fetchList<Employee>(`/employees?${params}`),
+    queryKey: ['workers-list', page, search, status, legalEntityId],
+    queryFn: async () => {
+      try {
+        // Call workers endpoint (backend)
+        const response = await apiClient<BackendWorker[]>(
+          `${ENDPOINTS.WORKERS.LIST}?${params}`
+        );
+
+        // Transform backend response to match frontend structure
+        const workers = Array.isArray(response) ? response : [];
+        
+        // Map worker fields to employee format (handles encrypted fields, etc.)
+        const employees = workers.map((worker) => {
+          const mapped = mapWorkerFields(worker, 'toFrontend');
+          return {
+            ...mapped,
+            // Ensure status is lowercase for frontend
+            status: (mapped.status || '').toLowerCase(),
+            createdAt: mapped.createdAt || new Date().toISOString(),
+          } as Employee;
+        });
+
+        // Transform pagination
+        return transformPaginatedResponse(employees, (response as any).meta);
+      } catch (error) {
+        console.error('Failed to fetch workers:', error);
+        throw error;
+      }
+    },
   });
 
   const columns = [
@@ -187,13 +217,13 @@ export default function EmployeeList() {
         </div>
         <div className="w-52">
           <Select
-            value={departmentId}
-            options={deptOptions}
+            value={legalEntityId}
+            options={entityOptions}
             onChange={(v) => {
-              setDepartmentId(v);
+              setLegalEntityId(v);
               setPage(1);
             }}
-            placeholder="All departments"
+            placeholder="All entities"
           />
         </div>
       </div>
@@ -208,7 +238,7 @@ export default function EmployeeList() {
         onRowClick={(row) => navigate(`/employees/${row.id}`)}
         rowKey={(row) => row.id}
         emptyMessage="No employees found"
-        rowClassName={(row) => (row.status === 'exited' ? 'opacity-60' : '')}
+        rowClassName={(row) => (row.status === 'terminated' || row.status === 'exited' ? 'opacity-60' : '')}
       />
     </div>
   );

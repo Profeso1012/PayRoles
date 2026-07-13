@@ -1,48 +1,39 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, MapPin, Users } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
+import { formatDate } from '@/lib/utils';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import Badge from '@/components/ui/Badge';
-import OrgSetupBanner from '@/components/shared/OrgSetupBanner';
 
-interface OverviewLegalEntity {
+interface LegalEntity {
   id: string;
+  tenantId: string;
   name: string;
   country: string;
   taxId: string;
   address: string;
   createdAt: string;
-  departments: { id: string }[];
-  locations: { id: string }[];
-  payGroups: { id: string }[];
-}
-
-interface SetupStatus {
-  hasLegalEntities: boolean;
-  hasDepartments: boolean;
-  hasPayGroups: boolean;
 }
 
 export default function OrgOverview() {
   const navigate = useNavigate();
 
   const {
-    data: overview,
+    data: legalEntities,
     isLoading,
     isError,
     refetch,
-  } = useQuery<OverviewLegalEntity[]>({
-    queryKey: ['org-overview'],
-    queryFn: () => apiClient('/organisation/overview'),
-  });
-
-  const { data: setupStatus } = useQuery<SetupStatus>({
-    queryKey: ['org-setup-status'],
-    queryFn: () => apiClient('/organisation/setup-status'),
-    enabled: !!(overview && overview.length > 0),
+  } = useQuery<LegalEntity[]>({
+    queryKey: ['legal-entities'],
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
+      const entities = Array.isArray(response) ? response : (response.data || []);
+      return entities;
+    },
   });
 
   if (isLoading) {
@@ -56,12 +47,6 @@ export default function OrgOverview() {
   if (isError) {
     return <ErrorState onRetry={refetch} />;
   }
-
-  const showSetupBanner =
-    setupStatus &&
-    overview &&
-    overview.length > 0 &&
-    (!setupStatus.hasDepartments || !setupStatus.hasPayGroups);
 
   return (
     <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -77,15 +62,11 @@ export default function OrgOverview() {
           Organisation
         </h1>
         <p style={{ fontSize: '0.875rem', color: '#1F6F4E' }}>
-          Overview of your legal entities, departments, locations, and pay groups.
+          Overview of your legal entities and organizational structure.
         </p>
       </div>
 
-      {showSetupBanner && (
-        <OrgSetupBanner message="Some organisation setup steps are incomplete. Ensure you have departments and pay groups configured." />
-      )}
-
-      {(!overview || overview.length === 0) ? (
+      {(!legalEntities || legalEntities.length === 0) ? (
         <EmptyState
           icon={Building2}
           title="No legal entities yet."
@@ -103,7 +84,7 @@ export default function OrgOverview() {
             gap: '1.25rem',
           }}
         >
-          {overview.map((le) => (
+          {legalEntities.map((le) => (
             <div
               key={le.id}
               style={{
@@ -151,83 +132,22 @@ export default function OrgOverview() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Building2 size={15} style={{ color: '#1F6F4E', flexShrink: 0 }} />
                   <span style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>
-                    {le.departments.length} Department{le.departments.length !== 1 ? 's' : ''}
+                    {le.taxId}
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <MapPin size={15} style={{ color: '#1F6F4E', flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>
-                    {le.locations.length} Location{le.locations.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <Users size={15} style={{ color: '#1F6F4E', flexShrink: 0 }} />
-                  <span style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>
-                    {le.payGroups.length} Pay Group{le.payGroups.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  gap: '0.75rem',
-                  borderTop: '1px solid #CDEFD7',
-                  paddingTop: '0.75rem',
-                  flexWrap: 'wrap',
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => navigate('/organisation/departments')}
+                <p
                   style={{
                     fontSize: '0.8125rem',
-                    color: '#4FAD72',
-                    fontWeight: 500,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 0,
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '2px',
+                    color: '#1F6F4E',
+                    lineHeight: '1.4',
+                    marginTop: '0.25rem',
                   }}
                 >
-                  Departments
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/organisation/locations')}
-                  style={{
-                    fontSize: '0.8125rem',
-                    color: '#4FAD72',
-                    fontWeight: 500,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 0,
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '2px',
-                  }}
-                >
-                  Locations
-                </button>
-                <button
-                  type="button"
-                  onClick={() => navigate('/organisation/pay-groups')}
-                  style={{
-                    fontSize: '0.8125rem',
-                    color: '#4FAD72',
-                    fontWeight: 500,
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    padding: 0,
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '2px',
-                  }}
-                >
-                  Pay Groups
-                </button>
+                  {le.address}
+                </p>
+                <span style={{ fontSize: '0.75rem', color: '#1F6F4E', opacity: 0.6, marginTop: '0.25rem' }}>
+                  Created {formatDate(le.createdAt)}
+                </span>
               </div>
             </div>
           ))}

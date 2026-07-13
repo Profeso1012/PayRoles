@@ -2,8 +2,11 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, FileText, User, Building2, CreditCard, ChevronRight } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
+import { minorToMajor } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
+import { useAuthStore } from '@/store/authStore';
 import Button from '@/components/ui/Button';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
@@ -28,12 +31,53 @@ interface EmployeeDashboardData {
   totalPayslips: number;
 }
 
+// Build employee dashboard data from worker and payslip APIs
+async function buildEmployeeDashboard(): Promise<EmployeeDashboardData> {
+  if (!USE_REAL_API) {
+    return apiClient<EmployeeDashboardData>('/dashboard/employee');
+  }
+
+  // Get current user info
+  const user = await apiClient<any>(ENDPOINTS.AUTH.ME);
+  
+  // Get worker details for current user
+  const worker = await apiClient<any>(ENDPOINTS.WORKERS.DETAIL(user.workerId || user.id));
+  
+  // Get worker's payslips
+  const payslipsResponse = await apiClient<any>(ENDPOINTS.WORKERS.PAYSLIPS(worker.id));
+  const payslips = Array.isArray(payslipsResponse) ? payslipsResponse : (payslipsResponse.data || []);
+
+  // Latest payslip
+  const latestPayslip = payslips.length > 0 ? {
+    id: payslips[0].id,
+    payRunId: payslips[0].payrollRunId || payslips[0].payRunId,
+    period: payslips[0].period || 'N/A',
+    grossPay: payslips[0].grossPayMinor ? minorToMajor(payslips[0].grossPayMinor, payslips[0].currency) : 0,
+    totalDeductions: payslips[0].totalDeductionsMinor ? minorToMajor(payslips[0].totalDeductionsMinor, payslips[0].currency) : 0,
+    netPay: payslips[0].netPayMinor ? minorToMajor(payslips[0].netPayMinor, payslips[0].currency) : 0,
+    currency: payslips[0].currency || 'NGN',
+    payGroupName: worker.legalEntity?.name || 'N/A',
+  } : null;
+
+  // Find next pay date (could fetch from payroll runs, but for simplicity default to 30 days)
+  const now = new Date();
+  const nextPayDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+
+  return {
+    employeeName: `${worker.firstName} ${worker.lastName}`,
+    nextPayDate,
+    payGroupName: worker.legalEntity?.name || worker.department || 'N/A',
+    latestPayslip,
+    totalPayslips: payslips.length,
+  };
+}
+
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
 
   const { data, isLoading, isError, refetch } = useQuery<EmployeeDashboardData>({
     queryKey: ['dashboard-employee'],
-    queryFn: () => apiClient<EmployeeDashboardData>('/dashboard/employee'),
+    queryFn: buildEmployeeDashboard,
   });
 
   if (isLoading) {

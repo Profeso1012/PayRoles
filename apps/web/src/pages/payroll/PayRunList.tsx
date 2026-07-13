@@ -3,7 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { formatPeriod, formatDate } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
@@ -17,32 +20,13 @@ interface PaginatedResult<T> {
   meta: { page: number; pageSize: number; total: number };
 }
 
-async function fetchList<T>(path: string): Promise<PaginatedResult<T>> {
-  const { token, clearSession } = useAuthStore.getState();
-  const res = await fetch(`/api${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-  });
-  if (res.status === 401) {
-    clearSession();
-    window.location.href = '/login';
-    throw new Error('Session expired');
-  }
-  const json = await res.json();
-  if (!res.ok) throw new Error(json?.error?.message ?? 'Request failed');
-  return { data: json.data, meta: json.meta ?? { page: 1, pageSize: 20, total: (json.data as unknown[])?.length ?? 0 } };
-}
-
 const statusOptions = [
   { value: '', label: 'All statuses' },
   { value: 'draft', label: 'Draft' },
-  { value: 'calculating', label: 'Calculating' },
-  { value: 'calculated', label: 'Calculated' },
   { value: 'in_review', label: 'In Review' },
   { value: 'approved', label: 'Approved' },
-  { value: 'paid', label: 'Paid' },
+  { value: 'calculating', label: 'Processing' },
+  { value: 'paid', label: 'Completed' },
 ];
 
 const statusVariantMap: Record<PayRunStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
@@ -59,15 +43,24 @@ const statusVariantMap: Record<PayRunStatus, 'draft' | 'info' | 'warning' | 'suc
 
 const statusLabelMap: Record<PayRunStatus, string> = {
   draft: 'Draft',
-  calculating: 'Calculating',
+  calculating: 'Processing',
   calculated: 'Calculated',
   in_review: 'In Review',
   approved: 'Approved',
-  paid: 'Paid',
+  paid: 'Completed',
   posted: 'Posted',
   reversed: 'Reversed',
   failed: 'Failed',
 };
+
+// Helper to format period from start/end dates
+function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
+  if (period) return period;
+  if (!periodStart) return '—';
+  const start = new Date(periodStart);
+  const month = start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  return month;
+}
 
 export default function PayRunList() {
   const navigate = useNavigate();
@@ -77,12 +70,46 @@ export default function PayRunList() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
 
-  const params = new URLSearchParams({ page: String(page), pageSize: '20' });
-  if (status) params.set('status', status);
-
   const { data, isLoading, isError } = useQuery<PaginatedResult<PayRun>>({
     queryKey: ['pay-runs-list', page, status],
-    queryFn: () => fetchList<PayRun>(`/pay-runs?${params}`),
+    queryFn: async () => {
+      const params = buildPaginationParams({ page, limit: 20, sortBy: 'createdAt', sortDir: 'DESC' });
+      if (status) {
+        addFilterParams(params, { status });
+      }
+      
+      const response = await apiClient<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+      
+      // Transform response
+      const paginatedData = transformPaginatedResponse(response.data || response, response.meta);
+      
+      // Transform each payroll run from backend format to frontend format
+      const transformedRuns = paginatedData.data.map((run: any) => {
+        const transformed = mapPayrollRunFields(run, 'toFrontend');
+        
+        // Build period string from dates if not present
+        if (!transformed.period && transformed.periodStart) {
+          transformed.period = formatPeriod(transformed.periodStart, transformed.periodEnd);
+        }
+        
+        // Handle missing employeeCount (not in backend response)
+        if (!transformed.employeeCount) {
+          transformed.employeeCount = 0;
+        }
+        
+        // Map payGroupName to name if present
+        if (transformed.name && !transformed.payGroupName) {
+          transformed.payGroupName = transformed.name;
+        }
+        
+        return transformed;
+      });
+      
+      return {
+        data: transformedRuns,
+        meta: paginatedData,
+      };
+    },
   });
 
   const columns = [
@@ -90,13 +117,17 @@ export default function PayRunList() {
       key: 'period',
       header: 'Period',
       render: (row: PayRun) => (
-        <span className="font-medium text-deep-cash">{formatPeriod(row.period)}</span>
+        <span className="font-medium text-deep-cash">
+          {row.period || formatPeriod(row.periodStart, row.periodEnd)}
+        </span>
       ),
     },
     {
       key: 'payGroupName',
-      header: 'Pay Group',
-      render: (row: PayRun) => <span className="text-sm text-cash-green">{row.payGroupName}</span>,
+      header: 'Name',
+      render: (row: PayRun) => (
+        <span className="text-sm text-cash-green">{row.payGroupName || row.name || '—'}</span>
+      ),
     },
     {
       key: 'status',
@@ -182,3 +213,4 @@ export default function PayRunList() {
     </div>
   );
 }
+

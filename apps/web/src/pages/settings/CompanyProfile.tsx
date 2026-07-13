@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Building2, CheckCircle, AlertCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
@@ -50,7 +51,12 @@ export default function CompanyProfile() {
 
   const { data: profile, isLoading, isError, refetch } = useQuery<TenantProfile>({
     queryKey: ['tenant-profile'],
-    queryFn: () => apiClient('/tenants/profile'),
+    queryFn: () => {
+      if (!USE_REAL_API) {
+        return apiClient('/tenants/profile');
+      }
+      return apiClient(ENDPOINTS.TENANTS.PROFILE);
+    },
   });
 
   useEffect(() => {
@@ -61,11 +67,18 @@ export default function CompanyProfile() {
   }, [profile]);
 
   const saveMutation = useMutation({
-    mutationFn: (body: { name: string; country: string }) =>
-      apiClient('/tenants/profile', {
+    mutationFn: (body: { name: string; country: string }) => {
+      if (!USE_REAL_API) {
+        return apiClient('/tenants/profile', {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+      }
+      return apiClient(ENDPOINTS.TENANTS.UPDATE_PROFILE, {
         method: 'PATCH',
         body: JSON.stringify(body),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['tenant-profile'] });
       setSaveStatus('success');

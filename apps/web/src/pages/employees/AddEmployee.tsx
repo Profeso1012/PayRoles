@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { CheckCircle, ChevronRight } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { useAuthStore } from '@/store/authStore';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
@@ -11,10 +11,11 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import type { Employee } from '@contracts/types/employee';
 
-interface Department { id: string; name: string; }
-interface Location { id: string; name: string; legalEntityId: string; }
-interface JobGrade { id: string; name: string; }
-interface PayGroup { id: string; name: string; }
+interface LegalEntity {
+  id: string;
+  name: string;
+  country: string;
+}
 
 type PersonalForm = {
   firstName: string;
@@ -27,18 +28,17 @@ type PersonalForm = {
 };
 
 type EmploymentForm = {
-  jobTitle: string;
-  departmentId: string;
-  locationId: string;
-  jobGradeId: string;
+  employeeNumber: string;
+  position: string;
+  department: string;
+  legalEntityId: string;
   employmentType: string;
-  effectiveFrom: string;
+  hireDate: string;
 };
 
 type CompensationForm = {
-  grossSalary: string;
-  payGroupId: string;
-  effectiveFrom: string;
+  basicSalary: string;
+  effectiveDate: string;
 };
 
 type BankForm = {
@@ -63,9 +63,10 @@ const genderOptions = [
 ];
 
 const employmentTypeOptions = [
-  { value: 'full_time', label: 'Full Time' },
-  { value: 'part_time', label: 'Part Time' },
-  { value: 'contract', label: 'Contract' },
+  { value: 'FULL_TIME', label: 'Full Time' },
+  { value: 'PART_TIME', label: 'Part Time' },
+  { value: 'CONTRACT', label: 'Contract' },
+  { value: 'INTERN', label: 'Intern' },
 ];
 
 export default function AddEmployee() {
@@ -79,92 +80,72 @@ export default function AddEmployee() {
   });
 
   const [employment, setEmployment] = useState<EmploymentForm>({
-    jobTitle: '', departmentId: '', locationId: '', jobGradeId: '',
-    employmentType: 'full_time', effectiveFrom: '',
+    employeeNumber: '',
+    position: '',
+    department: '',
+    legalEntityId: '',
+    employmentType: 'FULL_TIME',
+    hireDate: '',
   });
 
   const [compensation, setCompensation] = useState<CompensationForm>({
-    grossSalary: '', payGroupId: '', effectiveFrom: '',
+    basicSalary: '',
+    effectiveDate: '',
   });
 
   const [bank, setBank] = useState<BankForm>({
     bankName: '', accountNumber: '', accountName: '',
   });
 
-  const { data: departments } = useQuery<Department[]>({
-    queryKey: ['departments'],
+  const { data: legalEntities } = useQuery<LegalEntity[]>({
+    queryKey: ['legal-entities'],
     queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch('/api/organisation/departments', {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      return (await res.json()).data ?? [];
+      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
+      const entities = Array.isArray(response) ? response : (response.data || []);
+      return entities;
     },
   });
 
-  const { data: locations } = useQuery<Location[]>({
-    queryKey: ['locations'],
-    queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch('/api/organisation/locations', {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      return (await res.json()).data ?? [];
-    },
-  });
-
-  const { data: jobGrades } = useQuery<JobGrade[]>({
-    queryKey: ['job-grades'],
-    queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch('/api/organisation/job-grades', {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      return (await res.json()).data ?? [];
-    },
-  });
-
-  const { data: payGroups } = useQuery<PayGroup[]>({
-    queryKey: ['pay-groups'],
-    queryFn: async () => {
-      const { token } = useAuthStore.getState();
-      const res = await fetch('/api/organisation/pay-groups', {
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
-      return (await res.json()).data ?? [];
-    },
-  });
-
-  const deptOptions = (departments ?? []).map((d) => ({ value: d.id, label: d.name }));
-  const locOptions = (locations ?? []).map((l) => ({ value: l.id, label: l.name }));
-  const gradeOptions = (jobGrades ?? []).map((g) => ({ value: g.id, label: g.name }));
-  const pgOptions = (payGroups ?? []).map((p) => ({ value: p.id, label: p.name }));
+  const leOptions = (legalEntities ?? []).map((le) => ({ value: le.id, label: le.name }));
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      const employee = await apiClient<Employee>('/employees', {
+      const payload = {
+        employeeNumber: employment.employeeNumber,
+        firstName: personal.firstName,
+        lastName: personal.lastName,
+        email: personal.email || null,
+        phone: personal.phone || null,
+        dateOfBirth: personal.dateOfBirth || null,
+        gender: personal.gender || null,
+        nationalIdEncrypted: personal.nationalId || null,
+        position: employment.position || null,
+        department: employment.department || null,
+        legalEntityId: employment.legalEntityId,
+        employmentType: employment.employmentType,
+        hireDate: employment.hireDate,
+        bankName: bank.bankName || null,
+        bankAccountEncrypted: bank.accountNumber || null,
+      };
+      
+      const employee = await apiClient<Employee>(ENDPOINTS.WORKERS.CREATE, {
         method: 'POST',
-        body: JSON.stringify({
-          ...personal,
-          bankDetails: bank.bankName ? [{ ...bank, isPrimary: true }] : [],
-        }),
+        body: JSON.stringify(payload),
       });
-      if (employment.jobTitle) {
-        await apiClient(`/employees/${employee.id}/assignments`, {
-          method: 'POST',
-          body: JSON.stringify(employment),
-        });
-      }
-      if (compensation.grossSalary && compensation.payGroupId) {
-        await apiClient(`/employees/${employee.id}/compensations`, {
+      
+      // Create compensation if provided
+      if (compensation.basicSalary && compensation.effectiveDate) {
+        await apiClient(ENDPOINTS.COMPENSATION.CREATE, {
           method: 'POST',
           body: JSON.stringify({
-            ...compensation,
-            grossSalary: Math.round(parseFloat(compensation.grossSalary) * 100),
+            workerId: employee.id,
+            basicSalaryMinor: String(Math.round(parseFloat(compensation.basicSalary) * 100)),
             currency: 'NGN',
+            effectiveDate: compensation.effectiveDate,
           }),
         });
       }
+      
       return employee;
     },
     onSuccess: (employee) => {
@@ -284,34 +265,41 @@ export default function AddEmployee() {
         <div className="bg-white rounded-xl border border-mint-light p-6">
           <h2 className="text-base font-semibold text-deep-cash mb-5">Employment Details</h2>
           <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Employee Number"
+              value={employment.employeeNumber}
+              onChange={(e) => setEmployment((f) => ({ ...f, employeeNumber: e.target.value }))}
+              placeholder="e.g. EMP-001"
+            />
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Hire Date</p>
+              <input
+                type="date"
+                className={fieldClass}
+                value={employment.hireDate}
+                onChange={(e) => setEmployment((f) => ({ ...f, hireDate: e.target.value }))}
+              />
+            </div>
             <div className="col-span-2">
               <Input
-                label="Job Title"
-                value={employment.jobTitle}
-                onChange={(e) => setEmployment((f) => ({ ...f, jobTitle: e.target.value }))}
+                label="Job Title / Position"
+                value={employment.position}
+                onChange={(e) => setEmployment((f) => ({ ...f, position: e.target.value }))}
                 placeholder="e.g. HR Manager"
               />
             </div>
-            <Select
-              label="Department"
-              value={employment.departmentId}
-              options={deptOptions}
-              onChange={(v) => setEmployment((f) => ({ ...f, departmentId: v }))}
-              placeholder="Select department"
+            <Input
+              label="Department (optional)"
+              value={employment.department}
+              onChange={(e) => setEmployment((f) => ({ ...f, department: e.target.value }))}
+              placeholder="e.g. Human Resources"
             />
             <Select
-              label="Location"
-              value={employment.locationId}
-              options={locOptions}
-              onChange={(v) => setEmployment((f) => ({ ...f, locationId: v }))}
-              placeholder="Select location"
-            />
-            <Select
-              label="Job Grade"
-              value={employment.jobGradeId}
-              options={gradeOptions}
-              onChange={(v) => setEmployment((f) => ({ ...f, jobGradeId: v }))}
-              placeholder="Select grade (optional)"
+              label="Legal Entity"
+              value={employment.legalEntityId}
+              options={leOptions}
+              onChange={(v) => setEmployment((f) => ({ ...f, legalEntityId: v }))}
+              placeholder="Select legal entity"
             />
             <Select
               label="Employment Type"
@@ -319,15 +307,6 @@ export default function AddEmployee() {
               options={employmentTypeOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, employmentType: v }))}
             />
-            <div className="col-span-2">
-              <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
-              <input
-                type="date"
-                className={fieldClass}
-                value={employment.effectiveFrom}
-                onChange={(e) => setEmployment((f) => ({ ...f, effectiveFrom: e.target.value }))}
-              />
-            </div>
           </div>
         </div>
       )}
@@ -335,34 +314,28 @@ export default function AddEmployee() {
       {/* Step 2: Compensation */}
       {step === 2 && (
         <div className="bg-white rounded-xl border border-mint-light p-6">
-          <h2 className="text-base font-semibold text-deep-cash mb-5">Compensation</h2>
+          <h2 className="text-base font-semibold text-deep-cash mb-1">Compensation</h2>
+          <p className="text-sm text-cash-green/70 mb-5">Optional — can be added later from the employee profile.</p>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Gross Annual Salary (₦)</p>
+              <p className="text-sm text-cash-green font-medium mb-1">Basic Salary (₦)</p>
               <input
                 type="number"
                 className={fieldClass}
-                value={compensation.grossSalary}
-                onChange={(e) => setCompensation((f) => ({ ...f, grossSalary: e.target.value }))}
-                placeholder="e.g. 1200000"
+                value={compensation.basicSalary}
+                onChange={(e) => setCompensation((f) => ({ ...f, basicSalary: e.target.value }))}
+                placeholder="e.g. 100000"
                 min={0}
               />
-              <p className="text-xs text-cash-green/60 mt-1">Enter as a whole number (e.g. 1200000 for ₦1,200,000)</p>
+              <p className="text-xs text-cash-green/60 mt-1">Enter monthly basic salary (e.g. 100000 for ₦100,000)</p>
             </div>
-            <Select
-              label="Pay Group"
-              value={compensation.payGroupId}
-              options={pgOptions}
-              onChange={(v) => setCompensation((f) => ({ ...f, payGroupId: v }))}
-              placeholder="Select pay group"
-            />
             <div>
               <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
               <input
                 type="date"
                 className={fieldClass}
-                value={compensation.effectiveFrom}
-                onChange={(e) => setCompensation((f) => ({ ...f, effectiveFrom: e.target.value }))}
+                value={compensation.effectiveDate}
+                onChange={(e) => setCompensation((f) => ({ ...f, effectiveDate: e.target.value }))}
               />
             </div>
           </div>
@@ -414,24 +387,34 @@ export default function AddEmployee() {
               <dd className="text-deep-cash capitalize">{personal.gender.replace(/_/g, ' ')}</dd>
             </dl>
           </div>
-          {employment.jobTitle && (
+          {employment.position && (
             <div>
               <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Employment</p>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <dt className="text-cash-green/60">Job Title</dt>
-                <dd className="text-deep-cash font-medium">{employment.jobTitle}</dd>
+                <dt className="text-cash-green/60">Employee Number</dt>
+                <dd className="text-deep-cash font-medium">{employment.employeeNumber}</dd>
+                <dt className="text-cash-green/60">Position</dt>
+                <dd className="text-deep-cash font-medium">{employment.position}</dd>
+                {employment.department && (
+                  <>
+                    <dt className="text-cash-green/60">Department</dt>
+                    <dd className="text-deep-cash">{employment.department}</dd>
+                  </>
+                )}
                 <dt className="text-cash-green/60">Type</dt>
                 <dd className="text-deep-cash capitalize">{employment.employmentType.replace(/_/g, ' ')}</dd>
+                <dt className="text-cash-green/60">Hire Date</dt>
+                <dd className="text-deep-cash">{employment.hireDate}</dd>
               </dl>
             </div>
           )}
-          {compensation.grossSalary && (
+          {compensation.basicSalary && (
             <div>
               <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Compensation</p>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <dt className="text-cash-green/60">Gross Salary</dt>
+                <dt className="text-cash-green/60">Basic Salary</dt>
                 <dd className="text-deep-cash font-semibold">
-                  ₦{Number(compensation.grossSalary).toLocaleString()}
+                  ₦{Number(compensation.basicSalary).toLocaleString()}
                 </dd>
               </dl>
             </div>
@@ -462,7 +445,8 @@ export default function AddEmployee() {
           <Button
             variant="primary"
             disabled={
-              step === 0 && (!personal.firstName || !personal.lastName || !personal.email)
+              (step === 0 && (!personal.firstName || !personal.lastName || !personal.email)) ||
+              (step === 1 && (!employment.employeeNumber || !employment.hireDate || !employment.legalEntityId))
             }
             onClick={() => setStep((s) => s + 1)}
           >
@@ -472,7 +456,7 @@ export default function AddEmployee() {
           <Button
             variant="primary"
             loading={createMutation.isPending}
-            disabled={!personal.firstName || !personal.lastName || !personal.email}
+            disabled={!personal.firstName || !personal.lastName || !personal.email || !employment.employeeNumber || !employment.hireDate}
             onClick={() => createMutation.mutate()}
           >
             Add Employee
@@ -482,3 +466,4 @@ export default function AddEmployee() {
     </div>
   );
 }
+
