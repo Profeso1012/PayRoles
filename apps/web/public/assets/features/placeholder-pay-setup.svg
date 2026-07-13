@@ -1,0 +1,11 @@
+<svg width="640" height="420" viewBox="0 0 640 420" xmlns="http://www.w3.org/2000/svg">
+  <rect width="640" height="420" rx="16" fill="#F7FAF8"/>
+  <rect x="1" y="1" width="638" height="418" rx="15" fill="none" stroke="#CDEFD7" stroke-width="2" stroke-dasharray="8 6"/>
+  <g transform="translate(272,150)">
+    <rect x="0" y="0" width="96" height="76" rx="8" fill="#CDEFD7"/>
+    <circle cx="24" cy="24" r="9" fill="#F7FAF8"/>
+    <path d="M8 62 L34 36 L52 54 L68 38 L88 62 Z" fill="#F7FAF8"/>
+  </g>
+  <text x="320" y="270" text-anchor="middle" font-family="Arial, sans-serif" font-size="15" font-weight="600" fill="#1F6F4E">Screenshot placeholder</text>
+  <text x="320" y="294" text-anchor="middle" font-family="Arial, sans-serif" font-size="13" fill="#4FAD72">Set Up Pay page</text>
+</svg>

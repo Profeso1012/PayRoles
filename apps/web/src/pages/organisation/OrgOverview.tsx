@@ -14,7 +14,7 @@ interface LegalEntity {
   tenantId: string;
   name: string;
   country: string;
-  taxId: string;
+  taxIdEncrypted: string | null; // Backend never returns the decrypted value
   address: string;
   createdAt: string;
 }
@@ -132,7 +132,7 @@ export default function OrgOverview() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Building2 size={15} style={{ color: '#1F6F4E', flexShrink: 0 }} />
                   <span style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>
-                    {le.taxId}
+                    {le.taxIdEncrypted ? 'Tax ID on file' : 'No tax ID on file'}
                   </span>
                 </div>
                 <p

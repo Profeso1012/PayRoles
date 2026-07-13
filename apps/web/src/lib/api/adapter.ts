@@ -132,12 +132,16 @@ export const ENDPOINTS = {
   },
 
   // ---------------------------------------------------------------------------
-  // Tenants
+  // Tenants - there is no self-service /tenants/profile route on the backend.
+  // GET /tenants/:id is readable by SUPER_ADMIN or TENANT_ADMIN; PATCH /tenants/:id
+  // is SUPER_ADMIN only (tenant-scoped Role.SUPER_ADMIN, which bypasses RolesGuard
+  // entirely - TENANT_ADMIN cannot edit the company profile via this backend).
+  // There is also no /tenants/setup endpoint - tenants are provisioned by a
+  // platform admin via PLATFORM_TENANTS.CREATE, not self-service.
   // ---------------------------------------------------------------------------
   TENANTS: {
-    PROFILE: `${API_VERSION}/tenants/profile`,
-    UPDATE_PROFILE: `${API_VERSION}/tenants/profile`,
-    SETUP: `${API_VERSION}/tenants/setup`,
+    DETAIL: (id: string) => `${API_VERSION}/tenants/${id}`,
+    UPDATE: (id: string) => `${API_VERSION}/tenants/${id}`,
   },
 
   // ---------------------------------------------------------------------------
@@ -211,11 +215,13 @@ export const ENDPOINTS = {
   // Import/Export (New in backend)
   // ---------------------------------------------------------------------------
   IMPORTS: {
+    LIST: `${API_VERSION}/imports`,
     WORKERS_UPLOAD: `${API_VERSION}/imports/workers/upload`,
     STATUS: (id: string) => `${API_VERSION}/imports/${id}`,
   },
 
   EXPORTS: {
+    LIST: `${API_VERSION}/exports`,
     CREATE: `${API_VERSION}/exports`,
     STATUS: (id: string) => `${API_VERSION}/exports/${id}`,
     DOWNLOAD: (id: string) => `${API_VERSION}/exports/${id}/download`,

@@ -9,6 +9,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Button from '@/components/ui/Button';
 import type { Payslip, PayElement } from '@contracts/types/payroll';
+import type { BackendPayslip, BackendWorker, BackendPayrollRun } from '@/lib/api/types';
 
 // Helper to format period from start/end dates or single period string
 function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
@@ -25,50 +26,46 @@ export default function PayslipViewer() {
 
   const { data: payslip, isLoading, isError, refetch } = useQuery<Payslip>({
     queryKey: ['payslip', runId, payslipId],
-    queryFn: async () => {
+    queryFn: async (): Promise<Payslip> => {
       if (!runId || !payslipId) throw new Error('Missing IDs');
-      
-      const response = await apiClient<any>(ENDPOINTS.PAYROLL.PAYSLIPS.DETAIL(runId, payslipId));
-      
-      // Transform amounts from minor units to major units
-      const transformed: any = { ...response };
-      
-      if (transformed.totalGross !== undefined) {
-        transformed.grossPay = transformed.totalGross;
-      } else if (transformed.totalGrossMinor) {
-        transformed.grossPay = minorToMajor(transformed.totalGrossMinor, transformed.currency);
-      }
-      
-      if (transformed.totalDeductionsMinor) {
-        transformed.totalDeductions = minorToMajor(transformed.totalDeductionsMinor, transformed.currency);
-      }
-      
-      if (transformed.netPayMinor) {
-        transformed.netPay = minorToMajor(transformed.netPayMinor, transformed.currency);
-      }
-      
-      // Transform pay elements if present
-      if (transformed.elements && Array.isArray(transformed.elements)) {
-        transformed.elements = transformed.elements.map((el: any) => ({
-          ...el,
-          amount: el.amountMinor ? minorToMajor(el.amountMinor, transformed.currency) : (el.amount || 0),
-        }));
-      }
-      
-      // Map worker fields to employee fields
-      if (transformed.workerFirstName && transformed.workerLastName) {
-        transformed.employeeName = `${transformed.workerFirstName} ${transformed.workerLastName}`;
-      }
-      if (transformed.workerEmployeeNumber) {
-        transformed.employeeNumber = transformed.workerEmployeeNumber;
-      }
-      
-      // Generate period from dates if not present
-      if (!transformed.period) {
-        transformed.period = formatPeriod(transformed.periodStart, transformed.periodEnd);
-      }
-      
-      return transformed;
+
+      // The real Payslip entity has no worker name or run period on it - fetch
+      // those separately (payElements is also shaped differently: {code,name,type,amountMinor}).
+      const [backendPayslip, run] = await Promise.all([
+        apiClient<BackendPayslip>(ENDPOINTS.PAYROLL.PAYSLIPS.DETAIL(runId, payslipId)),
+        apiClient<BackendPayrollRun>(ENDPOINTS.PAYROLL.RUNS.DETAIL(runId)).catch(() => null as BackendPayrollRun | null),
+      ]);
+
+      const resolvedWorker = await apiClient<BackendWorker>(
+        ENDPOINTS.WORKERS.DETAIL(backendPayslip.workerId),
+      ).catch(() => null);
+
+      const elements: PayElement[] = backendPayslip.payElements.map((el) => ({
+        id: el.code,
+        name: el.name,
+        type: el.type as PayElement['type'],
+        amount: minorToMajor(el.amountMinor),
+        currency: backendPayslip.currency,
+        isStatutory: false,
+        formula: null,
+      }));
+
+      return {
+        id: backendPayslip.id,
+        payRunId: backendPayslip.payrollRunId,
+        employeeId: backendPayslip.workerId,
+        employeeName: resolvedWorker ? `${resolvedWorker.firstName} ${resolvedWorker.lastName}` : backendPayslip.workerId,
+        employeeNumber: resolvedWorker?.employeeNumber || '—',
+        period: formatPeriod(run?.periodStart, run?.periodEnd),
+        name: run?.name,
+        payGroupName: run?.name,
+        elements,
+        grossPay: minorToMajor(backendPayslip.grossPayMinor),
+        totalDeductions: minorToMajor(backendPayslip.deductionsMinor),
+        netPay: minorToMajor(backendPayslip.netPayMinor),
+        currency: backendPayslip.currency,
+        createdAt: backendPayslip.createdAt,
+      };
     },
     enabled: !!runId && !!payslipId,
   });

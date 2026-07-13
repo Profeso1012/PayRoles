@@ -2,95 +2,51 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { FileText, TrendingUp } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { formatDate, formatPeriod } from '@/lib/utils';
+import { apiClientWithMeta } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
+import { minorToMajor } from '@/lib/api/transforms';
+import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import { PATHS } from '@/router/paths';
+import type { BackendPayslip } from '@/lib/api/types';
 
 interface MyPayslip {
   id: string;
-  period: string;
-  payGroupName: string;
+  payRunId: string;
   grossPay: number;
   totalDeductions: number;
   netPay: number;
   currency: string;
-  generatedAt: string;
-  payRunId: string;
+  createdAt: string;
 }
-
-const MOCK_PAYSLIPS: MyPayslip[] = [
-  {
-    id: 'ps-001',
-    period: '2026-06',
-    payGroupName: 'Monthly Staff',
-    grossPay: 60000_00,
-    totalDeductions: 9800_00,
-    netPay: 50200_00,
-    currency: 'NGN',
-    generatedAt: '2026-06-25T10:00:00Z',
-    payRunId: 'pr-001',
-  },
-  {
-    id: 'ps-002',
-    period: '2026-05',
-    payGroupName: 'Monthly Staff',
-    grossPay: 60000_00,
-    totalDeductions: 9800_00,
-    netPay: 50200_00,
-    currency: 'NGN',
-    generatedAt: '2026-05-25T10:00:00Z',
-    payRunId: 'pr-002',
-  },
-  {
-    id: 'ps-003',
-    period: '2026-04',
-    payGroupName: 'Monthly Staff',
-    grossPay: 58000_00,
-    totalDeductions: 9400_00,
-    netPay: 48600_00,
-    currency: 'NGN',
-    generatedAt: '2026-04-25T10:00:00Z',
-    payRunId: 'pr-003',
-  },
-  {
-    id: 'ps-004',
-    period: '2026-03',
-    payGroupName: 'Monthly Staff',
-    grossPay: 58000_00,
-    totalDeductions: 9400_00,
-    netPay: 48600_00,
-    currency: 'NGN',
-    generatedAt: '2026-03-25T10:00:00Z',
-    payRunId: 'pr-004',
-  },
-  {
-    id: 'ps-005',
-    period: '2026-02',
-    payGroupName: 'Monthly Staff',
-    grossPay: 55000_00,
-    totalDeductions: 8900_00,
-    netPay: 46100_00,
-    currency: 'NGN',
-    generatedAt: '2026-02-25T10:00:00Z',
-    payRunId: 'pr-005',
-  },
-];
 
 export default function MyPayslips() {
   const navigate = useNavigate();
-  const userId = useAuthStore((s) => s.user?.id);
+  const workerId = useAuthStore((s) => s.user?.workerId);
 
   const { data: payslips, isLoading, isError, refetch } = useQuery<MyPayslip[]>({
-    queryKey: ['my-payslips', userId],
+    queryKey: ['my-payslips', workerId],
     queryFn: async () => {
-      // Local mock — no real handler needed
-      await new Promise((r) => setTimeout(r, 300));
-      return MOCK_PAYSLIPS;
+      if (!workerId) throw new Error('No worker record linked to this account');
+      const params = buildPaginationParams({ page: 1, limit: 50, sortBy: 'createdAt', sortDir: 'desc' });
+      const { data } = await apiClientWithMeta<BackendPayslip[]>(
+        `${ENDPOINTS.WORKERS.PAYSLIPS(workerId)}?${params}`,
+      );
+      return data.map((p): MyPayslip => ({
+        id: p.id,
+        payRunId: p.payrollRunId,
+        grossPay: minorToMajor(p.grossPayMinor),
+        totalDeductions: minorToMajor(p.deductionsMinor),
+        netPay: minorToMajor(p.netPayMinor),
+        currency: p.currency,
+        createdAt: p.createdAt,
+      }));
     },
+    enabled: !!workerId,
   });
 
   if (isLoading) {
@@ -102,7 +58,7 @@ export default function MyPayslips() {
   }
 
   if (isError || !payslips) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState onRetry={() => refetch()} />;
   }
 
   const latest = payslips[0];
@@ -136,7 +92,7 @@ export default function MyPayslips() {
               <span className="text-white text-lg font-bold">—</span>
             )}
             {latest && (
-              <p className="text-mint-light/50 text-xs mt-0.5">{formatPeriod(latest.period)}</p>
+              <p className="text-mint-light/50 text-xs mt-0.5">{formatDate(latest.createdAt)}</p>
             )}
           </div>
         </div>
@@ -171,10 +127,7 @@ export default function MyPayslips() {
               <thead>
                 <tr className="border-b border-mint-light">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
-                    Period
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
-                    Pay Group
+                    Date
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
                     Gross Pay
@@ -184,9 +137,6 @@ export default function MyPayslips() {
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
                     Net Pay
-                  </th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
-                    Generated
                   </th>
                   <th className="px-5 py-3" />
                 </tr>
@@ -200,14 +150,13 @@ export default function MyPayslips() {
                     }`}
                   >
                     <td className="px-5 py-3.5 font-medium text-deep-cash">
-                      {formatPeriod(slip.period)}
+                      {formatDate(slip.createdAt)}
                       {idx === 0 && (
                         <span className="ml-2 text-[10px] bg-fresh-cash/20 text-cash-green px-1.5 py-0.5 rounded-full font-medium">
                           Latest
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 text-cash-green">{slip.payGroupName}</td>
                     <td className="px-5 py-3.5 text-right">
                       <MoneyDisplay amount={slip.grossPay} currency={slip.currency} size="sm" />
                     </td>
@@ -219,14 +168,11 @@ export default function MyPayslips() {
                     <td className="px-5 py-3.5 text-right">
                       <MoneyDisplay amount={slip.netPay} currency={slip.currency} size="sm" className="text-cash-green" />
                     </td>
-                    <td className="px-5 py-3.5 text-xs text-cash-green/60">
-                      {formatDate(slip.generatedAt)}
-                    </td>
                     <td className="px-5 py-3.5 text-right">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => navigate(PATHS.PAYSLIP_VIEWER(slip.payRunId))}
+                        onClick={() => navigate(PATHS.PAYSLIP_VIEWER(slip.payRunId, slip.id))}
                       >
                         View
                       </Button>

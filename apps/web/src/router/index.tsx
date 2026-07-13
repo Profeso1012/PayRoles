@@ -26,6 +26,11 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 const Landing = lazy(() => import('@/pages/public/Landing'));
 // Deprecated: RequestAccess (backend has no company-requests endpoint at all)
 // const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
+const FeaturesOverview = lazy(() => import('@/pages/public/features/FeaturesOverview'));
+const FeaturesTeam = lazy(() => import('@/pages/public/features/FeaturesTeam'));
+const FeaturesPaySetup = lazy(() => import('@/pages/public/features/FeaturesPaySetup'));
+const FeaturesPayroll = lazy(() => import('@/pages/public/features/FeaturesPayroll'));
+const FeaturesPayments = lazy(() => import('@/pages/public/features/FeaturesPayments'));
 const Login = lazy(() => import('@/pages/auth/Login'));
 const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
 // Deprecated: ForgotPassword, ResetPassword, AcceptInvite - the real
@@ -39,8 +44,7 @@ const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
 const AppShell = lazy(() => import('@/components/layout/AppShell'));
 const AuthLayout = lazy(() => import('@/components/layout/AuthLayout'));
 
-// Onboarding
-const CompanySetup = lazy(() => import('@/pages/onboarding/CompanySetup'));
+// Deprecated: onboarding/CompanySetup (no backend self-service tenant setup endpoint)
 
 // Super admin
 const SADashboard = lazy(() => import('@/pages/super-admin/SADashboard'));
@@ -65,6 +69,7 @@ const LegalEntities = lazy(() => import('@/pages/organisation/LegalEntities'));
 // Employees
 const EmployeeList = lazy(() => import('@/pages/employees/EmployeeList'));
 const AddEmployee = lazy(() => import('@/pages/employees/AddEmployee'));
+const ImportEmployees = lazy(() => import('@/pages/employees/ImportEmployees'));
 const EmployeeDetail = lazy(() => import('@/pages/employees/EmployeeDetail'));
 const EditEmployee = lazy(() => import('@/pages/employees/EditEmployee'));
 
@@ -75,16 +80,17 @@ const PayRunCreate = lazy(() => import('@/pages/payroll/PayRunCreate'));
 const PayRunDetail = lazy(() => import('@/pages/payroll/PayRunDetail'));
 const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 
-// Finance & Reports
+// Finance
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
-const PayrollRegister = lazy(() => import('@/pages/reports/PayrollRegister'));
-const StatutoryReports = lazy(() => import('@/pages/reports/StatutoryReports'));
-const CostSummary = lazy(() => import('@/pages/reports/CostSummary'));
+const Exports = lazy(() => import('@/pages/exports/Exports'));
+// Deprecated: PayrollRegister, StatutoryReports, CostSummary (100% hardcoded
+// mock data - there is no backend /reports module of any kind to back these)
 
 // Settings
 const CompanyProfile = lazy(() => import('@/pages/settings/CompanyProfile'));
 const UsersAndRoles = lazy(() => import('@/pages/settings/UsersAndRoles'));
-const BankDetails = lazy(() => import('@/pages/settings/BankDetails'));
+// Deprecated: BankDetails (no tenant-level bank account endpoint - bank details
+// are per-worker only, see Employees > EmployeeDetail)
 const Jurisdictions = lazy(() => import('@/pages/settings/Jurisdictions'));
 
 // Audit & Notifications
@@ -94,7 +100,10 @@ const Notifications = lazy(() => import('@/pages/notifications/Notifications'));
 // Employee portal
 const MyPayslips = lazy(() => import('@/pages/employee-portal/MyPayslips'));
 const MyProfile = lazy(() => import('@/pages/employee-portal/MyProfile'));
-const MyBankDetails = lazy(() => import('@/pages/employee-portal/MyBankDetails'));
+// Deprecated: MyBankDetails - the employee_self_service role only holds
+// payslip:read/payslip:download permissions on the real backend, with no
+// worker:read/worker:write grant at all, so there is no reachable endpoint
+// for a self-service user to view or edit their own bank details.
 
 function Unauthorized() {
   return (
@@ -110,7 +119,7 @@ function DashboardRouter() {
   const role = useAuthStore((s) => s.user?.role);
 
   if (role === 'PLATFORM_ADMIN') return <Navigate to={PATHS.ADMIN} replace />;
-  if (role === 'employee_self_service') return <Navigate to={PATHS.MY_PAYSLIPS} replace />;
+  if (role === 'employee_self_service') return w(EmployeeDashboard);
   if (role === 'finance_manager') return w(FinanceDashboard);
   if (role === 'payroll_manager' || role === 'payroll_officer') return w(PayrollDashboard);
   return w(HRDashboard);
@@ -120,6 +129,11 @@ export const router = createBrowserRouter([
   // Public
   { path: PATHS.HOME, element: <Suspense fallback={<Loading />}><Landing /></Suspense> },
   // Deprecated: /request-access (no backend endpoint for company access requests)
+  { path: PATHS.FEATURES, element: w(FeaturesOverview) },
+  { path: PATHS.FEATURES_TEAM, element: w(FeaturesTeam) },
+  { path: PATHS.FEATURES_PAY_SETUP, element: w(FeaturesPaySetup) },
+  { path: PATHS.FEATURES_PAYROLL, element: w(FeaturesPayroll) },
+  { path: PATHS.FEATURES_PAYMENTS, element: w(FeaturesPayments) },
   { path: PATHS.UNAUTHORIZED, element: <Unauthorized /> },
 
   // Auth screens (AuthLayout wrapper)
@@ -149,17 +163,10 @@ export const router = createBrowserRouter([
     ],
   },
 
-  // Company setup wizard
-  {
-    path: PATHS.ONBOARDING,
-    element: (
-      <AuthGuard>
-        <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}>
-          <Suspense fallback={<Loading />}><CompanySetup /></Suspense>
-        </RoleGuard>
-      </AuthGuard>
-    ),
-  },
+  // Deprecated: /onboarding company setup wizard - the backend has no
+  // self-service tenant setup endpoint (no /tenants/setup route, no
+  // pay-group/company-bank-account concept). Tenants are provisioned by a
+  // platform admin via POST /platform/tenants + POST /platform/tenants/:id/users.
 
   // Main app shell — all tenant users
   {
@@ -192,10 +199,21 @@ export const router = createBrowserRouter([
         element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'finance_manager']}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(EmployeeList) },
-          { path: 'new', element: <OrgGuard requirePayGroups>{w(AddEmployee)}</OrgGuard> },
+          { path: 'new', element: <OrgGuard>{w(AddEmployee)}</OrgGuard> },
           { path: ':id', element: w(EmployeeDetail) },
           { path: ':id/edit', element: w(EditEmployee) },
         ],
+      },
+      // Bulk import also needs payroll_manager/payroll_officer, which the
+      // employees RoleGuard above doesn't grant - standalone route with its
+      // own broader role set (matches backend IMPORT_CREATE/IMPORT_READ).
+      {
+        path: 'employees/import',
+        element: (
+          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'hr_manager', 'hr_officer']}>
+            {w(ImportEmployees)}
+          </RoleGuard>
+        ),
       },
 
       // Payroll
@@ -207,23 +225,23 @@ export const router = createBrowserRouter([
           { path: 'runs', element: w(PayRunList) },
           { path: 'runs/new', element: w(PayRunCreate) },
           { path: 'runs/:id', element: w(PayRunDetail) },
-          { path: 'payslips/:id', element: w(PayslipViewer) },
+          { path: 'runs/:runId/payslips/:payslipId', element: w(PayslipViewer) },
         ],
       },
 
       // Finance
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(PaymentFiles)}</RoleGuard> },
-
-      // Reports
       {
-        path: 'reports',
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'finance_manager']}><Outlet /></RoleGuard>,
-        children: [
-          { path: 'register', element: w(PayrollRegister) },
-          { path: 'statutory', element: w(StatutoryReports) },
-          { path: 'cost', element: w(CostSummary) },
-        ],
+        path: 'exports',
+        element: (
+          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'hr_manager', 'hr_officer', 'finance_manager', 'auditor']}>
+            {w(Exports)}
+          </RoleGuard>
+        ),
       },
+
+      // Deprecated: /reports/* (PayrollRegister, StatutoryReports, CostSummary) -
+      // no backend /reports module exists at all; these were 100% mock data.
 
       // Settings
       {
@@ -232,7 +250,6 @@ export const router = createBrowserRouter([
         children: [
           { path: 'profile', element: w(CompanyProfile) },
           { path: 'users', element: w(UsersAndRoles) },
-          { path: 'bank', element: w(BankDetails) },
           { path: 'jurisdictions', element: w(Jurisdictions) },
         ],
       },
@@ -244,7 +261,6 @@ export const router = createBrowserRouter([
       // Employee self-service
       { path: 'my-payslips', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyPayslips)}</RoleGuard> },
       { path: 'my-profile', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyProfile)}</RoleGuard> },
-      { path: 'my-bank-details', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyBankDetails)}</RoleGuard> },
     ],
   },
 ]);

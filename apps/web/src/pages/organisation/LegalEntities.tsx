@@ -20,7 +20,7 @@ interface LegalEntity {
   tenantId: string;
   name: string;
   country: string;
-  taxId: string;
+  taxIdEncrypted: string | null; // Backend never returns the decrypted value
   address: string;
   createdAt: string;
 }
@@ -49,7 +49,10 @@ export default function LegalEntities() {
     refetch,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
-    queryFn: () => apiClient('/organisation/legal-entities'),
+    queryFn: async () => {
+      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
+      return Array.isArray(response) ? response : response.data || [];
+    },
   });
 
   const addMutation = useMutation({
@@ -190,7 +193,7 @@ export default function LegalEntities() {
                         fontSize: '0.8125rem',
                       }}
                     >
-                      {le.taxId}
+                      {le.taxIdEncrypted ? 'Protected' : '—'}
                     </td>
                     <td
                       style={{

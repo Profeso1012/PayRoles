@@ -11,17 +11,7 @@ import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-
-interface TenantProfile {
-  id: string;
-  name: string;
-  slug: string;
-  status: string;
-  plan: string;
-  country: string;
-  adminEmail: string;
-  setupComplete: boolean;
-}
+import type { BackendTenant } from '@/lib/api/types';
 
 const COUNTRY_OPTIONS = [
   { value: 'NG', label: 'Nigeria' },
@@ -33,48 +23,44 @@ const COUNTRY_OPTIONS = [
   { value: 'ZA', label: 'South Africa' },
 ];
 
-const PLAN_LABELS: Record<string, string> = {
-  starter: 'Starter',
-  growth: 'Growth',
-  enterprise: 'Enterprise',
-};
-
 export default function CompanyProfile() {
   const qc = useQueryClient();
   const toast = useToast();
-  const role = useAuthStore((s) => s.user?.role);
-  const canEdit = role === 'tenant_admin' || role === 'super_admin';
+  const user = useAuthStore((s) => s.user);
+  const role = user?.role;
+  // PATCH /tenants/:id is restricted to the tenant-scoped `super_admin` role
+  // on the real backend (it bypasses RolesGuard entirely) - `tenant_admin`
+  // can read the profile but cannot edit it via this API.
+  const canEdit = role === 'super_admin';
 
   const [name, setName] = useState('');
   const [country, setCountry] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const { data: profile, isLoading, isError, refetch } = useQuery<TenantProfile>({
-    queryKey: ['tenant-profile'],
+  const { data: profile, isLoading, isError, refetch } = useQuery<BackendTenant>({
+    queryKey: ['tenant-profile', user?.tenantId],
     queryFn: () => {
       if (!USE_REAL_API) {
         return apiClient('/tenants/profile');
       }
-      return apiClient(ENDPOINTS.TENANTS.PROFILE);
+      return apiClient<BackendTenant>(ENDPOINTS.TENANTS.DETAIL(user!.tenantId!));
     },
+    enabled: !!user?.tenantId || !USE_REAL_API,
   });
 
   useEffect(() => {
     if (profile) {
       setName(profile.name);
-      setCountry(profile.country);
+      setCountry(profile.country || '');
     }
   }, [profile]);
 
   const saveMutation = useMutation({
     mutationFn: (body: { name: string; country: string }) => {
       if (!USE_REAL_API) {
-        return apiClient('/tenants/profile', {
-          method: 'PATCH',
-          body: JSON.stringify(body),
-        });
+        return apiClient('/tenants/profile', { method: 'PATCH', body: JSON.stringify(body) });
       }
-      return apiClient(ENDPOINTS.TENANTS.UPDATE_PROFILE, {
+      return apiClient(ENDPOINTS.TENANTS.UPDATE(user!.tenantId!), {
         method: 'PATCH',
         body: JSON.stringify(body),
       });
@@ -101,10 +87,10 @@ export default function CompanyProfile() {
   }
 
   if (isError || !profile) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState onRetry={() => refetch()} />;
   }
 
-  const isDirty = name !== profile.name || country !== profile.country;
+  const isDirty = name !== profile.name || country !== (profile.country || '');
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -160,7 +146,7 @@ export default function CompanyProfile() {
           </p>
           {!canEdit && (
             <p style={{ fontSize: '0.8125rem', color: '#1F6F4E', marginTop: '0.25rem' }}>
-              You have read-only access. Contact your Super Admin to make changes.
+              You have read-only access. Only a Super Admin can edit the company profile.
             </p>
           )}
         </div>
@@ -195,14 +181,14 @@ export default function CompanyProfile() {
               placeholder="Select country"
             />
             <Input
-              label="Plan"
-              value={PLAN_LABELS[profile.plan] ?? profile.plan}
+              label="Currency"
+              value={profile.currency || '—'}
               disabled
-              hint="Contact support to upgrade your plan"
+              hint="Set during tenant provisioning"
             />
             <Input
-              label="Admin Email"
-              value={profile.adminEmail}
+              label="Contact Email"
+              value={profile.contactEmail}
               disabled
               hint="Primary contact — managed by platform admin"
             />

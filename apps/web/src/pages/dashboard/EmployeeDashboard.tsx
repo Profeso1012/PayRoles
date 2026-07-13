@@ -1,74 +1,76 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, FileText, User, Building2, CreditCard, ChevronRight } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
+import { FileText, User, ChevronRight } from 'lucide-react';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
-import { formatDate, formatPeriod } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import { useAuthStore } from '@/store/authStore';
 import Button from '@/components/ui/Button';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import type { BackendPayslip, BackendUser } from '@/lib/api/types';
 
 interface LatestPayslip {
   id: string;
   payRunId: string;
-  period: string;
   grossPay: number;
   totalDeductions: number;
   netPay: number;
   currency: string;
-  payGroupName: string;
+  createdAt: string;
 }
 
 interface EmployeeDashboardData {
   employeeName: string;
-  nextPayDate: string;
-  payGroupName: string;
   latestPayslip: LatestPayslip | null;
   totalPayslips: number;
 }
 
-// Build employee dashboard data from worker and payslip APIs
+// The employee_self_service role only holds payslip:read/payslip:download
+// permissions on the real backend - GET /workers/:workerId (worker:read) is
+// not accessible to it, so this must not fetch the Worker record at all.
+// GET /users/me works for anyone regardless of role/permissions (only @Auth(),
+// no specific permission required) and is the only source for a display name.
 async function buildEmployeeDashboard(): Promise<EmployeeDashboardData> {
   if (!USE_REAL_API) {
     return apiClient<EmployeeDashboardData>('/dashboard/employee');
   }
 
-  // Get current user info
-  const user = await apiClient<any>(ENDPOINTS.AUTH.ME);
-  
-  // Get worker details for current user
-  const worker = await apiClient<any>(ENDPOINTS.WORKERS.DETAIL(user.workerId || user.id));
-  
-  // Get worker's payslips
-  const payslipsResponse = await apiClient<any>(ENDPOINTS.WORKERS.PAYSLIPS(worker.id));
-  const payslips = Array.isArray(payslipsResponse) ? payslipsResponse : (payslipsResponse.data || []);
+  const [me, workerId] = await Promise.all([
+    apiClient<BackendUser>(ENDPOINTS.USERS.ME),
+    Promise.resolve(useAuthStore.getState().user?.workerId),
+  ]);
 
-  // Latest payslip
-  const latestPayslip = payslips.length > 0 ? {
-    id: payslips[0].id,
-    payRunId: payslips[0].payrollRunId || payslips[0].payRunId,
-    period: payslips[0].period || 'N/A',
-    grossPay: payslips[0].grossPayMinor ? minorToMajor(payslips[0].grossPayMinor, payslips[0].currency) : 0,
-    totalDeductions: payslips[0].totalDeductionsMinor ? minorToMajor(payslips[0].totalDeductionsMinor, payslips[0].currency) : 0,
-    netPay: payslips[0].netPayMinor ? minorToMajor(payslips[0].netPayMinor, payslips[0].currency) : 0,
-    currency: payslips[0].currency || 'NGN',
-    payGroupName: worker.legalEntity?.name || 'N/A',
-  } : null;
+  let latestPayslip: LatestPayslip | null = null;
+  let totalPayslips = 0;
 
-  // Find next pay date (could fetch from payroll runs, but for simplicity default to 30 days)
-  const now = new Date();
-  const nextPayDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  if (workerId) {
+    const params = buildPaginationParams({ page: 1, limit: 1, sortBy: 'createdAt', sortDir: 'desc' });
+    const { data: payslips, meta } = await apiClientWithMeta<BackendPayslip[]>(
+      `${ENDPOINTS.WORKERS.PAYSLIPS(workerId)}?${params}`,
+    );
+    totalPayslips = meta?.total ?? payslips.length;
+    const p = payslips[0];
+    latestPayslip = p
+      ? {
+          id: p.id,
+          payRunId: p.payrollRunId,
+          grossPay: minorToMajor(p.grossPayMinor),
+          totalDeductions: minorToMajor(p.deductionsMinor),
+          netPay: minorToMajor(p.netPayMinor),
+          currency: p.currency,
+          createdAt: p.createdAt,
+        }
+      : null;
+  }
 
   return {
-    employeeName: `${worker.firstName} ${worker.lastName}`,
-    nextPayDate,
-    payGroupName: worker.legalEntity?.name || worker.department || 'N/A',
+    employeeName: `${me.firstName} ${me.lastName}`,
     latestPayslip,
-    totalPayslips: payslips.length,
+    totalPayslips,
   };
 }
 
@@ -96,7 +98,6 @@ export default function EmployeeDashboard() {
 
   const quickLinks = [
     { label: 'My Profile', icon: User, path: PATHS.MY_PROFILE },
-    { label: 'My Bank Details', icon: CreditCard, path: PATHS.MY_BANK_DETAILS },
     { label: 'My Payslips', icon: FileText, path: PATHS.MY_PAYSLIPS },
   ];
 
@@ -108,27 +109,6 @@ export default function EmployeeDashboard() {
         <h1 className="text-3xl font-bold text-deep-cash">
           Hello, {data.employeeName}!
         </h1>
-        {data.payGroupName && (
-          <span className="inline-flex items-center gap-1.5 mt-2 px-3 py-1 rounded-full bg-mint-light text-xs font-medium text-cash-green">
-            <Building2 size={12} />
-            Pay group: {data.payGroupName}
-          </span>
-        )}
-      </div>
-
-      {/* Next Pay Date card */}
-      <div className="rounded-xl border-2 border-cash-gold/40 bg-cash-gold/10 px-6 py-5 flex items-center gap-4">
-        <div className="w-12 h-12 rounded-full bg-cash-gold/20 flex items-center justify-center shrink-0">
-          <Calendar size={24} className="text-cash-gold" />
-        </div>
-        <div>
-          <p className="text-xs font-medium text-cash-green uppercase tracking-wide">
-            Your next pay date
-          </p>
-          <p className="text-xl font-bold text-deep-cash mt-0.5">
-            {formatDate(data.nextPayDate)}
-          </p>
-        </div>
       </div>
 
       {/* Latest Payslip card */}
@@ -137,7 +117,7 @@ export default function EmployeeDashboard() {
           <div className="px-5 py-4 border-b border-mint-light bg-soft-white flex items-center justify-between">
             <h2 className="text-sm font-semibold text-deep-cash">Latest Payslip</h2>
             <span className="text-xs text-cash-green/60 font-medium">
-              {formatPeriod(data.latestPayslip.period)}
+              {formatDate(data.latestPayslip.createdAt)}
             </span>
           </div>
 
@@ -180,7 +160,7 @@ export default function EmployeeDashboard() {
             {/* View payslip button */}
             <Button
               variant="secondary"
-              onClick={() => navigate(PATHS.PAYSLIP_VIEWER(data.latestPayslip!.payRunId))}
+              onClick={() => navigate(PATHS.PAYSLIP_VIEWER(data.latestPayslip!.payRunId, data.latestPayslip!.id))}
               className="w-full"
             >
               <FileText size={15} />

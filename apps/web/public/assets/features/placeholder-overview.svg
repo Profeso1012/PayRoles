@@ -1,0 +1,11 @@
+<svg width="960" height="560" viewBox="0 0 960 560" xmlns="http://www.w3.org/2000/svg">
+  <rect width="960" height="560" rx="20" fill="#F7FAF8"/>
+  <rect x="1" y="1" width="958" height="558" rx="19" fill="none" stroke="#CDEFD7" stroke-width="2" stroke-dasharray="8 6"/>
+  <g transform="translate(432,220)">
+    <rect x="0" y="0" width="96" height="76" rx="8" fill="#CDEFD7"/>
+    <circle cx="24" cy="24" r="9" fill="#F7FAF8"/>
+    <path d="M8 62 L34 36 L52 54 L68 38 L88 62 Z" fill="#F7FAF8"/>
+  </g>
+  <text x="480" y="340" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="600" fill="#1F6F4E">Screenshot placeholder</text>
+  <text x="480" y="364" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#4FAD72">PayRole dashboard overview</text>
+</svg>

@@ -1,369 +1,449 @@
-# PART 1
-Great questions. Let me answer each one properly because these are exactly the right things to understand before touching any code.
+# PART 0 — Reality Check: What Changed From The Original Plan
+
+The document below replaces everything in this file before it. It was written against
+the mock backend you designed from best guesses. The real backend (`e_payroll`) works
+differently in ways that matter for how you use and demo the app. Read this part first.
+
+**Gone entirely — no backend support, so the frontend now hides these:**
+- Self-signup / "Request Access" — nobody can sign up. A user only exists because
+  someone with authority created them directly, with a password, through the API.
+- Invite emails — there is no invite-token flow anywhere. When you "add a user," the
+  backend creates their account immediately with the password you typed. You tell them
+  the password yourself (Slack, phone call, whatever). There is no email step.
+- Forgot password / reset password — **there is no recovery path at all** if a user
+  forgets their password while logged out. Not for platform admins, not for tenant
+  admins, not for anyone. The only password-related endpoint is "change my own
+  password while I'm already logged in" (`PATCH /users/me/password`, requires knowing
+  your *current* password). If someone is fully locked out, the only fix today is
+  going into the database directly. Worth knowing before you rely on this in a demo.
+- Company self-service setup wizard — a company cannot onboard itself. The Platform
+  Admin creates the tenant *and* its first user in one motion (two API calls back to
+  back). There's no "welcome, let's set up your company" wizard on first login.
+- Departments, Locations, Pay Groups, Job Grades — none of these exist as real things.
+  The backend has **Legal Entities** and that's it for org structure. "Department" is
+  just a free-text string field on a worker record, not a manageable entity. Pay runs
+  are scoped to a Legal Entity directly, not a pay group.
+- 2FA / OTP — not implemented anywhere in the current backend.
+- Company bank account — there's no such concept. Bank details live per-worker only
+  (for paying that specific person), never at the company level.
+
+**Different from what you'd expect:**
+- Roles: not 4 (HR/Payroll/Finance/Employee) but **10** — see Part 1.
+- Money: every amount over the wire is in **minor units** (kobo, cents) as a string,
+  e.g. `"50000000"` = ₦500,000.00. The frontend converts for display; Postman calls
+  need to send/expect minor units.
+- Payroll run states: `draft → calculating → calculated → pending_approval → approved
+  → processing → completed`, with `rejected`/`cancelled`/`reversed`/`failed` branches.
+  Disbursement (actually paying people) is a *separate* step after approval — its own
+  batch with its own states.
+- Platform Admin and everyone else are **completely separate authentication systems** —
+  different login page, different JWT, different secret. A platform token cannot be
+  used on a tenant route and vice versa.
 
 ---
 
-## Who can log in and what do they see?
+# PART 1 — The Cast of Characters (as the backend actually defines them)
 
-There are **two completely separate worlds** of users in this system.
+**World 1: Platform staff** (people who work for PayRole itself, not any customer)
+Log in at `/platform-login`. Five possible roles, but in practice you'll only ever use
+`super_admin`:
 
-**World 1: The company staff (tenant-scoped users)**
-These are people *inside* Zenith Logistics, Dangote, or whatever company is using the app. They log in and see *only their company's data*. Within their company, they have different roles:
-
-- **HR Manager** — can add/edit employees, update salaries, manage records
-- **Payroll Manager** — can run and review payroll calculations
-- **Finance Director** — can approve and authorize payments
-- **Regular Employee** — can only see their own payslips and personal info
-
-Nobody at Dangote can see Zenith's data. Nobody at Zenith can see Dangote's. Same app, different sealed universes.
-
-**World 2: The platform owner (super admin)**
-This is whoever built and sells the software. They have a god-mode dashboard where they can create new company accounts (onboard a new tenant), manage subscriptions, handle support issues. They never touch payroll data — they just manage which companies exist on the platform.
-
-**Who sets the roles?** When a company first signs up, the platform owner creates their account and assigns one person as the company's **Super Admin** (usually the IT lead or Head of HR). That Super Admin then logs in and creates all other users — assigns Amaka as HR Manager, Emeka as Payroll Manager, Mrs. Okonkwo as Finance Director. They can also deactivate users who leave the company. So role assignment flows downward: platform owner → company super admin → everyone else.
-
-**Can regular employees log in?** Yes, but to a very stripped-down view — basically just "my payslips" and "my personal details." Some companies enable this, some don't. It's a permission toggle the company super admin controls.
-
----
-
-## How does the actual money move? Does it leave from inside the app?
-
-This is one of the most important things to understand. There are **two models** and the PRD hints at both.
-
-**Model A: The app generates a payment file, the bank does the actual transfer**
-
-This is the most common model, especially in Nigeria and many markets. Here's the flow:
-
-1. Mrs. Okonkwo approves payroll inside the app
-2. The app generates a **bulk payment file** — essentially a structured list saying "pay Chidi ₦227,800 to GTBank account 0123456789, pay Ada ₦310,000 to Access Bank account 9876543210..." for all 87 employees
-3. That file gets uploaded to the company's **corporate banking portal** (GTBank Business, Zenith Bank Corporate, etc.) by the finance team
-4. The bank processes it and moves the money
-
-The file format depends on the bank. Most Nigerian banks accept a specific Excel or CSV template. Some accept XML. There's no universal standard — it varies bank to bank, which is why the PRD mentions this is something to figure out. In the UK, there's a standard called **BACS** (a specific file format all UK banks accept for bulk payroll). In the US it's **ACH**. The app would need to know which format to generate based on the country.
-
-**Model B: The app connects directly to a payment API and pushes money itself**
-
-This is more advanced. Instead of generating a file, the app calls something like Monnify, Flutterwave, or a bank's direct API and says "transfer ₦227,800 to account 0123456789 right now." The money moves without anyone downloading a file and logging into a banking portal.
-
-You've actually worked on something adjacent to this — Signum uses Monnify's API for transfers. Same concept here, just at bulk payroll scale.
-
-**Which model does this PRD use?** Reading it carefully, the PRD says "payments" as a module but doesn't lock in either approach. This is one of those **joint decisions** the doc says to make early. For a first version (Phase 1), Model A (generate a file) is simpler and safer. Model B is the premium feature you add later.
-
----
-
-## What about payslips — when are they sent, to whom, in what format?
-
-Payslips serve two audiences with different needs.
-
-**The employee** wants to know: what did I get paid and why. Payslips are typically:
-- Generated automatically every time a payroll run is approved
-- Sent to the employee's work email immediately after approval, as a **PDF attachment**
-- Also available to view/download anytime they log into the employee portal
-- Some companies only do the portal (no email) to reduce clutter
-
-PDF is the universal standard for payslips because it's non-editable, printable, and looks professional. Nobody sends payslips as Word docs — that would let people edit them, which is a legal problem.
-
-**The company/finance team** wants different reports:
-- **Payroll register** — the full table of every employee, every line item, for a given run. This is usually exported as Excel because finance people need to manipulate numbers, cross-reference with budgets, etc.
-- **Statutory reports** — what you owe FIRS (tax authority), what you owe pension fund administrators, what you owe NHF. These have specific government-mandated formats, sometimes a specific Excel template FIRS publishes, sometimes an online portal where you upload a CSV
-- **Management summaries** — monthly/annual cost summaries for the MD or CFO. Usually PDF or Excel depending on audience
-
-**How often?** The trigger is always the payroll run approval, not a calendar. When Mrs. Okonkwo clicks Approve:
-- Employee payslips are generated and distributed immediately
-- Statutory remittance reports are generated for the HR/finance team to file
-- The payroll register is available for download
-
-Employees can also request old payslips anytime — banks ask for 3 or 6 months of payslips when processing loan applications. That's why the system keeps them forever and makes them accessible on demand.
-
----
-
-## Pulling it all together — the full picture of who does what
-
-Let me map every actor to their actions cleanly:
-
-| Who | What they do in the app |
+| Role | Can do |
 |---|---|
-| **Platform Super Admin** | Creates company accounts, manages subscriptions |
-| **Company Super Admin** | Creates users, assigns roles, configures company settings, links bank details |
-| **HR Manager** | Adds/edits employees, manages salaries, assignments, org structure |
-| **Payroll Manager** | Runs payroll calculations, reviews results, flags issues, submits for approval |
-| **Finance Director** | Reviews final register, approves payroll, downloads payment file for the bank |
-| **Finance Team** | Takes payment file to corporate banking portal, uploads it, confirms transfers |
-| **Employee** | Views own payslips, updates personal/bank details |
+| `super_admin` | Everything — bypasses all permission checks |
+| `platform_admin` | Manage tenants, platform users, view system health/audit |
+| `support_engineer` | Read tenants/users, view health, impersonate for support |
+| `auditor` | Read-only: tenants, audit logs, system health |
+| `devops` | System health/metrics/settings, audit read |
 
-Notice the Finance Team step — that's a human action *outside the app* (for Model A). The app's job ends at generating the file. The human carries it to the bank.
+**World 2: Tenant staff** (people who work *at* a company using PayRole)
+Log in at `/login`. Ten possible roles:
 
----
+| Role | What they can actually touch (real backend permissions) |
+|---|---|
+| `super_admin` | Everything, tenant-wide — bypasses all permission checks (rare, "god mode" within the tenant) |
+| `tenant_admin` | Users, workers, legal entities, compensation, pay elements, payroll (read/create/approve/reject/process/reverse), payslips, audit, import/export. **Cannot** edit the company's own tenant profile (that PATCH is `super_admin`-only) |
+| `hr_manager` | Full worker/compensation/legal-entity read+write |
+| `hr_officer` | Same area as hr_manager, narrower permission set |
+| `payroll_manager` | Pay elements, worker pay elements, payroll read/create/process, payslips |
+| `payroll_officer` | Same area as payroll_manager, narrower permission set |
+| `finance_manager` | Payroll approve/reject, payslip read/download, audit read |
+| `auditor` | Read-only: audit logs, tax rules |
+| `read_only` | Read-only: workers, payroll, payslips, legal entities, compensation, pay elements, tax rules |
+| `employee_self_service` | **Only** `payslip:read` and `payslip:download`. That's it — no worker profile access, no bank details access, nothing else |
 
-## The one thing to nail before any of this
-
-The thing the PRD is most serious about — and which will make or break everything else — is **who can do what, enforced in code, not just in the UI**. 
-
-Emeka should not be able to approve his own payroll even if he finds the API endpoint. Mrs. Okonkwo should not be able to edit Chidi's salary. These rules live in the backend and get checked on every single request. The frontend just *reflects* the rules by hiding buttons — but the backend *enforces* them by rejecting unauthorized requests. That's the RBAC system the PRD keeps mentioning.
-
-Once you understand that mental model — roles, permissions, tenant isolation, and the payroll lifecycle from draft to paid — every module in the PRD has an obvious reason for existing. Does this fill the gaps? What's still fuzzy?
-
----
-
-# PART 2
-
-Good. Let me walk you through every screen, every click, and every data handshake — using apps you already know as reference points.
-
----
-
-## First, the mental model for login/signup
-
-Think of how **Paystack** works for businesses. When a merchant signs up, they create a *business account* — not just a personal account. Then inside that business, they can invite team members. Each team member logs in with their own email/password but lands inside the merchant's dashboard. That's exactly how this works.
-
-Now layer in **Cowrywise** — when you open the app, it just asks for email and password. No "which company are you?" question. The system already knows which company you belong to based on your email and account record. Same principle here.
+That last row matters a lot: an employee cannot view or edit their own worker profile
+or bank details through this backend at all. Their whole world is payslips, plus the
+universal `GET /users/me` and `PATCH /users/me/password` that every role gets.
 
 ---
 
-## World 1: Platform Super Admin
+# PART 2 — First Boot: Seeding & The Platform Admin
 
-This person works at the company that *built and sells* the payroll software. Think of them like a Paystack internal operations staff.
+### Step 1 — Seed the platform admin (one-time, database-level)
 
-**How they got their account:** It was created directly in the database during deployment. No signup page. Like how the first admin of any system is seeded. They have a separate login URL entirely — something like `admin.payrollapp.com` versus `app.payrollapp.com` for everyone else.
+You already did this: ran `seed-admin.sql` against Postgres, generated a real bcrypt
+hash for the password yourself (the file's canned hash was fake), and confirmed
+`"platformRole" = 'super_admin'` (lowercase — the seed file's placeholder value
+`'PLATFORM_SUPER_ADMIN'` doesn't match any real enum member and gets rejected by every
+permission check).
 
-**Their screen flow:**
+**Postman check** — confirm the backend is up:
+```
+GET {{baseUrl}}/api/docs
+```
+(`baseUrl` = `http://localhost:3000`, no version prefix needed for Swagger)
 
-They visit `admin.payrollapp.com/login`. They see a plain, minimal login screen — just email and password. No branding, no signup link. This portal is not meant to be found by random people.
+### Step 2 — Log in as Platform Admin
 
-They log in. They land on a **super admin dashboard** that looks like a CRM or a Flutterwave merchant list — a table of all companies using the platform. Company name, number of employees, subscription plan, date joined, status (active/suspended).
+**Frontend:** open `http://localhost:5173/platform-login`. Enter email, then password
+(two-step form, no company code — platform admins don't belong to a tenant).
 
-From here they can:
-- Click **"Onboard New Company"** — a form where they enter the company's name, country, subscription plan, and the email of the person who will be that company's Super Admin. They submit. The system creates the tenant record in the database and fires an **email invitation** to that person.
-- Click into any company row to see their details — but NOT their payroll data. Just account-level info: billing, user count, which country packs are active.
-- Suspend or deactivate a company account.
+**What fires under the hood:**
+```
+POST {{baseUrl}}/api/platform/auth/login
+Content-Type: application/json
 
-That's largely their entire world. Simple but powerful.
+{ "email": "admin@payrolles.com", "password": "Admin@123" }
+```
+Response: `{ success, data: { accessToken, refreshToken, expiresIn, tokenType } }`.
+Save `data.accessToken` — every following platform call needs
+`Authorization: Bearer {{accessToken}}`.
 
----
+The frontend then calls `GET /api/platform/users/me` to get your name for the sidebar.
 
-## World 2: Company Super Admin (first time — onboarding)
+You land on **`/admin`** — the Platform Overview dashboard (stat cards: total/active/
+inactive/suspended companies, recent companies table).
 
-This is the IT lead or Head of HR at say, **Dangote Cement**. The Platform Admin just sent them an invite email.
+### Step 3 — Onboard a new company
 
-**Step 1 — The invitation email**
+**Frontend:** sidebar → **Companies** (`/admin/companies`) → **Onboard New Company**
+button → modal. Fill in: Company name, Slug (auto-suggested from the name, editable),
+Contact email (this doubles as the first admin's login email), Country, Currency, then
+a "First Admin User" section: first name, last name, a temporary password (auto-
+generated, editable — you'll need to tell this to the actual admin yourself). Click
+**Create Company**.
 
-They receive an email that looks like a **Piggyvest referral link** or a **Notion workspace invite** — a branded email saying "You've been invited to set up Dangote Cement on [App Name]. Click to get started." There's a single button. The link has a **token** embedded in it — a one-time code that expires in 48 hours. Something like `app.payrollapp.com/accept-invite?token=xK9f2...`. This token carries the company ID and their email address encoded inside it.
+**What fires (two calls in sequence):**
+```
+POST {{baseUrl}}/api/platform/tenants
+Authorization: Bearer {{platformAccessToken}}
+Content-Type: application/json
 
-**Step 2 — Accept invite screen**
+{
+  "name": "Zenith Logistics Ltd",
+  "slug": "zenith-logistics",
+  "contactEmail": "admin@zenithlogistics.com",
+  "country": "NG",
+  "currency": "NGN"
+}
+```
+Response gives you the new tenant's `id`. Then:
+```
+POST {{baseUrl}}/api/platform/tenants/{{tenantId}}/users
+Authorization: Bearer {{platformAccessToken}}
+Content-Type: application/json
 
-They click the link. The app reads the token, decodes it, and shows a screen that says "Welcome. You're setting up the account for **Dangote Cement**. Please create your password." They set their password, maybe confirm their name and phone number. They submit. Their user account is now created and linked to Dangote's tenant. They're redirected to login.
+{
+  "email": "admin@zenithlogistics.com",
+  "password": "Zx9#kLp2mQ8r",
+  "firstName": "Chidi",
+  "lastName": "Nwosu",
+  "role": "tenant_admin"
+}
+```
+Without that second call, the tenant exists but has zero users and nobody can ever log
+into it — so both calls are mandatory, every time.
 
-No "which company do you work for?" question. No company code. The token already told the system everything.
+### Step 4 — Manage an existing company
 
-**Step 3 — First login and company setup wizard**
-
-They log in with their email and new password. Because this is their first login and the company is freshly created, the system detects that setup is incomplete and redirects them to an **onboarding wizard** — think of how **Zoho** or **Slack** walks you through setup the first time.
-
-The wizard has steps:
-1. **Company profile** — full legal name, RC number, address, industry
-2. **Country/jurisdiction** — "Which countries do you operate in?" They select Nigeria. This activates the Nigeria country pack (PAYE rules, pension rules, NHF rules). If they also select UK, the UK pack activates too.
-3. **Pay groups** — "How often do you pay staff?" Monthly, bi-weekly, weekly. They might set up "Lagos Monthly Staff" and "Abuja Monthly Staff" as separate groups
-4. **Bank details** — company bank account that salaries will be paid from. Account number, bank name. This is where the payment file will reference when generated.
-
-After the wizard, they land on the main dashboard.
-
-**Step 4 — Inviting internal users**
-
-Their first real action is usually going to **Settings → Users & Roles** and inviting their team. This screen looks like **Slack's invite members page** or **Google Workspace admin console** — a list of current users and an "Invite User" button.
-
-They click Invite User. A modal/form appears:
-- Email address
-- Full name
-- Role (dropdown: HR Manager, Payroll Manager, Finance Director, Employee)
-
-They submit. That person gets an invite email exactly like the one the Super Admin received. Same token flow. They click the link, set their password, log in — and land directly in Dangote's dashboard with their assigned role's permissions.
-
-This is how every internal user gets access. **Nobody self-registers.** There's no public signup page that says "Join your company." You only get in if someone with authority invites you. This is a security requirement for financial software.
-
----
-
-## World 2: Regular Tenant Users (HR, Payroll, Finance, Employee)
-
-Once they've accepted their invite and set their password, every subsequent login is identical regardless of role.
-
-**Login screen** — `app.payrollapp.com/login`
-
-Just like the **GTBank mobile app** login or **Carbon loan app** — email field, password field, Login button. Maybe a "Forgot password?" link. No company name field. No tenant code. The system looks up their email in the database, finds which company they belong to, and routes them in.
-
-What if someone from Zenith and someone from Dangote have the same email? That shouldn't happen — email is unique across the entire platform. One person, one account. If someone genuinely works for two companies (a consultant for instance), they'd need two separate email addresses for each company account.
-
-**After login — what each person sees:**
-
-This is where it diverges completely based on role.
-
----
-
-### HR Manager (Amaka's flow)
-
-She logs in and lands on a **dashboard** that looks like the main screen of **Workday** or a simplified **BambooHR** — her primary concern is people.
-
-Her dashboard shows:
-- Total headcount
-- New joiners this month
-- Upcoming contract end dates
-- Employees with incomplete records (missing bank details etc.)
-
-Her navigation menu has:
-- **Employees** — the main area she lives in
-- **Organisation** — legal entities, departments, locations
-- **Reports** — HR-specific reports
-
-She clicks **Employees**. She sees a data table — think of the **Flutterwave transactions list** but for people. Search bar at top, filter by department/location/status, paginated list of employees. Each row: name, employee ID, job title, department, status (active/on leave/exited).
-
-She clicks **Add Employee**. A multi-step form opens — like filling a **NIN enrollment form** or a **NYSC portal form**. Step 1 is personal details (name, DOB, gender, contact). Step 2 is employment details (start date, department, job title, employment type). Step 3 is compensation (salary amount, currency, effective from date — this is that effective-dating field). Step 4 is bank details (for salary payment). Step 5 is review and submit.
-
-She submits. The employee record is created. If the employee portal is enabled, an invite email goes to that employee automatically.
-
-When she needs to give Chidi a raise in October, she goes to his profile, clicks **Compensation**, sees a timeline of his salary history (this looks like a **Cowrywise savings history** — entries with dates), and clicks **Add New Entry**. She enters ₦350,000 and "effective from October 1st." The old ₦280,000 record stays untouched. The system now knows: before October, use ₦280,000. October onwards, use ₦350,000. When October payroll runs, it automatically picks the right figure.
+**Frontend:** click any row in the Companies table → `/admin/companies/:id`. You see
+name/contact email/country/currency/member-since, plus:
+- **Add User** button → same two-field-plus-password modal as above, minus the tenant
+  creation call — just fires `POST /api/platform/tenants/:id/users` again (e.g. to add
+  a second `tenant_admin` or recover from a lost password by creating a *new* user,
+  since there's no reset for the old one).
+- **Suspend / Reactivate** button → confirms, then fires
+  `PATCH /api/platform/tenants/:id/suspend` or `.../activate`. A suspended tenant's
+  users are immediately blocked from logging in.
 
 ---
 
-### Payroll Manager (Emeka's flow)
+# PART 3 — Company Admin's First Login (tenant_admin)
 
-He logs in and lands on a **payroll-focused dashboard**. His primary concern is runs and deadlines.
+**Frontend:** `http://localhost:5173/login`. Three steps: email → company code (the
+`slug` you picked when onboarding, e.g. `zenith-logistics`) → password.
 
-His dashboard shows:
-- Upcoming pay dates (like a calendar widget)
-- Status of current pay runs (Draft / In Review / Approved / Paid)
-- Any flagged issues from the last calculation
+**What fires:**
+```
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
 
-His navigation has:
-- **Pay Runs** — main area
-- **Pay Elements** — tax rules, allowances, deductions setup
-- **Reports** — payroll register, statutory reports
+{ "email": "admin@zenithlogistics.com", "password": "Zx9#kLp2mQ8r", "tenantSlug": "zenith-logistics" }
+```
+Response: `{ accessToken, refreshToken, expiresIn, tokenType }`. Then the frontend
+calls `GET /api/v1/auth/me` (returns `{id, email, tenantId, role, isActive, workerId}`)
+and `GET /api/v1/users/me` (returns `firstName`/`lastName` for display) to build the
+session.
 
-He clicks **Pay Runs → New Run**. A setup screen appears — think of initiating a **transfer on the GTBank app** but for payroll. He selects:
-- Pay group: Lagos Monthly Staff
-- Pay period: July 2026
+There is no setup wizard. You land straight on **`/dashboard`** (the general-purpose
+dashboard — total employees, active/suspended/inactive counts, recent hires).
 
-He clicks **Create**. The run is created in **Draft** state. He sees a run detail screen showing the 87 employees who will be included, their basic salary figures pulled from their records. He hasn't calculated yet — this is just the preview.
+**What to actually do first, in order:**
 
-He clicks **Calculate**. This triggers the backend engine. A **progress indicator** appears — like the spinning/loading state on a **Flutterwave bulk transfer** or how **Kuda** shows "processing" for transfers. The calculation runs in the background. The page either polls for updates or receives a live signal when it's done.
-
-When calculation finishes, the run moves to **Calculated** state. The page refreshes to show the full register — a detailed table of every employee, every element (basic salary, transport allowance, PAYE tax, pension, net pay). He can click into any employee row to see their individual breakdown.
-
-He spots Bola's ₦0 issue. He flags it via a comment or goes to HR to fix the record. Once fixed, he clicks **Recalculate** — which reruns just Bola's calculation (or the whole run depending on implementation).
-
-Satisfied, he clicks **Submit for Approval**. The run moves to **In Review** state. His approve button disappears — he can no longer touch it. A notification goes to Mrs. Okonkwo.
-
----
-
-### Finance Director (Mrs. Okonkwo's flow)
-
-She logs in and lands on a **finance-focused dashboard** — her concern is money leaving the company and compliance.
-
-She sees:
-- Payroll runs awaiting her approval (highlighted, with urgency indicator if pay date is close)
-- Total payroll cost this month vs last month vs budget
-- Upcoming statutory filing deadlines (PAYE remittance to FIRS is due by the 10th of every month)
-
-She clicks the notification/alert for July Lagos payroll. She lands on the run detail screen in **read-only mode** — she can see everything Emeka saw but cannot edit anything. Her available action is just the **Approve** button (and a **Reject/Send Back** button with a comment box if something is wrong).
-
-She reviews. She clicks **Approve**. A **confirmation modal** appears — think of how **Kuda or Opay** asks "Are you sure you want to send ₦24.3M?" with a summary. She confirms.
-
-The run moves to **Approved** state. Several things happen automatically in the background:
-- All 87 payslips are generated as PDFs and stored
-- Employees who have portal access get email notifications "Your July payslip is ready"
-- The payroll register is available for download as Excel
-- Statutory remittance reports are available for download
-
-She then goes to the **Payments** section. She sees the approved run. She clicks **Download Payment File**. The system generates the bulk payment file in the format configured for the company's bank (e.g., GTBank bulk transfer Excel template). She downloads it, logs into GTBank Business Internet Banking separately (outside this app), uploads the file there, and authorizes the transfers. That's the money moving.
+1. **Organisation → Legal Entities** (`/organisation/legal-entities`) → **Add Legal
+   Entity**. Fill name, country, tax ID, address. This is the *only* org-structure step
+   that's real — do this before adding employees or creating pay runs, both of which
+   reference a legal entity.
+   ```
+   POST {{baseUrl}}/api/v1/legal-entities
+   Authorization: Bearer {{accessToken}}
+   { "name": "Zenith Logistics Nigeria", "country": "NG", "taxId": "RC-445566", "address": "12 Marina, Lagos" }
+   ```
+2. **Settings → Users & Roles** (`/settings/users`) → **Add User**. Create your HR
+   Manager, Payroll Manager, Finance Manager, etc. here — same
+   `POST /api/v1/users` call as the platform admin's "Add User," just scoped to your
+   own tenant automatically (no tenant ID needed in the body — it comes from your JWT).
+   ```
+   POST {{baseUrl}}/api/v1/users
+   Authorization: Bearer {{accessToken}}
+   { "email": "amaka@zenithlogistics.com", "password": "Hr9$Temp22aQ", "firstName": "Amaka", "lastName": "Eze", "role": "hr_manager" }
+   ```
+   Tell Amaka her temporary password directly — again, no invite email exists.
+3. Now hand off to HR (Part 4) to start adding employees.
 
 ---
 
-### Employee (Chidi's flow)
+# PART 4 — Each Role's Day-to-Day Flow
 
-Chidi got an invite email when Amaka added him. He set his password. He logs in.
+### HR Manager (`hr_manager` / `hr_officer`)
 
-His dashboard is the most minimal of all — like the **PiggyVest** or **Carbon** home screen but with almost nothing to do except view. He sees:
+Lands on `/dashboard` → HR Dashboard (headcount, new this month, missing-bank-detail
+alerts, recent hires table).
 
-- His name and employee ID
-- His current salary (if the company has enabled this visibility)
-- His latest payslip with a quick summary
-- A notification if a new payslip is available
+**Add an employee:** sidebar → **Employees** (`/employees`) → **Add Employee** → the
+5-step wizard (Personal → Employment → Compensation → Bank → Review). This route is
+guarded — if you have zero legal entities yet, you get bounced back to Organisation.
 
-His navigation is tiny:
-- **My Payslips** — list of all his payslips, click any to view the PDF or see it rendered on screen. He can download any one as PDF for bank loan applications.
-- **My Profile** — his personal details. He can update his home address, phone number, next of kin. He *cannot* update his salary or job title — that's HR's job.
-- **My Bank Details** — he can view and update his bank account number. Some companies lock this so only HR can change it (to prevent fraud).
+Step-by-step API calls fired on final submit:
+```
+POST {{baseUrl}}/api/v1/workers
+Authorization: Bearer {{accessToken}}
+{
+  "employeeNumber": "ZL-0001",
+  "firstName": "Chidi", "lastName": "Okeke",
+  "email": "chidi@zenithlogistics.com", "phone": "+2348012345678",
+  "dateOfBirth": "1992-04-15",
+  "nationalId": "NIN-1234567890",
+  "position": "Software Engineer", "department": "Engineering",
+  "legalEntityId": "{{legalEntityId}}",
+  "employmentType": "full_time",
+  "hireDate": "2026-07-01",
+  "bankName": "GTBank", "bankAccount": "0123456789"
+}
+```
+(`nationalId`/`bankAccount` are sent plain — the backend encrypts them at rest and
+never returns the decrypted value again; the UI always shows "Protected" after this.)
 
-That's his entire world. Clean, simple, nothing he doesn't need.
+If you filled in the Compensation step too, a second call follows automatically:
+```
+POST {{baseUrl}}/api/v1/compensation
+Authorization: Bearer {{accessToken}}
+{ "workerId": "{{newWorkerId}}", "amountMinor": 50000000, "currency": "NGN", "effectiveDate": "2026-07-01" }
+```
+(`50000000` minor units = ₦500,000.00.)
+
+**View/edit an employee:** click any row → `/employees/:id` → four tabs (Profile,
+Assignments, Compensation, Payslips). Assignments tab is permanently empty — there's
+no assignments endpoint on this backend at all, it's a known gap, not a bug you'll fix
+by clicking around. Compensation tab is read-only history (`GET /v1/compensation/worker/:workerId`).
+**Edit** button (top right) → `/employees/:id/edit` → fires `PATCH /v1/workers/:id`
+with whatever changed (name/email/phone/DOB/national ID — no gender field exists on
+this backend, and status changes are not available through this form).
+
+**Give someone a raise:** there's currently no "Add Compensation" button on the
+employee detail page — compensation history is read-only there today. A new
+compensation record can only be created the same way as above
+(`POST /v1/compensation`), so for now that's a Postman/backend-console action, not yet
+a frontend button.
+
+### Payroll Manager (`payroll_manager` / `payroll_officer`)
+
+**Set up pay elements first:** sidebar → **Pay Elements** (`/payroll/pay-elements`) →
+**Add Element**. Give it a `code` (auto-uppercased, e.g. `TRANSPORT_ALLOWANCE`), a
+name, a type (Earning / Deduction / Employer Contribution / Tax / Benefit), and either
+a formula (e.g. `GROSS * 0.15`) or, if type is Tax, a tax rule code instead.
+```
+POST {{baseUrl}}/api/v1/pay-elements
+Authorization: Bearer {{accessToken}}
+{ "code": "TRANSPORT_ALLOWANCE", "name": "Transport Allowance", "type": "earning", "formula": "GROSS * 0.15" }
+```
+
+**Create a pay run:** **Pay Runs** (`/payroll/runs`) → **New Run** → pick a Legal
+Entity, name it, set period start/end and pay date.
+```
+POST {{baseUrl}}/api/v1/payroll/runs
+{ "legalEntityId": "{{legalEntityId}}", "name": "July 2026 Payroll", "periodStart": "2026-07-01", "periodEnd": "2026-07-31", "payDate": "2026-07-31" }
+```
+Lands on `/payroll/runs/:id` in **draft**. Click **Calculate Payroll**:
+```
+PATCH {{baseUrl}}/api/v1/payroll/runs/:id/calculate
+```
+Page polls every 2 seconds while status is `calculating`/`processing`. Once
+`calculated`, the employee register table appears (joined client-side from
+`GET /v1/payroll/runs/:id/payslips` + a worker lookup per row, since the raw register
+rows carry no name). Click **Submit for Review**:
+```
+PATCH {{baseUrl}}/api/v1/payroll/runs/:id/submit
+```
+Run moves to `pending_approval` (shown in the UI as "In Review"). You can also
+**Cancel Run** from draft/calculated states — `PATCH .../cancel`.
+
+### Finance Manager (`finance_manager`)
+
+Lands on the Finance Dashboard (awaiting-approval count, cost-this-month, approval
+queue). Click a queued run → `/payroll/runs/:id` (read-only except the approval
+actions). **Approve Pay Run**:
+```
+PATCH {{baseUrl}}/api/v1/payroll/runs/:id/approve
+{}
+```
+or **Return to Payroll** (requires a reason, shown in a modal):
+```
+PATCH {{baseUrl}}/api/v1/payroll/runs/:id/reject
+{ "reason": "Missing overtime hours for Lagos branch" }
+```
+After approval, the run can also be **Reversed** later (with a reason) if something
+was genuinely wrong — historical records are kept, corrections require a new run.
+
+**Disbursement (actually paying people):** sidebar → **Payments** (`/payments`) —
+lists every approved-or-later pay run alongside its disbursement batch (or "Not
+started" if none yet). Click **Initiate**:
+```
+POST {{baseUrl}}/api/v1/payroll/runs/:runId/disbursement
+{ "executionPolicy": "manual" }
+```
+Depending on your tenant's approval workflow setting, the batch may need **Approve**
+(`POST .../disbursement/:batchId/approve`) before **Execute**
+(`POST .../disbursement/:batchId/execute`). Once transactions exist, a download button
+streams the bulk bank file: `GET .../disbursement/:batchId/bulk-file?format=csv`. If
+something fails partway, **Retry** re-attempts just the failed transactions.
+
+### Auditor / Read Only
+
+Land on the default dashboard (HR Dashboard for auditor; a minimal dashboard for
+read_only). Sidebar is limited to **Audit Logs** (auditor) or read-only views of
+Employees/Pay Runs (read_only) — every write button is hidden, and the backend would
+403 anyway if one were clicked directly.
+
+### Employee (`employee_self_service`)
+
+Lands on **`/dashboard`**, which for this role is a small "Hello, {name}!" screen with
+their latest payslip summary — built entirely from `GET /users/me` (name) and
+`GET /v1/workers/:workerId/payslips` (payslip data), because this role has no access
+to anything else. Quick links: **My Payslips** (`/my-payslips`, full history) and
+**My Profile** (`/my-profile` — just their account email/name plus a **Change
+Password** form using `PATCH /v1/users/me/password` with `currentPassword`/
+`newPassword`). There is no "My Bank Details" page — this role cannot read or edit
+worker records at all, including their own.
 
 ---
 
-## The shared flows that cut across everyone
+# PART 5 — Password & Account Reality, Restated
 
-**Forgot password** — same on every role. They click "Forgot password" on the login screen, enter their email, receive a reset link (token-based, expires in 1 hour), click it, set a new password, get redirected to login. Exactly like **Cowrywise** or any Nigerian fintech app's reset flow.
-
-**Session expiry** — after say 30 minutes of inactivity, their session expires. Next time they click anything, the app quietly redirects them to login. When they log back in, they land back where they were trying to go. Like how **GTBank mobile** kicks you out after idle time.
-
-**Two-Factor Authentication** — for Finance Director and Super Admin roles especially, after entering password they get an OTP to their phone (SMS) or email. They enter the OTP. Then they're in. Like how **Paystack dashboard** requires 2FA for high-permission accounts. This is a financial app — the Finance Director approving ₦24.3M transfers should definitely have a second factor.
+- **Nobody resets their own password from a logged-out state.** If you're locked out,
+  someone with `tenant_admin`/`super_admin` (or a platform admin, for platform users)
+  has to create you a *fresh* account, or someone with direct database access has to
+  intervene. There is no email-based recovery anywhere in this system today.
+- **Changing your own password while logged in** works for everyone, any role:
+  `PATCH /v1/users/me/password` with `{ currentPassword, newPassword }` (tenant users)
+  or `PATCH /platform/users/me/password` (platform users).
+- **Nobody signs themselves up.** Every account — platform or tenant — is created by
+  someone else calling a `POST .../users` endpoint with a password they chose.
 
 ---
 
-## The complete page map, summarized
+# PART 6 — Page Map, Annotated With the API Behind Each Screen
 
 ```
 PUBLIC (no login)
-└── /login
-└── /forgot-password
-└── /reset-password?token=...
-└── /accept-invite?token=...
+└── /                          Landing page — "Get Started" links go to /login
+└── /login                     Tenant login (email → company slug → password)
+└── /platform-login            Platform admin login (email → password)
 
-PLATFORM ADMIN (admin.payrollapp.com)
-└── /dashboard → company list
-└── /companies/new → onboard form
-└── /companies/:id → company detail
+PLATFORM ADMIN
+└── /admin                                 GET /platform/tenants (stats)
+└── /admin/companies                       GET /platform/tenants
+│     "Onboard New Company"                POST /platform/tenants  →  POST /platform/tenants/:id/users
+└── /admin/companies/:id                   GET /platform/tenants/:id
+      "Add User"                           POST /platform/tenants/:id/users
+      "Suspend / Reactivate"               PATCH /platform/tenants/:id/suspend|activate
 
-COMPANY SUPER ADMIN
-└── /dashboard
-└── /settings/company → company profile, jurisdiction
-└── /settings/users → invite, assign roles, deactivate
-└── /settings/pay-groups → pay frequency setup
-└── /settings/bank → company bank account
+TENANT — everyone lands on /dashboard, content depends on role
+└── /dashboard                             role-dependent: HR / Payroll / Finance / Employee view
 
-HR MANAGER
-└── /employees → list
-└── /employees/new → add employee wizard
-└── /employees/:id → profile, compensation history, assignments
-└── /organisation → departments, legal entities
+  Organisation (tenant_admin, hr_manager, hr_officer)
+  └── /organisation                        GET /legal-entities
+  └── /organisation/legal-entities         GET/POST /legal-entities, PATCH .../deactivate
 
-PAYROLL MANAGER
-└── /pay-runs → list of all runs and their states
-└── /pay-runs/new → create run
-└── /pay-runs/:id → run detail, calculate, review register
-└── /pay-elements → configure salary components, tax rules
+  Employees (tenant_admin, hr_manager, hr_officer, finance_manager)
+  └── /employees                           GET /workers
+  └── /employees/new                       POST /workers  →  POST /compensation
+  └── /employees/:id                       GET /workers/:id, /compensation/worker/:id, /workers/:id/payslips
+  └── /employees/:id/edit                  PATCH /workers/:id
 
-FINANCE DIRECTOR
-└── /dashboard → approvals queue, cost summary
-└── /pay-runs/:id → read-only review + approve button
-└── /payments → download payment files, disbursement history
-└── /reports → statutory reports, PAYE remittance, pension schedule
+  Payroll (tenant_admin, payroll_manager, payroll_officer, finance_manager)
+  └── /payroll/pay-elements                GET/POST/PATCH /pay-elements
+  └── /payroll/runs                        GET /payroll/runs
+  └── /payroll/runs/new                    POST /payroll/runs
+  └── /payroll/runs/:id                    calculate / submit / approve / reject / cancel / reverse
+  └── /payroll/runs/:runId/payslips/:payslipId    GET /payroll/runs/:runId/payslips/:payslipId
 
-EMPLOYEE
-└── /my-payslips → list + download
-└── /my-profile → personal details
-└── /my-bank-details → bank account
+  Payments (tenant_admin, finance_manager)
+  └── /payments                            GET /payroll/runs/:id/disbursement per approved run
+                                            initiate / approve / reject / execute / retry / cancel / bulk-file
+
+  Settings (tenant_admin only)
+  └── /settings/profile                    GET /tenants/:id  (edit is super_admin-only)
+  └── /settings/users                      GET /users, POST /users, PATCH /users/:id/disable
+  └── /settings/jurisdictions              GET /tax/jurisdictions, /tax/rules, /tax/rules/:code/versions
+
+  Audit (tenant_admin, finance_manager, auditor)
+  └── /audit                               GET /audit-logs
+
+  Notifications (everyone)
+  └── /notifications                       GET /notifications
+
+  Employee self-service (employee_self_service only)
+  └── /my-payslips                         GET /workers/:workerId/payslips
+  └── /my-profile                          GET /users/me, PATCH /users/me/password
 ```
 
-This is your entire application in plain words. Every screen has a clear owner, a clear purpose, and a clear data transaction. When you now look at the PRD's technical terms, you can map each one to a specific screen or action in this flow.
+---
 
+# PART 7 — Postman Setup Cheatsheet
 
-# PART 3 - PROMPT
+Create a Postman environment with:
+- `baseUrl` = `http://localhost:3000`
+- `accessToken` — paste in after any login call, use as `Bearer {{accessToken}}`
+- `tenantSlug`, `legalEntityId`, `workerId`, `payRunId` — fill in as you create things
 
-You missed out how Amaka the HR has to first manage organizations (create groups, departments, set or edit stuff, etc before she can add employess under them for cases where there is a bulk similarity btw a group of employees that certian events or data be added to or processed from). I guess this goes for other user's flows too. So dont forget to incorporate that in your build plan and phases.
+Every real response is wrapped: `{ "success": true, "data": ..., "meta"?: ..., "traceId": ..., "correlationId": ... }`
+— the thing you actually want is always inside `data`. Errors look like:
+`{ "success": false, "error": { "code": "...", "message": "...", "fieldErrors": {...} } }`.
 
-So there is a name and brand to follow for the app (PayRole) as seen in the images uploaded, along with some images of mockup to go into landing page and dashboard pages for users. Notice the UI theme and all.
+Quickest smoke-test sequence to prove the whole system end to end in Postman alone:
+1. `POST /api/platform/auth/login` → grab `accessToken`
+2. `POST /api/platform/tenants` → grab `id` as `{{tenantId}}`
+3. `POST /api/platform/tenants/{{tenantId}}/users` (role `tenant_admin`)
+4. `POST /api/v1/auth/login` with that user's email/password/`tenantSlug` → new `{{accessToken}}`
+5. `POST /api/v1/legal-entities` → grab `id` as `{{legalEntityId}}`
+6. `POST /api/v1/workers` (`legalEntityId` from step 5) → grab `id` as `{{workerId}}`
+7. `POST /api/v1/compensation` (`workerId` from step 6)
+8. `POST /api/v1/pay-elements`
+9. `POST /api/v1/payroll/runs` (`legalEntityId` from step 5) → grab `id` as `{{payRunId}}`
+10. `PATCH /api/v1/payroll/runs/{{payRunId}}/calculate`, then `.../submit`
+11. Log in as a `finance_manager` user, `PATCH .../approve`
+12. `POST /api/v1/payroll/runs/{{payRunId}}/disbursement`
 
-
-Three CSS tricks to make any layout responsive with minimum effort. Text. Instead of defining grid columns or every screen size, use auto-fit with minimum and maximum values using minmax. This way, the grid automatically adapts to the screen size using just one line of code. Second, instead of applying fixed widths everywhere, set the width to 100% and limit it with a max-width or ensure, use the minimum method. Third, instead of hardcoding sizes, use clamp. It lets spacing and font sizes scale smoothly between a minimum and a maximum.
-
-
-
-
-I actually dont know the flow of this app now o.
-I had initially built the frontend indpependent of a real api backend structure to my best knowledge (mediocre at best) on how a multitenant payroll system flow would work. What i had in mind was what i saved in the @PayRoles/User story flow , but since the backend discates this now, i will want something of this simple, story like and understable flow documented in same format, alongside a way to nav the frontend ( id dint even know what needs to be done first after seeding the admin, wht page to login, what a new componay has to do in the frontend to start, etc), then the api flow is a bit okay i.e i should know how to test the api with postaman every step of the way as it follows the user stories you cite.
+If all twelve succeed, the backend and the frontend's expectations of it agree end to end.

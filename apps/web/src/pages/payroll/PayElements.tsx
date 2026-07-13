@@ -14,38 +14,45 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
-import type { PayElement } from '@contracts/types/payroll';
+import type { PayElementDefinition } from '@contracts/types/payroll';
 
+// Real backend PayElementType enum (common.enum.ts) - lowercase.
 const typeOptions = [
   { value: 'earning', label: 'Earning' },
   { value: 'deduction', label: 'Deduction' },
   { value: 'employer_contribution', label: 'Employer Contribution' },
+  { value: 'tax', label: 'Tax (delegates to a tax rule)' },
+  { value: 'benefit', label: 'Benefit' },
 ];
 
-const typeVariant: Record<string, 'success' | 'error' | 'info'> = {
+const typeVariant: Record<string, 'success' | 'error' | 'info' | 'warning'> = {
   earning: 'success',
   deduction: 'error',
   employer_contribution: 'info',
+  tax: 'warning',
+  benefit: 'info',
 };
 
 const typeLabel: Record<string, string> = {
   earning: 'Earning',
   deduction: 'Deduction',
   employer_contribution: 'Employer Contribution',
+  tax: 'Tax',
+  benefit: 'Benefit',
 };
 
-const blank = { name: '', type: 'earning', formula: '' };
+const blank = { code: '', name: '', type: 'earning', formula: '', taxRuleCode: '' };
 
 export default function PayElements() {
   const qc = useQueryClient();
   const toast = useToast();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editing, setEditing] = useState<PayElement | null>(null);
+  const [editing, setEditing] = useState<PayElementDefinition | null>(null);
   const [form, setForm] = useState(blank);
-  const [deleteTarget, setDeleteTarget] = useState<PayElement | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PayElementDefinition | null>(null);
 
-  const { data: elements, isLoading, isError, refetch } = useQuery<PayElement[]>({
+  const { data: elements, isLoading, isError, refetch } = useQuery<PayElementDefinition[]>({
     queryKey: ['pay-elements'],
     queryFn: async () => {
       const response = await apiClient<any>(ENDPOINTS.PAY_ELEMENTS.LIST);
@@ -55,16 +62,27 @@ export default function PayElements() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      editing
-        ? apiClient<PayElement>(ENDPOINTS.PAY_ELEMENTS.UPDATE(editing.id), {
-            method: 'PATCH',
-            body: JSON.stringify(form),
-          })
-        : apiClient<PayElement>(ENDPOINTS.PAY_ELEMENTS.CREATE, {
-            method: 'POST',
-            body: JSON.stringify({ ...form, isStatutory: false }),
-          }),
+    mutationFn: () => {
+      // code is UPPER_SNAKE_CASE and immutable once created (formulas
+      // reference it elsewhere) - only send it on create.
+      const payload: Record<string, unknown> = {
+        name: form.name,
+        type: form.type,
+        formula: form.formula || undefined,
+      };
+      if (form.type === 'tax') payload.taxRuleCode = form.taxRuleCode || undefined;
+
+      if (editing) {
+        return apiClient<PayElementDefinition>(ENDPOINTS.PAY_ELEMENTS.UPDATE(editing.id), {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
+      }
+      return apiClient<PayElementDefinition>(ENDPOINTS.PAY_ELEMENTS.CREATE, {
+        method: 'POST',
+        body: JSON.stringify({ ...payload, code: form.code, isStatutory: false }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-elements'] });
       toast.success(editing ? 'Pay element updated' : 'Pay element created');
@@ -89,9 +107,15 @@ export default function PayElements() {
     setModalOpen(true);
   }
 
-  function openEdit(el: PayElement) {
+  function openEdit(el: PayElementDefinition) {
     setEditing(el);
-    setForm({ name: el.name, type: el.type, formula: el.formula ?? '' });
+    setForm({
+      code: el.code,
+      name: el.name,
+      type: el.type,
+      formula: el.formula ?? '',
+      taxRuleCode: el.taxRuleCode ?? '',
+    });
     setModalOpen(true);
   }
 
@@ -116,8 +140,10 @@ export default function PayElements() {
   const earnings = (elements ?? []).filter((e) => e.type === 'earning');
   const deductions = (elements ?? []).filter((e) => e.type === 'deduction');
   const contributions = (elements ?? []).filter((e) => e.type === 'employer_contribution');
+  const taxes = (elements ?? []).filter((e) => e.type === 'tax');
+  const benefits = (elements ?? []).filter((e) => e.type === 'benefit');
 
-  function ElementGroup({ title, items }: { title: string; items: PayElement[] }) {
+  function ElementGroup({ title, items }: { title: string; items: PayElementDefinition[] }) {
     if (items.length === 0) return null;
     return (
       <div className="bg-white rounded-xl border border-mint-light overflow-hidden mb-4">
@@ -200,6 +226,8 @@ export default function PayElements() {
           <ElementGroup title="Earnings" items={earnings} />
           <ElementGroup title="Deductions" items={deductions} />
           <ElementGroup title="Employer Contributions" items={contributions} />
+          <ElementGroup title="Taxes" items={taxes} />
+          <ElementGroup title="Benefits" items={benefits} />
         </>
       )}
 
@@ -210,6 +238,20 @@ export default function PayElements() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
+          <Input
+            label="Code"
+            value={form.code}
+            disabled={!!editing}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                // Backend requires UPPER_SNAKE_CASE (/^[A-Z][A-Z0-9_]*$/), starting with a letter.
+                code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '').replace(/^[0-9_]+/, ''),
+              }))
+            }
+            placeholder="e.g. TRANSPORT_ALLOWANCE"
+            hint={editing ? 'Code cannot be changed once created — formulas may reference it.' : 'Unique identifier, referenced by other formulas.'}
+          />
           <Input
             label="Name"
             value={form.name}
@@ -222,18 +264,28 @@ export default function PayElements() {
             options={typeOptions}
             onChange={(v) => setForm((f) => ({ ...f, type: v }))}
           />
-          <Input
-            label="Formula (optional)"
-            value={form.formula}
-            onChange={(e) => setForm((f) => ({ ...f, formula: e.target.value }))}
-            placeholder="e.g. GROSS * 0.15"
-          />
+          {form.type === 'tax' ? (
+            <Input
+              label="Tax Rule Code"
+              value={form.taxRuleCode}
+              onChange={(e) => setForm((f) => ({ ...f, taxRuleCode: e.target.value.toUpperCase() }))}
+              placeholder="e.g. NIGERIA_PIT"
+              hint="References a tax rule's code instead of evaluating a formula."
+            />
+          ) : (
+            <Input
+              label="Formula (optional)"
+              value={form.formula}
+              onChange={(e) => setForm((f) => ({ ...f, formula: e.target.value }))}
+              placeholder="e.g. GROSS * 0.15"
+            />
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={closeModal}>Cancel</Button>
             <Button
               variant="primary"
               loading={saveMutation.isPending}
-              disabled={!form.name}
+              disabled={!form.name || (!editing && !form.code)}
               onClick={() => saveMutation.mutate()}
             >
               {editing ? 'Save Changes' : 'Add Element'}

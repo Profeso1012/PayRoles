@@ -55,6 +55,8 @@ export interface PayRunEmployee {
   flagReason: string | null;
 }
 
+// A computed line item on a payroll register row / payslip (has an `amount`).
+// NOT the same as a pay element *definition* - see PayElementDefinition below.
 export interface PayElement {
   id: string;
   name: string;
@@ -63,6 +65,23 @@ export interface PayElement {
   currency: string;
   isStatutory: boolean;
   formula: string | null;
+}
+
+// A configured pay element template (GET/POST /pay-elements) - matches the
+// real backend PayElement entity/CreatePayElementDto. This has no `amount`;
+// amounts only exist once an element is calculated onto a payslip (PayElement above).
+export interface PayElementDefinition {
+  id: string;
+  code: string; // UPPER_SNAKE_CASE, immutable identifier referenced by formulas
+  name: string;
+  type: 'earning' | 'deduction' | 'employer_contribution' | 'tax' | 'benefit';
+  formula: string | null;
+  taxRuleCode: string | null; // Only meaningful when type === 'tax'
+  isActive: boolean;
+  isTaxable: boolean;
+  isStatutory: boolean;
+  sortOrder: number;
+  description: string | null;
 }
 
 export interface Payslip {

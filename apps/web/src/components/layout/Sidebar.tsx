@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FolderTree, Users, Calculator,
   CreditCard, BarChart3, Settings, Receipt, User, Landmark,
   ChevronDown, ChevronRight, FileText, MapPin, Layers, Play,
-  TrendingUp, Shield, Bell, History,
+  TrendingUp, Shield, Bell, History, UploadCloud, FileOutput,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -36,7 +36,13 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
       // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
     ],
   },
-  { label: 'Employees', path: '/employees', icon: Users },
+  {
+    label: 'Employees', path: '/employees', icon: Users,
+    children: [
+      { label: 'All Employees', path: '/employees', icon: Users },
+      { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
+    ],
+  },
   {
     label: 'Payroll', path: '/payroll', icon: Calculator,
     children: [
@@ -45,20 +51,13 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
     ],
   },
   { label: 'Payments', path: '/payments', icon: CreditCard },
-  {
-    label: 'Reports', path: '/reports', icon: BarChart3,
-    children: [
-      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-    ],
-  },
+  { label: 'Exports', path: '/exports', icon: FileOutput },
+  // Deprecated: Reports (no backend /reports module)
   {
     label: 'Settings', path: '/settings', icon: Settings,
     children: [
       { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
       { label: 'Users & Roles', path: '/settings/users', icon: Users },
-      { label: 'Bank Details', path: '/settings/bank', icon: Landmark },
       { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
     ],
   },
@@ -76,29 +75,24 @@ const HR_NAV: NavItem[] = [
       // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
     ],
   },
-  { label: 'Employees', path: '/employees', icon: Users },
   {
-    label: 'Reports', path: '/reports', icon: BarChart3,
+    label: 'Employees', path: '/employees', icon: Users,
     children: [
-      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
+      { label: 'All Employees', path: '/employees', icon: Users },
+      { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
     ],
   },
+  { label: 'Exports', path: '/exports', icon: FileOutput },
+  // Deprecated: Reports (no backend /reports module)
 ];
 
 const PAYROLL_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
-  {
-    label: 'Reports', path: '/reports', icon: BarChart3,
-    children: [
-      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-    ],
-  },
+  { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
+  { label: 'Exports', path: '/exports', icon: FileOutput },
+  // Deprecated: Reports (no backend /reports module)
 ];
 
 const FINANCE_NAV: NavItem[] = [
@@ -106,19 +100,14 @@ const FINANCE_NAV: NavItem[] = [
   { label: 'Employees', path: '/employees', icon: Users },
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Payments', path: '/payments', icon: CreditCard },
-  {
-    label: 'Reports', path: '/reports', icon: BarChart3,
-    children: [
-      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-    ],
-  },
+  { label: 'Exports', path: '/exports', icon: FileOutput },
+  // Deprecated: Reports (no backend /reports module)
 ];
 
 const AUDITOR_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Audit Logs', path: '/audit', icon: History },
+  { label: 'Exports', path: '/exports', icon: FileOutput },
 ];
 
 const READ_ONLY_NAV: NavItem[] = [
@@ -130,7 +119,7 @@ const READ_ONLY_NAV: NavItem[] = [
 const EMPLOYEE_NAV: NavItem[] = [
   { label: 'My Payslips', path: '/my-payslips', icon: Receipt },
   { label: 'My Profile', path: '/my-profile', icon: User },
-  { label: 'My Bank Details', path: '/my-bank-details', icon: Landmark },
+  // Deprecated: My Bank Details (employee_self_service has no worker:read/write permission)
 ];
 
 const NAV_MAP: Record<UserRole, NavItem[]> = {

@@ -1,179 +1,315 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle } from 'lucide-react';
+import { apiClient, apiClientWithMeta, BASE_URL } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
+import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
+import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { formatDate, formatPeriod } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
+import Modal from '@/components/ui/Modal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
+import type { BackendDisbursementBatch, BackendBatchStatus } from '@/lib/api/types';
+import type { PayRun } from '@contracts/types/payroll';
 
-interface PaymentFile {
-  id: string;
-  payRunId: string;
-  period: string;
-  payGroupName: string;
-  generatedAt: string;
-  status: 'ready' | 'downloaded' | 'sent';
-  totalAmount: number;
-  currency: string;
-  employeeCount: number;
-  format: 'NIBSS' | 'GTBANK' | 'ZENITH' | 'UBA';
+// Helper to format period from start/end dates or single period string
+function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
+  if (period) return period;
+  if (!periodStart) return '—';
+  const start = new Date(periodStart);
+  return start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
-const INITIAL_FILES: PaymentFile[] = [
-  {
-    id: 'pf-001',
-    payRunId: 'pr-001',
-    period: '2026-06',
-    payGroupName: 'Monthly Staff',
-    generatedAt: '2026-06-24T09:15:00Z',
-    status: 'ready',
-    totalAmount: 148500000,
-    currency: 'NGN',
-    employeeCount: 14,
-    format: 'NIBSS',
-  },
-  {
-    id: 'pf-002',
-    payRunId: 'pr-002',
-    period: '2026-05',
-    payGroupName: 'Monthly Staff',
-    generatedAt: '2026-05-22T10:30:00Z',
-    status: 'downloaded',
-    totalAmount: 145200000,
-    currency: 'NGN',
-    employeeCount: 13,
-    format: 'NIBSS',
-  },
-  {
-    id: 'pf-003',
-    payRunId: 'pr-003',
-    period: '2026-05',
-    payGroupName: 'Contract Workers',
-    generatedAt: '2026-05-23T14:00:00Z',
-    status: 'sent',
-    totalAmount: 38750000,
-    currency: 'NGN',
-    employeeCount: 5,
-    format: 'GTBANK',
-  },
-  {
-    id: 'pf-004',
-    payRunId: 'pr-004',
-    period: '2026-04',
-    payGroupName: 'Monthly Staff',
-    generatedAt: '2026-04-25T11:45:00Z',
-    status: 'sent',
-    totalAmount: 142900000,
-    currency: 'NGN',
-    employeeCount: 13,
-    format: 'NIBSS',
-  },
-];
+// A payroll run paired with its disbursement batch (if one has been initiated).
+// Runs only become disbursement-eligible once approved by Finance.
+interface DisbursementRow {
+  run: PayRun;
+  batch: BackendDisbursementBatch | null;
+}
 
-const statusBadgeMap: Record<PaymentFile['status'], 'warning' | 'info' | 'success'> = {
-  ready: 'warning',
-  downloaded: 'info',
-  sent: 'success',
+const batchStatusVariant: Record<BackendBatchStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
+  draft: 'draft',
+  pending_approval: 'warning',
+  approved: 'info',
+  awaiting_schedule: 'info',
+  queued: 'info',
+  processing: 'warning',
+  partially_paid: 'warning',
+  paid: 'success',
+  reconciling: 'warning',
+  reconciled: 'success',
+  completed: 'success',
+  cancelled: 'error',
+  failed: 'error',
+  expired: 'error',
+  retrying: 'warning',
+  reversed: 'error',
+  awaiting_confirmation: 'warning',
 };
 
-const statusLabelMap: Record<PaymentFile['status'], string> = {
-  ready: 'Ready',
-  downloaded: 'Downloaded',
-  sent: 'Sent',
+const batchStatusLabel: Record<BackendBatchStatus, string> = {
+  draft: 'Draft',
+  pending_approval: 'Awaiting Approval',
+  approved: 'Approved',
+  awaiting_schedule: 'Scheduled',
+  queued: 'Queued',
+  processing: 'Processing',
+  partially_paid: 'Partially Paid',
+  paid: 'Paid',
+  reconciling: 'Reconciling',
+  reconciled: 'Reconciled',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  failed: 'Failed',
+  expired: 'Expired',
+  retrying: 'Retrying',
+  reversed: 'Reversed',
+  awaiting_confirmation: 'Awaiting Confirmation',
 };
+
+/** Authenticated blob download - apiClient always parses JSON, this streams raw bytes instead. */
+async function downloadFile(path: string, fallbackFilename: string) {
+  const { accessToken } = useAuthStore.getState();
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+  if (!response.ok) throw new Error('Download failed');
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] || fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 export default function PaymentFiles() {
+  const qc = useQueryClient();
   const toast = useToast();
-  const [localStatuses, setLocalStatuses] = useState<Record<string, PaymentFile['status']>>({});
+  const role = useAuthStore((s) => s.user?.role);
+  const canApprove = role === 'finance_manager' || role === 'tenant_admin' || role === 'super_admin';
+  const canManage = canApprove || role === 'payroll_manager' || role === 'payroll_officer';
 
-  const { data: files = [], isLoading, isError } = useQuery<PaymentFile[]>({
-    queryKey: ['payment-files'],
-    queryFn: async () => INITIAL_FILES,
+  const [rejectTarget, setRejectTarget] = useState<DisbursementRow | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [cancelTarget, setCancelTarget] = useState<DisbursementRow | null>(null);
+
+  const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
+    queryKey: ['disbursement-batches'],
+    queryFn: async () => {
+      const params = buildPaginationParams({ page: 1, limit: 50, sortBy: 'createdAt', sortDir: 'desc' });
+      const { data: runs } = await apiClientWithMeta<any[]>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+
+      // Only approved-or-later runs can have a disbursement batch.
+      const eligible = runs
+        .map((r) => mapPayrollRunFields(r, 'toFrontend') as PayRun)
+        .filter((r) => ['approved', 'processing', 'paid'].includes(r.status));
+
+      return Promise.all(
+        eligible.map(async (run): Promise<DisbursementRow> => {
+          try {
+            const batch = await apiClient<BackendDisbursementBatch>(
+              ENDPOINTS.DISBURSEMENT.FOR_RUN(run.id),
+            );
+            return { run, batch };
+          } catch {
+            return { run, batch: null }; // No batch initiated yet
+          }
+        }),
+      );
+    },
   });
 
-  const getStatus = (file: PaymentFile): PaymentFile['status'] =>
-    localStatuses[file.id] ?? file.status;
+  const invalidate = () => qc.invalidateQueries({ queryKey: ['disbursement-batches'] });
 
-  const handleDownload = (file: PaymentFile) => {
-    setLocalStatuses((prev) => ({ ...prev, [file.id]: 'downloaded' }));
-    toast.success('File downloaded', `${file.format} file for ${formatPeriod(file.period)} saved.`);
+  const initiateMutation = useMutation({
+    mutationFn: (runId: string) =>
+      apiClient(ENDPOINTS.DISBURSEMENT.INITIATE(runId), {
+        method: 'POST',
+        body: JSON.stringify({ executionPolicy: 'manual' }),
+      }),
+    onSuccess: () => {
+      toast.success('Disbursement initiated');
+      invalidate();
+    },
+    onError: () => toast.error('Failed to initiate disbursement'),
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (row: DisbursementRow) =>
+      apiClient(ENDPOINTS.DISBURSEMENT.APPROVE(row.run.id, row.batch!.id), {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    onSuccess: () => {
+      toast.success('Batch approved');
+      invalidate();
+    },
+    onError: () => toast.error('Failed to approve batch'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: () =>
+      apiClient(ENDPOINTS.DISBURSEMENT.REJECT(rejectTarget!.run.id, rejectTarget!.batch!.id), {
+        method: 'POST',
+        body: JSON.stringify({ remarks: rejectReason }),
+      }),
+    onSuccess: () => {
+      toast.success('Batch rejected');
+      setRejectTarget(null);
+      setRejectReason('');
+      invalidate();
+    },
+    onError: () => toast.error('Failed to reject batch'),
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: (row: DisbursementRow) =>
+      apiClient(ENDPOINTS.DISBURSEMENT.EXECUTE(row.run.id, row.batch!.id), { method: 'POST' }),
+    onSuccess: () => {
+      toast.success('Execution started');
+      invalidate();
+    },
+    onError: () => toast.error('Failed to execute batch'),
+  });
+
+  const retryMutation = useMutation({
+    mutationFn: (row: DisbursementRow) =>
+      apiClient(ENDPOINTS.DISBURSEMENT.RETRY(row.run.id, row.batch!.id), { method: 'POST' }),
+    onSuccess: () => {
+      toast.success('Retry started');
+      invalidate();
+    },
+    onError: () => toast.error('Failed to retry batch'),
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: () =>
+      apiClient(
+        `${ENDPOINTS.DISBURSEMENT.CANCEL(cancelTarget!.run.id, cancelTarget!.batch!.id)}?reason=${encodeURIComponent('Cancelled from Payments page')}`,
+        { method: 'DELETE' },
+      ),
+    onSuccess: () => {
+      toast.success('Batch cancelled');
+      setCancelTarget(null);
+      invalidate();
+    },
+    onError: () => toast.error('Failed to cancel batch'),
+  });
+
+  const handleDownload = async (row: DisbursementRow) => {
+    if (!row.batch) return;
+    try {
+      await downloadFile(
+        ENDPOINTS.DISBURSEMENT.BULK_FILE(row.run.id, row.batch.id, 'csv'),
+        `${row.batch.reference}.csv`,
+      );
+      toast.success('File downloaded');
+    } catch {
+      toast.error('Failed to download file');
+    }
   };
 
-  const displayFiles = files.map((f) => ({ ...f, status: getStatus(f) }));
-
-  const readyCount = displayFiles.filter((f) => f.status === 'ready').length;
-  const totalAmount = displayFiles.reduce((sum, f) => sum + f.totalAmount, 0);
+  const readyToInitiateCount = rows.filter((r) => !r.batch).length;
+  const totalNetPending = rows
+    .filter((r) => r.batch && !['completed', 'reconciled', 'cancelled'].includes(r.batch.status))
+    .reduce((sum, r) => sum + r.run.totalNet, 0);
 
   const columns = [
     {
       key: 'period',
       header: 'Period',
-      render: (row: PaymentFile) => (
-        <span className="font-medium text-deep-cash">{formatPeriod(row.period)}</span>
+      render: (row: DisbursementRow) => (
+        <div>
+          <p className="font-medium text-deep-cash">{row.run.period || formatPeriod(row.run.periodStart, row.run.periodEnd)}</p>
+          <p className="text-xs text-cash-green/60">{row.run.payGroupName || row.run.name}</p>
+        </div>
       ),
     },
     {
-      key: 'payGroupName',
-      header: 'Pay Group',
-      render: (row: PaymentFile) => (
-        <span className="text-sm text-cash-green">{row.payGroupName}</span>
+      key: 'totalNet',
+      header: 'Net Payable',
+      render: (row: DisbursementRow) => (
+        <MoneyDisplay amount={row.run.totalNet} currency={row.run.currency} size="sm" />
       ),
     },
     {
-      key: 'format',
-      header: 'Format',
-      render: (row: PaymentFile) => (
-        <span className="text-xs font-mono bg-deep-cash/5 text-deep-cash px-2 py-0.5 rounded">
-          {row.format}
-        </span>
-      ),
+      key: 'batchStatus',
+      header: 'Disbursement Status',
+      render: (row: DisbursementRow) =>
+        row.batch ? (
+          <Badge variant={batchStatusVariant[row.batch.status]} label={batchStatusLabel[row.batch.status]} />
+        ) : (
+          <Badge variant="draft" label="Not started" />
+        ),
     },
     {
-      key: 'employeeCount',
-      header: 'Employees',
-      render: (row: PaymentFile) => (
-        <span className="text-sm tabular-nums">{row.employeeCount}</span>
-      ),
-    },
-    {
-      key: 'totalAmount',
-      header: 'Total Amount',
-      render: (row: PaymentFile) => (
-        <MoneyDisplay amount={row.totalAmount} currency={row.currency} size="sm" />
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (row: PaymentFile) => (
-        <Badge variant={statusBadgeMap[row.status]} label={statusLabelMap[row.status]} />
-      ),
-    },
-    {
-      key: 'generatedAt',
-      header: 'Generated',
-      render: (row: PaymentFile) => (
-        <span className="text-xs text-cash-green/70">{formatDate(row.generatedAt)}</span>
-      ),
+      key: 'progress',
+      header: 'Transactions',
+      render: (row: DisbursementRow) =>
+        row.batch ? (
+          <span className="text-xs tabular-nums text-cash-green/80">
+            {row.batch.successfulCount}/{row.batch.totalCount} paid
+            {row.batch.failedCount > 0 && <span className="text-red-500"> · {row.batch.failedCount} failed</span>}
+          </span>
+        ) : (
+          <span className="text-cash-green/40 text-xs">—</span>
+        ),
     },
     {
       key: 'actions',
       header: '',
-      render: (row: PaymentFile) => (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={(e) => {
-            e.stopPropagation();
-            handleDownload(row);
-          }}
-        >
-          <DownloadCloud size={14} />
-          Download
-        </Button>
+      render: (row: DisbursementRow) => (
+        <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+          {!row.batch && canManage && (
+            <Button variant="secondary" size="sm" loading={initiateMutation.isPending} onClick={() => initiateMutation.mutate(row.run.id)}>
+              <Play size={13} />
+              Initiate
+            </Button>
+          )}
+          {row.batch?.status === 'pending_approval' && canApprove && (
+            <>
+              <Button variant="secondary" size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate(row)}>
+                <ThumbsUp size={13} />
+                Approve
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setRejectTarget(row)}>
+                <ThumbsDown size={13} />
+              </Button>
+            </>
+          )}
+          {(row.batch?.status === 'approved' || row.batch?.status === 'awaiting_schedule') && canManage && (
+            <Button variant="secondary" size="sm" loading={executeMutation.isPending} onClick={() => executeMutation.mutate(row)}>
+              <Play size={13} />
+              Execute
+            </Button>
+          )}
+          {(row.batch?.status === 'failed' || row.batch?.status === 'partially_paid') && canManage && (
+            <Button variant="secondary" size="sm" loading={retryMutation.isPending} onClick={() => retryMutation.mutate(row)}>
+              <RotateCcw size={13} />
+              Retry
+            </Button>
+          )}
+          {row.batch && row.batch.totalCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => handleDownload(row)}>
+              <DownloadCloud size={13} />
+            </Button>
+          )}
+          {row.batch && ['draft', 'pending_approval', 'approved', 'awaiting_schedule'].includes(row.batch.status) && canManage && (
+            <Button variant="ghost" size="sm" onClick={() => setCancelTarget(row)}>
+              <XCircle size={13} className="text-red-400" />
+            </Button>
+          )}
+        </div>
       ),
     },
   ];
@@ -181,10 +317,10 @@ export default function PaymentFiles() {
   return (
     <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
       <PageHeader
-        title="Payment Files"
+        title="Payments"
         action={
           <p className="text-sm text-cash-green/70 pt-1">
-            Download and submit bank transfer files
+            Initiate and track salary disbursement for approved pay runs
           </p>
         }
       />
@@ -202,8 +338,8 @@ export default function PaymentFiles() {
             <FileText size={18} className="text-cash-green" />
           </div>
           <div>
-            <p className="text-xs text-cash-green/70 mb-0.5">Total Files</p>
-            <p className="text-2xl font-bold text-deep-cash tabular-nums">{displayFiles.length}</p>
+            <p className="text-xs text-cash-green/70 mb-0.5">Approved Runs</p>
+            <p className="text-2xl font-bold text-deep-cash tabular-nums">{rows.length}</p>
           </div>
         </div>
 
@@ -212,8 +348,8 @@ export default function PaymentFiles() {
             <Clock size={18} className="text-amber-600" />
           </div>
           <div>
-            <p className="text-xs text-cash-green/70 mb-0.5">Ready to Download</p>
-            <p className="text-2xl font-bold text-deep-cash tabular-nums">{readyCount}</p>
+            <p className="text-xs text-cash-green/70 mb-0.5">Not Yet Initiated</p>
+            <p className="text-2xl font-bold text-deep-cash tabular-nums">{readyToInitiateCount}</p>
           </div>
         </div>
 
@@ -222,28 +358,63 @@ export default function PaymentFiles() {
             <CheckCircle2 size={18} className="text-fresh-cash" />
           </div>
           <div>
-            <p className="text-xs text-cash-green/70 mb-0.5">Total Amount Paid</p>
-            <MoneyDisplay amount={totalAmount} currency="NGN" size="sm" className="text-deep-cash" />
+            <p className="text-xs text-cash-green/70 mb-0.5">Pending Disbursement</p>
+            <MoneyDisplay amount={totalNetPending} currency="NGN" size="sm" className="text-deep-cash" />
           </div>
         </div>
       </div>
 
-      {!isLoading && !isError && displayFiles.length === 0 ? (
+      {!isLoading && !isError && rows.length === 0 ? (
         <div className="bg-white rounded-xl border border-mint-light p-16 flex flex-col items-center gap-3 text-center">
           <Inbox size={40} className="text-cash-green/30" />
-          <p className="text-sm font-medium text-deep-cash">No payment files</p>
-          <p className="text-xs text-cash-green/60">Payment files are generated when a pay run is approved.</p>
+          <p className="text-sm font-medium text-deep-cash">No approved pay runs yet</p>
+          <p className="text-xs text-cash-green/60">Disbursement becomes available once Finance approves a pay run.</p>
         </div>
       ) : (
         <DataTable
           columns={columns}
-          data={displayFiles}
+          data={rows}
           isLoading={isLoading}
           isError={isError}
-          rowKey={(row) => row.id}
-          emptyMessage="No payment files found"
+          rowKey={(row) => row.run.id}
+          emptyMessage="No approved pay runs found"
         />
       )}
+
+      <Modal isOpen={!!rejectTarget} onClose={() => setRejectTarget(null)} title="Reject Disbursement Batch" size="sm">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">Explain why this batch is being rejected.</p>
+          <textarea
+            className="w-full border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+            rows={3}
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="e.g. Bank details need review"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setRejectTarget(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={rejectMutation.isPending}
+              disabled={!rejectReason.trim()}
+              onClick={() => rejectMutation.mutate()}
+            >
+              Reject Batch
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <ConfirmModal
+        isOpen={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => cancelMutation.mutate()}
+        title="Cancel Disbursement Batch"
+        message="Cancel this disbursement batch? Any pending transactions will be stopped."
+        confirmLabel="Cancel Batch"
+        variant="danger"
+        isLoading={cancelMutation.isPending}
+      />
     </div>
   );
 }

@@ -1,36 +1,29 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, Users, CheckCircle, PauseCircle, Clock } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { Building2, Users, CheckCircle, PauseCircle, Archive } from 'lucide-react';
+import { apiClientWithMeta } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Badge from '@/components/ui/Badge';
 import { formatDate } from '@/lib/utils';
+import type { BackendTenant } from '@/lib/api/types';
 
-interface Tenant {
-  id: string;
-  name: string;
-  status: 'active' | 'suspended' | 'onboarding';
-  plan: string;
-  country: string;
-  createdAt: string;
-  setupComplete: boolean;
-  adminEmail: string;
-}
-
+// Real backend Status enum (common.enum.ts): active | inactive | suspended | archived.
+// There is no "onboarding" tenant status.
 const STATUS_ICON: Record<string, React.ReactNode> = {
   active: <CheckCircle size={18} className="text-fresh-cash" />,
+  inactive: <PauseCircle size={18} className="text-cash-gold" />,
   suspended: <PauseCircle size={18} className="text-red-400" />,
-  onboarding: <Clock size={18} className="text-cash-gold" />,
+  archived: <Archive size={18} className="text-cash-green/40" />,
 };
 
 export default function SADashboard() {
-  const { data: tenants, isLoading, isError, refetch } = useQuery({
+  const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
     queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.PLATFORM_TENANTS.LIST);
-      const items = Array.isArray(response) ? response : (response.data || []);
-      return items;
+      const params = buildPaginationParams({ page: 1, limit: 100 });
+      const { data } = await apiClientWithMeta<BackendTenant[]>(`${ENDPOINTS.PLATFORM_TENANTS.LIST}?${params}`);
+      return data;
     },
   });
 
@@ -43,19 +36,18 @@ export default function SADashboard() {
   }
 
   if (isError || !tenants) {
-    return <ErrorState message="Failed to load tenants." onRetry={refetch} />;
+    return <ErrorState message="Failed to load tenants." onRetry={() => refetch()} />;
   }
 
-  const active = tenants.filter((t: any) => t.status === 'active').length;
-  const suspended = tenants.filter((t: any) => t.status === 'suspended').length;
-  // Real Tenant entity has no setupComplete field - approximate "onboarding" as non-active/suspended.
-  const onboarding = tenants.filter((t: any) => t.status !== 'active' && t.status !== 'suspended').length;
-  const recent = [...tenants].sort((a: any, b: any) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  const active = tenants.filter((t) => t.status === 'active').length;
+  const suspended = tenants.filter((t) => t.status === 'suspended').length;
+  const inactive = tenants.filter((t) => t.status === 'inactive' || t.status === 'archived').length;
+  const recent = [...tenants].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
   const stats = [
     { label: 'Total Companies', value: tenants.length, icon: Building2, color: 'text-fresh-cash', bg: 'bg-mint-light/40' },
     { label: 'Active', value: active, icon: CheckCircle, color: 'text-fresh-cash', bg: 'bg-mint-light/40' },
-    { label: 'Onboarding', value: onboarding, icon: Clock, color: 'text-cash-gold', bg: 'bg-cash-gold/10' },
+    { label: 'Inactive', value: inactive, icon: Archive, color: 'text-cash-gold', bg: 'bg-cash-gold/10' },
     { label: 'Suspended', value: suspended, icon: PauseCircle, color: 'text-red-400', bg: 'bg-red-50' },
   ];
 
@@ -91,7 +83,7 @@ export default function SADashboard() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-mint-light bg-soft-white">
-                {['Company', 'Admin Email', 'Plan', 'Country', 'Status', 'Joined'].map((h) => (
+                {['Company', 'Contact Email', 'Country', 'Currency', 'Status', 'Joined'].map((h) => (
                   <th key={h} className="text-left px-6 py-3 text-xs font-medium text-cash-green/70 uppercase tracking-wide">
                     {h}
                   </th>
@@ -107,11 +99,9 @@ export default function SADashboard() {
                       <span className="font-medium text-deep-cash">{t.name}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-cash-green/80">{t.adminEmail}</td>
-                  <td className="px-6 py-4">
-                    <span className="capitalize text-deep-cash">{t.plan}</span>
-                  </td>
-                  <td className="px-6 py-4 text-cash-green/80">{t.country}</td>
+                  <td className="px-6 py-4 text-cash-green/80">{t.contactEmail}</td>
+                  <td className="px-6 py-4 text-cash-green/80">{t.country || '—'}</td>
+                  <td className="px-6 py-4 text-cash-green/80">{t.currency || '—'}</td>
                   <td className="px-6 py-4">
                     <Badge
                       variant={t.status === 'active' ? 'success' : t.status === 'suspended' ? 'danger' : 'warning'}

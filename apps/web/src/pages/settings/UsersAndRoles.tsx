@@ -1,40 +1,21 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, RefreshCw, AlertTriangle, ShieldOff } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
-import { transformPaginatedResponse } from '@/lib/api/transforms';
+import { UserPlus, ShieldOff, ShieldCheck } from 'lucide-react';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import Badge from '@/components/ui/Badge';
 import Avatar from '@/components/ui/Avatar';
-import Tabs from '@/components/ui/Tabs';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-
-interface TenantUser {
-  id: string;
-  fullName: string;
-  email: string;
-  role: string;
-  status: string;
-}
-
-interface Invite {
-  id: string;
-  email: string;
-  role: string;
-  status: 'pending' | 'accepted' | 'expired';
-  expiresAt: string;
-  createdAt: string;
-}
+import type { BackendUser, BackendRole, CreateUserRequest } from '@/lib/api/types';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -62,18 +43,25 @@ const ROLE_BADGE_VARIANT: Record<string, 'success' | 'info' | 'warning'> = {
   employee_self_service: 'info',
 };
 
-const INVITE_ROLE_OPTIONS = [
-  { value: 'hr_manager', label: 'HR Manager' },
-  { value: 'hr_officer', label: 'HR Officer' },
-  { value: 'payroll_manager', label: 'Payroll Manager' },
-  { value: 'payroll_officer', label: 'Payroll Officer' },
-  { value: 'finance_manager', label: 'Finance Manager' },
-  { value: 'auditor', label: 'Auditor' },
-  { value: 'read_only', label: 'Read Only' },
-  { value: 'employee_self_service', label: 'Employee' },
-];
+// Real backend CreateUserDto has no invite-token flow at all - a "new user"
+// is created directly with an initial password (no separate accept-invite
+// step, no pending/expired invite state). This form reflects that.
+const ROLE_OPTIONS = Object.entries(ROLE_LABELS)
+  .filter(([value]) => value !== 'super_admin') // super_admin is reserved, not self-servable here
+  .map(([value, label]) => ({ value, label }));
 
-const blankInviteForm = { email: '', role: '' };
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+const blankAddUserForm = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  password: generateTempPassword(),
+  role: 'read_only' as BackendRole,
+};
 
 export default function UsersAndRoles() {
   const qc = useQueryClient();
@@ -82,112 +70,58 @@ export default function UsersAndRoles() {
   const role = currentUser?.role;
   const isSuperAdmin = role === 'tenant_admin' || role === 'super_admin';
 
-  const [activeTab, setActiveTab] = useState('users');
-  const [inviteOpen, setInviteOpen] = useState(false);
-  const [inviteForm, setInviteForm] = useState(blankInviteForm);
-  const [deactivateTarget, setDeactivateTarget] = useState<TenantUser | null>(null);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [form, setForm] = useState(blankAddUserForm);
+  const [disableTarget, setDisableTarget] = useState<BackendUser | null>(null);
 
   const {
-    data: usersResponse,
-    isLoading: usersLoading,
-    isError: usersError,
-    refetch: refetchUsers,
-  } = useQuery<any>({
+    data: users = [],
+    isLoading,
+    isError,
+    refetch,
+  } = useQuery<BackendUser[]>({
     queryKey: ['settings-users'],
     queryFn: async () => {
       if (!USE_REAL_API) {
-        return apiClient('/settings/users');
+        const response = await apiClient<any>('/settings/users');
+        return Array.isArray(response) ? response : response.data || [];
       }
-      const response = await apiClient<any>(ENDPOINTS.USERS.LIST);
-      return response;
+      const params = buildPaginationParams({ page: 1, limit: 100 });
+      const { data } = await apiClientWithMeta<BackendUser[]>(`${ENDPOINTS.USERS.LIST}?${params}`);
+      return data;
     },
     enabled: isSuperAdmin,
   });
 
-  // Transform users response
-  const users = usersResponse 
-    ? (Array.isArray(usersResponse) ? usersResponse : (usersResponse.data || []))
-    : [];
-
-  // Note: Invites endpoint may not be fully implemented in backend yet
-  const {
-    data: invitesResponse,
-    isLoading: invitesLoading,
-    isError: invitesError,
-    refetch: refetchInvites,
-  } = useQuery<any>({
-    queryKey: ['settings-invites'],
-    queryFn: async () => {
+  const createUserMutation = useMutation({
+    mutationFn: (body: CreateUserRequest) => {
       if (!USE_REAL_API) {
-        return apiClient('/settings/invites');
+        return apiClient('/settings/users', { method: 'POST', body: JSON.stringify(body) });
       }
-      // Backend may not have invites endpoint yet
-      try {
-        const response = await apiClient<any>(`${ENDPOINTS.USERS.LIST}?status=invited`);
-        return response;
-      } catch {
-        return []; // Return empty if endpoint doesn't exist
-      }
-    },
-    enabled: isSuperAdmin,
-  });
-
-  const invites = invitesResponse 
-    ? (Array.isArray(invitesResponse) ? invitesResponse : (invitesResponse.data || []))
-    : [];
-
-  const sendInviteMutation = useMutation({
-    mutationFn: (body: { email: string; role: string }) => {
-      if (!USE_REAL_API) {
-        return apiClient('/settings/invites', {
-          method: 'POST',
-          body: JSON.stringify(body),
-        });
-      }
-      // Backend users endpoint
-      return apiClient(ENDPOINTS.USERS.CREATE, {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
+      return apiClient(ENDPOINTS.USERS.CREATE, { method: 'POST', body: JSON.stringify(body) });
     },
     onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ['settings-invites'] });
       qc.invalidateQueries({ queryKey: ['settings-users'] });
-      toast.success(`Invite sent to ${vars.email}`);
-      setInviteForm(blankInviteForm);
-      setInviteOpen(false);
+      toast.success(`User created for ${vars.email}`, `Share the temporary password with them directly: ${vars.password}`);
+      setForm({ ...blankAddUserForm, password: generateTempPassword() });
+      setAddUserOpen(false);
     },
-    onError: () => toast.error('Failed to send invite'),
+    onError: () => toast.error('Failed to create user'),
   });
 
-  const resendMutation = useMutation({
+  const disableMutation = useMutation({
     mutationFn: (id: string) => {
       if (!USE_REAL_API) {
-        return apiClient(`/settings/invites/${id}/resend`, { method: 'POST' });
-      }
-      // Backend may not support resend yet
-      return apiClient(`${ENDPOINTS.USERS.DETAIL(id)}/resend-invite`, { method: 'POST' });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['settings-invites'] });
-      toast.success('Invite resent — expires in 7 days');
-    },
-    onError: () => toast.error('Failed to resend invite'),
-  });
-
-  const deactivateMutation = useMutation({
-    mutationFn: (id: string) => {
-      if (!USE_REAL_API) {
-        return apiClient(`/settings/users/${id}/deactivate`, { method: 'PATCH' });
+        return apiClient(`/settings/users/${id}/disable`, { method: 'PATCH' });
       }
       return apiClient(ENDPOINTS.USERS.DISABLE(id), { method: 'PATCH' });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
-      toast.success('User deactivated');
-      setDeactivateTarget(null);
+      toast.success('User disabled');
+      setDisableTarget(null);
     },
-    onError: () => toast.error('Failed to deactivate user'),
+    onError: () => toast.error('Failed to disable user'),
   });
 
   if (!isSuperAdmin) {
@@ -208,14 +142,11 @@ export default function UsersAndRoles() {
             fontSize: '0.9375rem',
           }}
         >
-          You need Super Admin access to manage users and roles.
+          You need Tenant Admin access to manage users and roles.
         </div>
       </div>
     );
   }
-
-  const isLoading = usersLoading || invitesLoading;
-  const isError = usersError || invitesError;
 
   if (isLoading) {
     return (
@@ -226,17 +157,8 @@ export default function UsersAndRoles() {
   }
 
   if (isError) {
-    return (
-      <ErrorState
-        onRetry={() => {
-          refetchUsers();
-          refetchInvites();
-        }}
-      />
-    );
+    return <ErrorState onRetry={() => refetch()} />;
   }
-
-  const pendingCount = (invites ?? []).filter((i: Invite) => i.status !== 'accepted').length;
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -244,276 +166,182 @@ export default function UsersAndRoles() {
         title="Users & Roles"
         breadcrumbs={[{ label: 'Settings' }, { label: 'Users & Roles' }]}
         action={
-          isSuperAdmin ? (
-            <Button variant="primary" onClick={() => setInviteOpen(true)}>
-              <UserPlus size={15} />
-              Invite User
-            </Button>
-          ) : undefined
+          <Button variant="primary" onClick={() => setAddUserOpen(true)}>
+            <UserPlus size={15} />
+            Add User
+          </Button>
         }
       />
 
-      <Tabs
-        tabs={[
-          { id: 'users', label: 'Active Users', count: (users ?? []).length },
-          { id: 'invites', label: 'Pending Invites', count: pendingCount },
-        ]}
-        activeTab={activeTab}
-        onChange={setActiveTab}
-        className="mb-5"
-      />
-
-      {activeTab === 'users' && (
-        <div
-          style={{
-            background: '#fff',
-            border: '1px solid #CDEFD7',
-            borderRadius: '0.75rem',
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#F7FAF8', borderBottom: '1px solid #CDEFD7' }}>
-                  {['Name', 'Email', 'Role', 'Status', ...(isSuperAdmin ? ['Actions'] : [])].map(
-                    (h) => (
-                      <th
-                        key={h}
-                        style={{
-                          padding: '0.75rem 1rem',
-                          textAlign: 'left',
-                          fontWeight: 600,
-                          color: '#0F2E23',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {h}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {(users ?? []).map((u: TenantUser) => {
-                  const isCurrentUser = u.id === currentUser?.id;
-                  return (
-                    <tr
-                      key={u.id}
-                      style={{ borderBottom: '1px solid #CDEFD7' }}
-                    >
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                          <Avatar name={u.fullName} size="sm" />
-                          <span style={{ fontWeight: 500, color: '#0F2E23' }}>{u.fullName}</span>
-                          {isCurrentUser && (
-                            <span
-                              style={{
-                                fontSize: '0.6875rem',
-                                fontWeight: 600,
-                                color: '#1F6F4E',
-                                background: '#CDEFD7',
-                                padding: '0.125rem 0.4rem',
-                                borderRadius: '0.25rem',
-                              }}
-                            >
-                              You
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E' }}>{u.email}</td>
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <Badge
-                          variant={ROLE_BADGE_VARIANT[u.role] ?? 'info'}
-                          label={ROLE_LABELS[u.role] ?? u.role}
-                        />
-                      </td>
-                      <td style={{ padding: '0.875rem 1rem' }}>
-                        <Badge variant="success" label="Active" />
-                      </td>
-                      {isSuperAdmin && (
-                        <td style={{ padding: '0.875rem 1rem' }}>
-                          <Button
-                            variant="danger"
-                            size="sm"
-                            disabled={isCurrentUser}
-                            onClick={() => setDeactivateTarget(u)}
+      <div
+        style={{
+          background: '#fff',
+          border: '1px solid #CDEFD7',
+          borderRadius: '0.75rem',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#F7FAF8', borderBottom: '1px solid #CDEFD7' }}>
+                {['Name', 'Email', 'Role', 'Status', 'Actions'].map((h) => (
+                  <th
+                    key={h}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      textAlign: 'left',
+                      fontWeight: 600,
+                      color: '#0F2E23',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => {
+                const fullName = `${u.firstName} ${u.lastName}`;
+                const isCurrentUser = u.id === currentUser?.id;
+                const isActive = u.status === 'active';
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid #CDEFD7' }}>
+                    <td style={{ padding: '0.875rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                        <Avatar name={fullName} size="sm" />
+                        <span style={{ fontWeight: 500, color: '#0F2E23' }}>{fullName}</span>
+                        {isCurrentUser && (
+                          <span
+                            style={{
+                              fontSize: '0.6875rem',
+                              fontWeight: 600,
+                              color: '#1F6F4E',
+                              background: '#CDEFD7',
+                              padding: '0.125rem 0.4rem',
+                              borderRadius: '0.25rem',
+                            }}
                           >
-                            <ShieldOff size={13} />
-                            Deactivate
-                          </Button>
-                        </td>
-                      )}
-                    </tr>
-                  );
-                })}
-                {(users ?? []).length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={isSuperAdmin ? 5 : 4}
-                      style={{ padding: '2rem', textAlign: 'center', color: '#1F6F4E' }}
-                    >
-                      No active users found.
+                            You
+                          </span>
+                        )}
+                      </div>
                     </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {activeTab === 'invites' && (
-        <div
-          style={{
-            background: '#fff',
-            border: '1px solid #CDEFD7',
-            borderRadius: '0.75rem',
-            overflow: 'hidden',
-          }}
-        >
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ background: '#F7FAF8', borderBottom: '1px solid #CDEFD7' }}>
-                  {['Email', 'Role', 'Status', 'Expires', 'Sent', 'Actions'].map((h) => (
-                    <th
-                      key={h}
-                      style={{
-                        padding: '0.75rem 1rem',
-                        textAlign: 'left',
-                        fontWeight: 600,
-                        color: '#0F2E23',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(invites ?? []).map((inv: Invite) => (
-                  <tr key={inv.id} style={{ borderBottom: '1px solid #CDEFD7' }}>
-                    <td style={{ padding: '0.875rem 1rem', color: '#0F2E23' }}>{inv.email}</td>
+                    <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E' }}>{u.email}</td>
                     <td style={{ padding: '0.875rem 1rem' }}>
                       <Badge
-                        variant={ROLE_BADGE_VARIANT[inv.role] ?? 'info'}
-                        label={ROLE_LABELS[inv.role] ?? inv.role}
+                        variant={ROLE_BADGE_VARIANT[u.role] ?? 'info'}
+                        label={ROLE_LABELS[u.role] ?? u.role}
                       />
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
-                      {inv.status === 'expired' ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                          <Badge variant="danger" label="Expired" />
-                          <AlertTriangle size={13} style={{ color: '#dc2626' }} />
-                        </div>
-                      ) : inv.status === 'accepted' ? (
-                        <Badge variant="success" label="Accepted" />
-                      ) : (
-                        <Badge variant="warning" label="Pending" />
-                      )}
-                    </td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E', whiteSpace: 'nowrap' }}>
-                      {formatDate(inv.expiresAt)}
-                    </td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E', whiteSpace: 'nowrap' }}>
-                      {formatDate(inv.createdAt)}
+                      <Badge variant={isActive ? 'success' : 'error'} label={isActive ? 'Active' : u.status} />
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
-                      {inv.status !== 'accepted' && (
+                      {isActive ? (
                         <Button
-                          variant="secondary"
+                          variant="danger"
                           size="sm"
-                          loading={resendMutation.isPending}
-                          onClick={() => resendMutation.mutate(inv.id)}
+                          disabled={isCurrentUser}
+                          onClick={() => setDisableTarget(u)}
                         >
-                          <RefreshCw size={13} />
-                          {inv.status === 'expired' ? 'Resend (expired)' : 'Resend'}
+                          <ShieldOff size={13} />
+                          Disable
                         </Button>
+                      ) : (
+                        <Badge variant="info" label="Disabled" />
                       )}
                     </td>
                   </tr>
-                ))}
-                {(invites ?? []).length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      style={{ padding: '2rem', textAlign: 'center', color: '#1F6F4E' }}
-                    >
-                      No pending invites.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                );
+              })}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: '#1F6F4E' }}>
+                    No users found.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </div>
 
       <Modal
-        isOpen={inviteOpen}
+        isOpen={addUserOpen}
         onClose={() => {
-          setInviteOpen(false);
-          setInviteForm(blankInviteForm);
+          setAddUserOpen(false);
+          setForm({ ...blankAddUserForm, password: generateTempPassword() });
         }}
-        title="Invite User"
+        title="Add User"
         size="sm"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Input
+              label="First name"
+              value={form.firstName}
+              onChange={(e) => setForm((f) => ({ ...f, firstName: e.target.value }))}
+            />
+            <Input
+              label="Last name"
+              value={form.lastName}
+              onChange={(e) => setForm((f) => ({ ...f, lastName: e.target.value }))}
+            />
+          </div>
           <Input
             label="Email address"
             type="email"
-            value={inviteForm.email}
-            onChange={(e) => setInviteForm((f) => ({ ...f, email: e.target.value }))}
+            value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
             placeholder="colleague@company.com"
           />
           <Select
             label="Role"
-            value={inviteForm.role}
-            options={INVITE_ROLE_OPTIONS}
-            onChange={(v) => setInviteForm((f) => ({ ...f, role: v }))}
+            value={form.role}
+            options={ROLE_OPTIONS}
+            onChange={(v) => setForm((f) => ({ ...f, role: v as BackendRole }))}
             placeholder="Select a role"
           />
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'flex-end',
-              gap: '0.5rem',
-              marginTop: '0.5rem',
-            }}
-          >
+          <Input
+            label="Temporary password"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            hint="Share this with the user directly — there is no invite email. They can change it after logging in."
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
             <Button
               variant="ghost"
               onClick={() => {
-                setInviteOpen(false);
-                setInviteForm(blankInviteForm);
+                setAddUserOpen(false);
+                setForm({ ...blankAddUserForm, password: generateTempPassword() });
               }}
             >
               Cancel
             </Button>
             <Button
               variant="primary"
-              loading={sendInviteMutation.isPending}
-              disabled={!inviteForm.email || !inviteForm.role || sendInviteMutation.isPending}
-              onClick={() => sendInviteMutation.mutate(inviteForm)}
+              loading={createUserMutation.isPending}
+              disabled={!form.firstName || !form.lastName || !form.email || !form.password || createUserMutation.isPending}
+              onClick={() => createUserMutation.mutate(form)}
             >
-              Send Invite
+              <ShieldCheck size={14} />
+              Create User
             </Button>
           </div>
         </div>
       </Modal>
 
       <ConfirmModal
-        isOpen={!!deactivateTarget}
-        onClose={() => setDeactivateTarget(null)}
-        onConfirm={() => deactivateTarget && deactivateMutation.mutate(deactivateTarget.id)}
-        title="Deactivate User"
-        message={`Are you sure you want to deactivate ${deactivateTarget?.fullName ?? 'this user'}? They will lose access to PayRole immediately.`}
-        confirmLabel="Deactivate"
+        isOpen={!!disableTarget}
+        onClose={() => setDisableTarget(null)}
+        onConfirm={() => disableTarget && disableMutation.mutate(disableTarget.id)}
+        title="Disable User"
+        message={`Are you sure you want to disable ${disableTarget ? `${disableTarget.firstName} ${disableTarget.lastName}` : 'this user'}? They will lose access to PayRole immediately.`}
+        confirmLabel="Disable"
         variant="danger"
-        isLoading={deactivateMutation.isPending}
+        isLoading={disableMutation.isPending}
       />
     </div>
   );

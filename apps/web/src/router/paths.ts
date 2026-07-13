@@ -2,6 +2,11 @@ export const PATHS = {
   // Public
   HOME: '/',
   REQUEST_ACCESS: '/request-access',
+  FEATURES: '/features',
+  FEATURES_TEAM: '/features/team',
+  FEATURES_PAY_SETUP: '/features/pay-setup',
+  FEATURES_PAYROLL: '/features/payroll',
+  FEATURES_PAYMENTS: '/features/payments',
   LOGIN: '/login',
   FORGOT_PASSWORD: '/forgot-password',
   RESET_PASSWORD: '/reset-password',
@@ -29,6 +34,7 @@ export const PATHS = {
   // Employees
   EMPLOYEES: '/employees',
   EMPLOYEE_ADD: '/employees/new',
+  EMPLOYEE_IMPORT: '/employees/import',
   EMPLOYEE_DETAIL: (id = ':id') => `/employees/${id}`,
   EMPLOYEE_EDIT: (id = ':id') => `/employees/${id}/edit`,
 
@@ -37,13 +43,17 @@ export const PATHS = {
   PAY_RUNS: '/payroll/runs',
   PAY_RUN_CREATE: '/payroll/runs/new',
   PAY_RUN_DETAIL: (id = ':id') => `/payroll/runs/${id}`,
-  PAYSLIP_VIEWER: (id = ':id') => `/payroll/payslips/${id}`,
+  // Matches the real backend route shape (GET /payroll/runs/:runId/payslips/:payslipId) -
+  // a payslip has no meaningful standalone ID without its parent run.
+  PAYSLIP_VIEWER: (runId = ':runId', payslipId = ':payslipId') =>
+    `/payroll/runs/${runId}/payslips/${payslipId}`,
 
   // Finance
   PAYMENTS: '/payments',
   REPORTS_REGISTER: '/reports/register',
   REPORTS_STATUTORY: '/reports/statutory',
   REPORTS_COST: '/reports/cost',
+  EXPORTS: '/exports',
 
   // Settings
   SETTINGS_PROFILE: '/settings/profile',

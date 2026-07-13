@@ -89,7 +89,8 @@ async function buildPayrollDashboard(): Promise<PayrollDashboardData> {
       totalGross: r.totalGrossMinor ? minorToMajor(r.totalGrossMinor, r.currency) : 0,
       totalNet: r.totalNetMinor ? minorToMajor(r.totalNetMinor, r.currency) : 0,
       currency: r.currency || 'NGN',
-      payGroupName: r.legalEntity?.name || 'N/A',
+      // BackendPayrollRun has no embedded legalEntity relation - fall back to the run's own name.
+      payGroupName: r.name || 'N/A',
       employeeCount: r.employeeCount,
     };
   });

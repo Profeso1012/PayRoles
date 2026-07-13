@@ -439,6 +439,88 @@ export interface CreateWorkerPayElementRequest {
 export interface UpdateWorkerPayElementRequest extends Partial<CreateWorkerPayElementRequest> {}
 
 // ============================================================================
+// Import Types
+// ============================================================================
+
+/** Real backend ImportStatus enum (common.enum.ts). */
+export type BackendImportStatus =
+  | 'pending'
+  | 'validating'
+  | 'preview'
+  | 'awaiting_approval'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'partially_completed';
+
+/** Real backend ImportEntityType enum (common.enum.ts). */
+export type BackendImportEntityType =
+  | 'workers'
+  | 'compensation'
+  | 'assignments'
+  | 'pay_elements'
+  | 'legal_entities';
+
+export interface BackendImportJob {
+  id: string;
+  tenantId: string;
+  entityType: BackendImportEntityType;
+  originalFilename: string;
+  uploadedBy: string | null;
+  status: BackendImportStatus;
+  totalRows: number;
+  successfulRows: number;
+  failedRows: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  duration: number | null;
+  // { reason: string } on failure, or { errors: [{row, error}] } (max 50) on partial completion, else null
+  errorSummary: { reason?: string; errors?: Array<{ row: number; error: string }> } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ============================================================================
+// Export Types
+// ============================================================================
+
+/** Real backend ExportStatus enum (common.enum.ts). */
+export type BackendExportStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'expired';
+
+/** Real backend ExportEntityType enum (common.enum.ts). */
+export type BackendExportEntityType =
+  | 'workers'
+  | 'payroll_register'
+  | 'payslips'
+  | 'audit_logs'
+  | 'gl_journals';
+
+/** Real backend ExportFormat enum (common.enum.ts). */
+export type BackendExportFormat = 'csv' | 'xlsx' | 'pdf' | 'json';
+
+export interface BackendExportJob {
+  id: string;
+  tenantId: string;
+  entityType: BackendExportEntityType;
+  format: BackendExportFormat;
+  generatedBy: string | null;
+  status: BackendExportStatus;
+  downloadUrl: string | null;
+  storageKey: string | null;
+  expiresAt: string;
+  completedAt: string | null;
+  errorSummary: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** POST /exports body (CreateExportJobDto). */
+export interface CreateExportJobRequest {
+  entityType: BackendExportEntityType;
+  format: BackendExportFormat;
+}
+
+// ============================================================================
 // User Types
 // ============================================================================
 
@@ -621,6 +703,103 @@ export interface CreateTaxVersionRequest {
     capMinor?: number;
     isActive?: boolean;
   }>;
+}
+
+// ============================================================================
+// Disbursement Types
+// ============================================================================
+
+/** Real backend BatchStatus enum (disbursement/domain/enums/batch-status.enum.ts). */
+export type BackendBatchStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'approved'
+  | 'awaiting_schedule'
+  | 'queued'
+  | 'processing'
+  | 'partially_paid'
+  | 'paid'
+  | 'reconciling'
+  | 'reconciled'
+  | 'completed'
+  | 'cancelled'
+  | 'failed'
+  | 'expired'
+  | 'retrying'
+  | 'reversed'
+  | 'awaiting_confirmation';
+
+export type BackendProviderType = 'manual_bank_file' | 'monnify' | 'paystack' | 'flutterwave' | 'remita';
+
+export interface BackendDisbursementBatch {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  providerType: BackendProviderType;
+  status: BackendBatchStatus;
+  executionPolicy: 'manual' | 'scheduled' | 'immediate';
+  reference: string;
+  providerBatchReference: string | null;
+  currency: string;
+  totalAmountMinor: string; // bigint - may serialize as number or string depending on driver, treat as string-coercible
+  totalCount: number;
+  successfulCount: number;
+  failedCount: number;
+  skippedCount: number;
+  retryCount: number;
+  processingFeeMinor: string | null;
+  fileKey: string | null;
+  fileUrl: string | null;
+  scheduledAt: string | null;
+  approvedAt: string | null;
+  executionStartedAt: string | null;
+  completedAt: string | null;
+  reconciledAt: string | null;
+  expiresAt: string | null;
+  createdBy: string | null;
+  executedBy: string | null;
+  confirmedBy: string | null;
+  failureReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type BackendTransactionStatus =
+  | 'pending'
+  | 'scheduled'
+  | 'queued'
+  | 'processing'
+  | 'successful'
+  | 'failed'
+  | 'retried'
+  | 'cancelled'
+  | 'reversed'
+  | 'manual'
+  | 'skipped';
+
+export interface BackendDisbursementTransaction {
+  id: string;
+  tenantId: string;
+  batchId: string;
+  payrollRunId: string;
+  payslipId: string;
+  workerId: string;
+  workerName: string;
+  accountNumber: string;
+  bankCode: string;
+  bankName: string | null;
+  accountName: string | null;
+  amountMinor: string;
+  currency: string;
+  status: BackendTransactionStatus;
+  disbursementMethod: string | null;
+  providerReference: string | null;
+  narration: string | null;
+  retryCount: number;
+  failureReason: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ============================================================================

@@ -1,35 +1,23 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Building2, Mail, Globe, BadgeCheck, PauseCircle, RefreshCw, Clock, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Building2, Mail, Globe, BadgeCheck, PauseCircle, UserPlus } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import Button from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
+import Input from '@/components/ui/Input';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import Modal from '@/components/ui/Modal';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
+import type { BackendTenant } from '@/lib/api/types';
 
-interface Tenant {
-  id: string;
-  name: string;
-  slug: string;
-  status: 'active' | 'suspended' | 'onboarding';
-  plan: string;
-  country: string;
-  createdAt: string;
-  setupComplete: boolean;
-  adminEmail: string;
-}
-
-interface AdminInvite {
-  id: string;
-  email: string;
-  status: 'pending' | 'accepted' | 'expired';
-  expiresAt: string;
-  createdAt: string;
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
 }
 
 export default function SACompanyDetail() {
@@ -38,37 +26,24 @@ export default function SACompanyDetail() {
   const toast = useToast();
   const qc = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [userForm, setUserForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: generateTempPassword(),
+  });
 
-  const { data: tenant, isLoading, isError, refetch } = useQuery({
+  const { data: tenant, isLoading, isError, refetch } = useQuery<BackendTenant>({
     queryKey: ['platform-tenant', id],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.PLATFORM_TENANTS.DETAIL(id!));
-      return response;
-    },
+    queryFn: () => apiClient<BackendTenant>(ENDPOINTS.PLATFORM_TENANTS.DETAIL(id!)),
     enabled: !!id,
-  });
-
-  // Note: Platform admin invites endpoint may not be implemented yet
-  const { data: invites, refetch: refetchInvites } = useQuery({
-    queryKey: ['platform-tenant-invites', id],
-    queryFn: () => apiClient<AdminInvite[]>(`/platform/tenants/${id}/invites`),
-    enabled: false, // Disable until backend implements this
-  });
-
-  const resendInvite = useMutation({
-    mutationFn: (inviteId: string) =>
-      apiClient(`/platform/tenants/${id}/invites/${inviteId}/resend`, { method: 'POST' }),
-    onSuccess: () => {
-      refetchInvites();
-      toast.success('Invite resent', `A fresh invite link was sent to the Super Admin.`);
-    },
-    onError: () => toast.error('Failed to resend', 'Please try again.'),
   });
 
   const toggleStatus = useMutation({
     mutationFn: () => {
       const isSuspended = tenant?.status === 'suspended';
-      const endpoint = isSuspended 
+      const endpoint = isSuspended
         ? ENDPOINTS.PLATFORM_TENANTS.ACTIVATE(id!)
         : ENDPOINTS.PLATFORM_TENANTS.SUSPEND(id!);
       return apiClient(endpoint, { method: 'PATCH' });
@@ -83,17 +58,30 @@ export default function SACompanyDetail() {
     onError: () => toast.error('Action failed', 'Please try again.'),
   });
 
+  const addUserMutation = useMutation({
+    mutationFn: () =>
+      apiClient(ENDPOINTS.PLATFORM_TENANTS.CREATE_USER(id!), {
+        method: 'POST',
+        body: JSON.stringify({ ...userForm, role: 'tenant_admin' }),
+      }),
+    onSuccess: () => {
+      toast.success('User created', `Share the temporary password with ${userForm.email} directly: ${userForm.password}`);
+      setAddUserOpen(false);
+      setUserForm({ firstName: '', lastName: '', email: '', password: generateTempPassword() });
+    },
+    onError: () => toast.error('Failed to create user', 'Please try again.'),
+  });
+
   if (isLoading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>;
-  if (isError || !tenant) return <ErrorState message="Company not found." onRetry={refetch} />;
+  if (isError || !tenant) return <ErrorState message="Company not found." onRetry={() => refetch()} />;
 
   const isSuspended = tenant.status === 'suspended';
 
   const fields = [
     { icon: Building2, label: 'Legal name', value: tenant.name },
-    { icon: Mail, label: 'Super Admin', value: tenant.adminEmail },
-    { icon: Globe, label: 'Country', value: tenant.country },
-    { icon: BadgeCheck, label: 'Plan', value: <span className="capitalize">{tenant.plan}</span> },
-    { icon: BadgeCheck, label: 'Setup', value: tenant.setupComplete ? 'Complete' : 'Pending' },
+    { icon: Mail, label: 'Contact Email', value: tenant.contactEmail },
+    { icon: Globe, label: 'Country', value: tenant.country || '—' },
+    { icon: BadgeCheck, label: 'Currency', value: tenant.currency || '—' },
     { icon: BadgeCheck, label: 'Member since', value: formatDate(tenant.createdAt) },
   ];
 
@@ -116,9 +104,13 @@ export default function SACompanyDetail() {
           </div>
           <div className="flex items-center gap-3">
             <Badge
-              variant={isSuspended ? 'danger' : tenant.status === 'onboarding' ? 'warning' : 'success'}
+              variant={isSuspended ? 'danger' : 'success'}
               label={tenant.status}
             />
+            <Button variant="secondary" onClick={() => setAddUserOpen(true)}>
+              <UserPlus size={15} className="mr-2" />
+              Add User
+            </Button>
             <Button
               variant={isSuspended ? 'secondary' : 'danger'}
               onClick={() => setShowConfirm(true)}
@@ -148,56 +140,32 @@ export default function SACompanyDetail() {
         ))}
       </div>
 
-      {/* Super Admin invite status */}
-      <div className="bg-white border border-mint-light rounded-xl shadow-sm overflow-hidden mb-6">
-        <div className="px-6 py-4 border-b border-mint-light flex items-center gap-2">
-          <Mail size={16} className="text-cash-green" />
-          <h2 className="text-sm font-semibold text-deep-cash">Super Admin Invite</h2>
+      {/* Add user modal */}
+      <Modal isOpen={addUserOpen} onClose={() => setAddUserOpen(false)} title="Add Tenant Admin" size="sm">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            There is no invite email on this backend — create the user directly and share the
+            temporary password with them.
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Input label="First name" value={userForm.firstName} onChange={(e) => setUserForm((f) => ({ ...f, firstName: e.target.value }))} />
+            <Input label="Last name" value={userForm.lastName} onChange={(e) => setUserForm((f) => ({ ...f, lastName: e.target.value }))} />
+          </div>
+          <Input label="Email" type="email" value={userForm.email} onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))} />
+          <Input label="Temporary password" value={userForm.password} onChange={(e) => setUserForm((f) => ({ ...f, password: e.target.value }))} />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setAddUserOpen(false)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={addUserMutation.isPending}
+              disabled={!userForm.firstName || !userForm.lastName || !userForm.email || !userForm.password}
+              onClick={() => addUserMutation.mutate()}
+            >
+              Create User
+            </Button>
+          </div>
         </div>
-        <div className="px-6 py-5">
-          {!invites || invites.length === 0 ? (
-            <p className="text-sm text-cash-green/60">No invite record found for this tenant.</p>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {invites.map((inv) => {
-                const isExpired = inv.status === 'expired' || new Date(inv.expiresAt) < new Date();
-                const statusLabel = inv.status === 'accepted' ? 'Accepted' : isExpired ? 'Expired' : 'Pending';
-                const statusVariant = inv.status === 'accepted' ? 'success' : isExpired ? 'danger' : 'warning';
-                return (
-                  <div key={inv.id} className="flex items-center justify-between gap-4 flex-wrap">
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-deep-cash">{inv.email}</span>
-                        <Badge variant={statusVariant} label={statusLabel} />
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-cash-green/60">
-                        <span className="flex items-center gap-1">
-                          <Clock size={11} />
-                          Sent {formatDate(inv.createdAt)}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          {isExpired && inv.status !== 'accepted' && <AlertTriangle size={11} className="text-red-400" />}
-                          {inv.status !== 'accepted' && `Expires ${formatDate(inv.expiresAt)}`}
-                        </span>
-                      </div>
-                    </div>
-                    {inv.status !== 'accepted' && (
-                      <Button
-                        variant="secondary"
-                        onClick={() => resendInvite.mutate(inv.id)}
-                        loading={resendInvite.isPending}
-                      >
-                        <RefreshCw size={13} className="mr-1.5" />
-                        {isExpired ? 'Resend (expired)' : 'Resend invite'}
-                      </Button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+      </Modal>
 
       {/* Confirm modal */}
       <ConfirmModal
