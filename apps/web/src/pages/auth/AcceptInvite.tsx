@@ -55,10 +55,9 @@ export default function AcceptInvite() {
         '/auth/accept-invite',
         { method: 'POST', body: JSON.stringify({ token, fullName, password }), skipAuthRedirect: true },
       );
-      setSession(data.user, data.token);
+      setSession({ user: data.user, accessToken: data.token });
       const role = data.user.role;
-      if (role === 'PLATFORM_ADMIN') navigate('/admin');
-      else if (role === 'EMPLOYEE') navigate('/my-payslips');
+      if (role === 'employee_self_service') navigate('/my-payslips');
       else navigate('/dashboard');
     } catch (err: unknown) {
       const message =

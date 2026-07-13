@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Users, UserCheck, Clock, UserX, UserPlus, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { apiClient } from '@/lib/api';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapWorkerStatus } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -27,7 +27,7 @@ interface RecentHire {
 interface HRDashboardData {
   total: number;
   active: number;
-  onLeave: number;
+  suspended: number;
   exited: number;
   newThisMonth: number;
   missingBankDetails: number;
@@ -43,29 +43,29 @@ async function buildHRDashboard(): Promise<HRDashboardData> {
   // Fetch all workers (or at least first 100 for stats)
   const params = buildPaginationParams({ page: 1, limit: 100 });
   params.set('sortBy', 'createdAt');
-  params.set('sortDir', 'DESC');
+  params.set('sortDir', 'desc');
   
-  const response = await apiClient<any>(`${ENDPOINTS.WORKERS.LIST}?${params}`);
-  const { data: workers, total } = transformPaginatedResponse(
-    response.data || response, 
-    response.meta
-  );
+  const response = await apiClientWithMeta<any[]>(`${ENDPOINTS.WORKERS.LIST}?${params}`);
+  const { data: workers, total } = transformPaginatedResponse<any>(response.data, response.meta);
 
   // Calculate stats
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   
-  const active = workers.filter((w: any) => 
+  const active = workers.filter((w: any) =>
     mapWorkerStatus(w.status, 'toFrontend') === 'active'
   ).length;
-  
-  const onLeave = workers.filter((w: any) => 
-    mapWorkerStatus(w.status, 'toFrontend') === 'on_leave'
+
+  const suspended = workers.filter((w: any) =>
+    mapWorkerStatus(w.status, 'toFrontend') === 'suspended'
   ).length;
-  
-  const exited = workers.filter((w: any) => 
-    mapWorkerStatus(w.status, 'toFrontend') === 'terminated'
-  ).length;
+
+  // Backend has no dedicated "terminated" status - PATCH /workers/:id/terminate
+  // just sets status to 'inactive' (see worker.service.ts#terminate).
+  const exited = workers.filter((w: any) => {
+    const s = mapWorkerStatus(w.status, 'toFrontend');
+    return s === 'inactive' || s === 'archived';
+  }).length;
   
   const newThisMonth = workers.filter((w: any) => {
     const createdAt = new Date(w.createdAt);
@@ -91,7 +91,7 @@ async function buildHRDashboard(): Promise<HRDashboardData> {
   return {
     total,
     active,
-    onLeave,
+    suspended,
     exited,
     newThisMonth,
     missingBankDetails,
@@ -101,14 +101,16 @@ async function buildHRDashboard(): Promise<HRDashboardData> {
 
 const statusVariantMap: Record<string, 'active' | 'on_leave' | 'exited' | 'info'> = {
   active: 'active',
-  on_leave: 'on_leave',
-  exited: 'exited',
+  suspended: 'on_leave',
+  inactive: 'exited',
+  archived: 'exited',
 };
 
 const statusLabelMap: Record<string, string> = {
   active: 'Active',
-  on_leave: 'On Leave',
-  exited: 'Exited',
+  suspended: 'Suspended',
+  inactive: 'Inactive',
+  archived: 'Archived',
 };
 
 export default function HRDashboard() {
@@ -150,15 +152,15 @@ export default function HRDashboard() {
       iconColor: 'text-cash-green',
     },
     {
-      label: 'On Leave',
-      value: data.onLeave,
+      label: 'Suspended',
+      value: data.suspended,
       icon: Clock,
       bg: 'bg-amber-50',
       text: 'text-amber-800',
       iconColor: 'text-amber-500',
     },
     {
-      label: 'Exited',
+      label: 'Inactive',
       value: data.exited,
       icon: UserX,
       bg: 'bg-red-50',

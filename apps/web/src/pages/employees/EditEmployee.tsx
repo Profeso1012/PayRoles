@@ -2,28 +2,16 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
+import { mapWorkerFields } from '@/lib/api/transforms';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
-import Drawer from '@/components/ui/Drawer';
 import Input from '@/components/ui/Input';
-import Select from '@/components/ui/Select';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { Employee } from '@contracts/types/employee';
-
-const genderOptions = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
-];
-
-const statusOptions = [
-  { value: 'active', label: 'Active' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'exited', label: 'Exited' },
-];
+import type { BackendWorker } from '@/lib/api/types';
 
 export default function EditEmployee() {
   const { id } = useParams<{ id: string }>();
@@ -32,20 +20,24 @@ export default function EditEmployee() {
   const toast = useToast();
 
   const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
-    queryKey: ['employee', id],
-    queryFn: () => apiClient<Employee>(`/employees/${id}`),
+    queryKey: ['worker', id],
+    queryFn: async () => {
+      const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
+      const mapped = mapWorkerFields(worker, 'toFrontend');
+      return { ...mapped, status: mapped.status || 'active' } as Employee;
+    },
     enabled: !!id,
   });
 
+  // Real UpdateWorkerDto has no `gender` or `status` field - status changes go
+  // through PATCH /workers/:id/terminate, not this generic update.
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     dateOfBirth: '',
-    gender: '',
     nationalId: '',
-    status: '',
   });
 
   useEffect(() => {
@@ -56,22 +48,31 @@ export default function EditEmployee() {
         email: employee.email,
         phone: employee.phone,
         dateOfBirth: employee.dateOfBirth,
-        gender: employee.gender,
-        nationalId: employee.nationalId,
-        status: employee.status,
+        nationalId: employee.nationalId === '****' ? '' : employee.nationalId,
       });
     }
   }, [employee]);
 
   const updateMutation = useMutation({
-    mutationFn: () =>
-      apiClient<Employee>(`/employees/${id}`, {
+    mutationFn: () => {
+      const payload: Record<string, string | undefined> = {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email || undefined,
+        phone: form.phone || undefined,
+        dateOfBirth: form.dateOfBirth || undefined,
+      };
+      // Only send nationalId if the user actually typed a new value (it
+      // displays masked as '****' for existing employees - see EmployeeDetail).
+      if (form.nationalId) payload.nationalId = form.nationalId;
+      return apiClient<BackendWorker>(ENDPOINTS.WORKERS.UPDATE(id!), {
         method: 'PATCH',
-        body: JSON.stringify(form),
-      }),
+        body: JSON.stringify(payload),
+      });
+    },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['employee', id] });
-      qc.invalidateQueries({ queryKey: ['employees-list'] });
+      qc.invalidateQueries({ queryKey: ['worker', id] });
+      qc.invalidateQueries({ queryKey: ['workers-list'] });
       toast.success('Employee updated');
       navigate(`/employees/${id}`);
     },
@@ -137,22 +138,11 @@ export default function EditEmployee() {
               onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
             />
           </div>
-          <Select
-            label="Gender"
-            value={form.gender}
-            options={genderOptions}
-            onChange={(v) => setForm((f) => ({ ...f, gender: v }))}
-          />
           <Input
             label="National ID (NIN)"
+            placeholder={employee.nationalId === '****' ? 'Protected - enter to replace' : ''}
             value={form.nationalId}
             onChange={(e) => setForm((f) => ({ ...f, nationalId: e.target.value }))}
-          />
-          <Select
-            label="Status"
-            value={form.status}
-            options={statusOptions}
-            onChange={(v) => setForm((f) => ({ ...f, status: v }))}
           />
         </div>
 

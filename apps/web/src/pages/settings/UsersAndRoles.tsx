@@ -37,26 +37,40 @@ interface Invite {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  COMPANY_SUPER_ADMIN: 'Super Admin',
-  HR_MANAGER: 'HR Manager',
-  PAYROLL_MANAGER: 'Payroll Manager',
-  FINANCE_DIRECTOR: 'Finance Director',
-  EMPLOYEE: 'Employee',
+  super_admin: 'Super Admin',
+  tenant_admin: 'Tenant Admin',
+  hr_manager: 'HR Manager',
+  hr_officer: 'HR Officer',
+  payroll_manager: 'Payroll Manager',
+  payroll_officer: 'Payroll Officer',
+  finance_manager: 'Finance Manager',
+  auditor: 'Auditor',
+  read_only: 'Read Only',
+  employee_self_service: 'Employee',
 };
 
 const ROLE_BADGE_VARIANT: Record<string, 'success' | 'info' | 'warning'> = {
-  COMPANY_SUPER_ADMIN: 'success',
-  HR_MANAGER: 'info',
-  PAYROLL_MANAGER: 'info',
-  FINANCE_DIRECTOR: 'warning',
-  EMPLOYEE: 'info',
+  super_admin: 'success',
+  tenant_admin: 'success',
+  hr_manager: 'info',
+  hr_officer: 'info',
+  payroll_manager: 'info',
+  payroll_officer: 'info',
+  finance_manager: 'warning',
+  auditor: 'warning',
+  read_only: 'info',
+  employee_self_service: 'info',
 };
 
 const INVITE_ROLE_OPTIONS = [
-  { value: 'HR_MANAGER', label: 'HR Manager' },
-  { value: 'PAYROLL_MANAGER', label: 'Payroll Manager' },
-  { value: 'FINANCE_DIRECTOR', label: 'Finance Director' },
-  { value: 'EMPLOYEE', label: 'Employee' },
+  { value: 'hr_manager', label: 'HR Manager' },
+  { value: 'hr_officer', label: 'HR Officer' },
+  { value: 'payroll_manager', label: 'Payroll Manager' },
+  { value: 'payroll_officer', label: 'Payroll Officer' },
+  { value: 'finance_manager', label: 'Finance Manager' },
+  { value: 'auditor', label: 'Auditor' },
+  { value: 'read_only', label: 'Read Only' },
+  { value: 'employee_self_service', label: 'Employee' },
 ];
 
 const blankInviteForm = { email: '', role: '' };
@@ -66,7 +80,7 @@ export default function UsersAndRoles() {
   const toast = useToast();
   const currentUser = useAuthStore((s) => s.user);
   const role = currentUser?.role;
-  const isSuperAdmin = role === 'COMPANY_SUPER_ADMIN';
+  const isSuperAdmin = role === 'tenant_admin' || role === 'super_admin';
 
   const [activeTab, setActiveTab] = useState('users');
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -166,7 +180,7 @@ export default function UsersAndRoles() {
       if (!USE_REAL_API) {
         return apiClient(`/settings/users/${id}/deactivate`, { method: 'PATCH' });
       }
-      return apiClient(ENDPOINTS.USERS.DEACTIVATE(id), { method: 'PATCH' });
+      return apiClient(ENDPOINTS.USERS.DISABLE(id), { method: 'PATCH' });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
@@ -222,7 +236,7 @@ export default function UsersAndRoles() {
     );
   }
 
-  const pendingCount = (invites ?? []).filter((i) => i.status !== 'accepted').length;
+  const pendingCount = (invites ?? []).filter((i: Invite) => i.status !== 'accepted').length;
 
   return (
     <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
@@ -281,7 +295,7 @@ export default function UsersAndRoles() {
                 </tr>
               </thead>
               <tbody>
-                {(users ?? []).map((u) => {
+                {(users ?? []).map((u: TenantUser) => {
                   const isCurrentUser = u.id === currentUser?.id;
                   return (
                     <tr
@@ -380,7 +394,7 @@ export default function UsersAndRoles() {
                 </tr>
               </thead>
               <tbody>
-                {(invites ?? []).map((inv) => (
+                {(invites ?? []).map((inv: Invite) => (
                   <tr key={inv.id} style={{ borderBottom: '1px solid #CDEFD7' }}>
                     <td style={{ padding: '0.875rem 1rem', color: '#0F2E23' }}>{inv.email}</td>
                     <td style={{ padding: '0.875rem 1rem' }}>

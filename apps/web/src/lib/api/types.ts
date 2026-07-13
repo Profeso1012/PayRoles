@@ -1,8 +1,10 @@
 /**
  * Backend API Type Definitions
- * 
- * Types that match the real backend API contracts.
- * These will gradually replace the mock types as we migrate.
+ *
+ * Types that match the real e_payroll backend API contracts exactly (entity
+ * columns, DTO fields, enum string values). Verified directly against
+ * e_payroll/src - do not "improve" these speculatively; if the backend
+ * changes, re-verify against the actual entity/DTO file before editing.
  */
 
 // ============================================================================
@@ -12,7 +14,7 @@
 export interface LoginRequest {
   email: string;
   password: string;
-  tenantSlug: string;  // Required by backend, not in mock
+  tenantSlug: string; // Required by backend, not in mock
 }
 
 export interface LoginResponse {
@@ -36,6 +38,12 @@ export interface PlatformLoginRequest {
 // Worker Types (backend calls them "workers", not "employees")
 // ============================================================================
 
+/** Real backend Status enum (common.enum.ts) - lowercase, no on_leave/terminated. */
+export type BackendStatus = 'active' | 'inactive' | 'suspended' | 'archived';
+
+/** Real backend EmploymentType enum (common.enum.ts) - lowercase snake_case. */
+export type BackendEmploymentType = 'full_time' | 'part_time' | 'contract' | 'temporary' | 'intern';
+
 export interface BackendWorker {
   id: string;
   tenantId: string;
@@ -48,13 +56,13 @@ export interface BackendWorker {
   dateOfBirth: string | null;
   hireDate: string;
   terminationDate: string | null;
-  employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
-  status: 'ACTIVE' | 'INACTIVE' | 'ON_LEAVE' | 'TERMINATED';
+  employmentType: BackendEmploymentType;
+  status: BackendStatus;
   legalEntityId: string | null;
   position: string | null;
-  department: string | null;  // String field, not related entity
+  department: string | null; // Plain string field, not a related entity
   managerId: string | null;
-  // Encrypted fields - backend won't return decrypted values
+  // Encrypted at rest - the backend never returns decrypted values.
   nationalIdEncrypted: string | null;
   bankAccountEncrypted: string | null;
   bankName: string | null;
@@ -64,24 +72,31 @@ export interface BackendWorker {
   updatedAt: string;
 }
 
+/**
+ * POST /workers body (CreateWorkerDto). Note: nationalId/bankAccount are sent
+ * PLAIN here - there is no `*Encrypted` request field; the backend encrypts
+ * them server-side into the entity's nationalIdEncrypted/bankAccountEncrypted
+ * columns. Sending `nationalIdEncrypted`/`bankAccountEncrypted` in the request
+ * body is rejected (ValidationPipe has forbidNonWhitelisted: true).
+ */
 export interface CreateWorkerRequest {
   employeeNumber: string;
   firstName: string;
   lastName: string;
-  middleName?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  dateOfBirth?: string | null;
+  middleName?: string;
+  email?: string;
+  phone?: string;
+  dateOfBirth?: string;
   hireDate: string;
-  employmentType: 'FULL_TIME' | 'PART_TIME' | 'CONTRACT' | 'INTERN';
-  legalEntityId?: string | null;
-  position?: string | null;
-  department?: string | null;
-  managerId?: string | null;
-  nationalIdEncrypted?: string;  // Send plain, backend encrypts
-  bankAccountEncrypted?: string;  // Send plain, backend encrypts
-  bankName?: string | null;
-  bankRoutingCode?: string | null;
+  employmentType?: BackendEmploymentType;
+  legalEntityId?: string;
+  position?: string;
+  department?: string;
+  managerId?: string;
+  nationalId?: string;
+  bankAccount?: string;
+  bankName?: string;
+  bankRoutingCode?: string;
 }
 
 export interface UpdateWorkerRequest extends Partial<CreateWorkerRequest> {}
@@ -95,34 +110,40 @@ export interface TerminateWorkerRequest {
 // Payroll Run Types
 // ============================================================================
 
+/** Real backend PayrollRunStatus enum (common.enum.ts) - lowercase snake_case. */
 export type PayrollRunStatus =
-  | 'DRAFT'
-  | 'PENDING_APPROVAL'
-  | 'APPROVED'
-  | 'PROCESSING'
-  | 'COMPLETED'
-  | 'REJECTED';
+  | 'draft'
+  | 'calculating'
+  | 'calculated'
+  | 'pending_approval'
+  | 'approved'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'rejected'
+  | 'cancelled'
+  | 'reversed';
 
+/** Real backend PayrollDisbursementStatus enum (common.enum.ts). */
 export type PayrollDisbursementStatus =
-  | 'NOT_STARTED'
-  | 'PENDING_APPROVAL'
-  | 'APPROVED'
-  | 'PROCESSING'
-  | 'PAID'
-  | 'FAILED';
+  | 'not_started'
+  | 'in_progress'
+  | 'completed'
+  | 'partially_completed'
+  | 'failed';
 
 export interface BackendPayrollRun {
   id: string;
   tenantId: string;
   legalEntityId: string;
   name: string;
-  periodStart: string;  // ISO date
-  periodEnd: string;    // ISO date
-  payDate: string;      // ISO date
+  periodStart: string; // ISO date
+  periodEnd: string; // ISO date
+  payDate: string; // ISO date
   status: PayrollRunStatus;
-  totalGrossMinor: string;      // Bigint as string (kobo)
+  totalGrossMinor: string; // Bigint as string (kobo)
   totalDeductionsMinor: string; // Bigint as string (kobo)
-  totalNetMinor: string;        // Bigint as string (kobo)
+  totalNetMinor: string; // Bigint as string (kobo)
   currency: string;
   processedAt: string | null;
   approvedAt: string | null;
@@ -141,9 +162,9 @@ export interface BackendPayrollRun {
 export interface CreatePayrollRunRequest {
   name: string;
   legalEntityId: string;
-  periodStart: string;  // ISO date string
-  periodEnd: string;    // ISO date string
-  payDate: string;      // ISO date string
+  periodStart: string; // ISO date string
+  periodEnd: string; // ISO date string
+  payDate: string; // ISO date string
   currency?: string;
   notes?: string;
 }
@@ -156,51 +177,122 @@ export interface RejectPayrollRunRequest {
   reason: string;
 }
 
+export interface CancelPayrollRunRequest {
+  reason?: string;
+}
+
+export interface ReversePayrollRunRequest {
+  reason: string;
+}
+
+/**
+ * Immutable per-worker snapshot row for a payroll run
+ * (GET /payroll/runs/:id/workers - payroll-worker.entity.ts). There is NO
+ * worker name/employee number on this row - join against a fetched
+ * BackendWorker[] by workerId if you need to display names.
+ */
+export type PayrollWorkerPaymentStatus = 'pending' | 'paid' | 'failed' | 'held';
+
+export interface BackendPayrollWorker {
+  id: string;
+  tenantId: string;
+  payrollRunId: string;
+  workerId: string;
+  grossPayMinor: string;
+  taxableIncomeMinor: string;
+  totalEarningsMinor: string;
+  totalDeductionsMinor: string;
+  employerContributionsMinor: string;
+  employeeContributionsMinor: string;
+  netPayMinor: string;
+  currency: string;
+  paymentStatus: PayrollWorkerPaymentStatus;
+  remarks: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /payroll/runs/:id/workers/:payrollWorkerId/items - payroll-item.entity.ts */
+export interface BackendPayrollItem {
+  id: string;
+  tenantId: string;
+  payrollWorkerId: string;
+  payElementId: string;
+  payElementCode: string;
+  payElementName: string;
+  type: BackendPayElementType;
+  amount: string; // Bigint as string, final applied amount (minor units)
+  calculatedAmount: string;
+  originalAmount: string; // Decimal string, pre-rounding
+  formulaUsed: string | null;
+  sequence: number;
+  calculationLog: Record<string, any> | null;
+  taxable: boolean;
+  statutory: boolean;
+}
+
 // ============================================================================
 // Payslip Types
 // ============================================================================
+
+/** Real backend DisbursementStatus enum (common.enum.ts), used on Payslip. */
+export type PayslipDisbursementStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'paid'
+  | 'failed'
+  | 'manual'
+  | 'skipped';
 
 export interface BackendPayslip {
   id: string;
   tenantId: string;
   payrollRunId: string;
   workerId: string;
-  grossPayMinor: string;      // Bigint as string
-  deductionsMinor: string;    // Bigint as string
-  netPayMinor: string;        // Bigint as string
+  payrollWorkerId: string | null;
+  grossPayMinor: string; // Bigint as string
+  deductionsMinor: string; // Bigint as string
+  netPayMinor: string; // Bigint as string
   currency: string;
-  elements: PayslipElement[];
+  payElements: PayslipElement[];
+  pdfStorageKey: string | null;
   pdfUrl: string | null;
-  metadata: Record<string, any> | null;
+  disbursementStatus: PayslipDisbursementStatus;
+  disbursementMethod: string | null;
+  transactionReference: string | null;
+  paidAt: string | null;
+  disbursementFailureReason: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface PayslipElement {
-  id: string;
+  code: string;
   name: string;
-  type: 'EARNING' | 'DEDUCTION' | 'EMPLOYER_CONTRIBUTION';
-  amountMinor: string;  // Bigint as string
-  isStatutory: boolean;
-  formula: string | null;
+  type: string;
+  amountMinor: number;
 }
 
 // ============================================================================
 // Legal Entity Types
 // ============================================================================
 
+/** Real backend LegalEntityType enum (legal-entity.entity.ts). */
+export type BackendLegalEntityType = 'company' | 'branch' | 'subsidiary' | 'department';
+
 export interface BackendLegalEntity {
   id: string;
   tenantId: string;
   name: string;
+  type: BackendLegalEntityType;
   registrationNumber: string | null;
-  taxId: string | null;
+  taxIdEncrypted: string | null;
+  currency: string | null;
+  country: string | null;
   address: string | null;
-  city: string | null;
-  state: string | null;
-  country: string;
-  currency: string;
-  status: 'ACTIVE' | 'INACTIVE';
+  phone: string | null;
+  email: string | null;
+  status: BackendStatus;
   metadata: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
@@ -208,76 +300,160 @@ export interface BackendLegalEntity {
 
 export interface CreateLegalEntityRequest {
   name: string;
-  registrationNumber?: string | null;
-  taxId?: string | null;
-  address?: string | null;
-  city?: string | null;
-  state?: string | null;
-  country: string;
+  type?: BackendLegalEntityType;
+  registrationNumber?: string;
+  taxId?: string; // Sent plain, encrypted server-side into taxIdEncrypted
   currency?: string;
+  country?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
 }
 
 // ============================================================================
 // Compensation Types
 // ============================================================================
 
+/** Real backend SalaryType enum (compensation.entity.ts). */
+export type BackendSalaryType = 'fixed' | 'hourly' | 'commission';
+
+/** Real backend PayFrequency enum (common.enum.ts). */
+export type BackendPayFrequency =
+  | 'weekly'
+  | 'biweekly'
+  | 'semimonthly'
+  | 'monthly'
+  | 'quarterly'
+  | 'annual';
+
 export interface BackendCompensation {
   id: string;
   tenantId: string;
   workerId: string;
-  effectiveFrom: string;  // ISO date
-  effectiveTo: string | null;  // ISO date
-  baseSalaryMinor: string;  // Bigint as string
+  salaryType: BackendSalaryType;
+  amountMinor: string; // Bigint as string on the entity/response
   currency: string;
-  payFrequency: 'MONTHLY' | 'BI_WEEKLY' | 'WEEKLY' | 'DAILY';
-  metadata: Record<string, any> | null;
+  payFrequency: BackendPayFrequency;
+  effectiveDate: string; // ISO date
+  expiryDate: string | null; // ISO date
+  isActive: boolean;
+  breakdown: Record<string, any> | null;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+/** POST /compensation body (CreateCompensationDto) - amountMinor is a `number` here, not a string. */
 export interface CreateCompensationRequest {
   workerId: string;
-  effectiveFrom: string;
-  effectiveTo?: string | null;
-  baseSalaryMinor: string;
+  salaryType?: BackendSalaryType;
+  amountMinor: number;
   currency: string;
-  payFrequency: 'MONTHLY' | 'BI_WEEKLY' | 'WEEKLY' | 'DAILY';
+  payFrequency?: BackendPayFrequency;
+  effectiveDate: string;
+  expiryDate?: string;
+  breakdown?: Record<string, any>;
+  notes?: string;
 }
 
 // ============================================================================
 // Pay Element Types
 // ============================================================================
 
+/** Real backend PayElementType enum (common.enum.ts). */
+export type BackendPayElementType = 'earning' | 'deduction' | 'employer_contribution' | 'tax' | 'benefit';
+
 export interface BackendPayElement {
   id: string;
   tenantId: string;
-  name: string;
   code: string;
-  type: 'EARNING' | 'DEDUCTION' | 'EMPLOYER_CONTRIBUTION';
-  category: string;
-  isStatutory: boolean;
-  isTaxable: boolean;
-  isPensionable: boolean;
+  name: string;
+  type: BackendPayElementType;
   formula: string | null;
+  taxRuleCode: string | null; // Only meaningful when type = 'tax'
+  isActive: boolean;
+  isTaxable: boolean;
+  isStatutory: boolean;
+  sortOrder: number;
+  description: string | null;
   metadata: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 }
 
+/** POST /pay-elements body (CreatePayElementDto). There is no `category` or `isPensionable` field. */
 export interface CreatePayElementRequest {
+  code: string; // UPPER_SNAKE_CASE, e.g. 'BASIC_SALARY'
   name: string;
-  code: string;
-  type: 'EARNING' | 'DEDUCTION' | 'EMPLOYER_CONTRIBUTION';
-  category: string;
-  isStatutory?: boolean;
+  type: BackendPayElementType;
+  formula?: string;
+  taxRuleCode?: string;
+  isActive?: boolean;
   isTaxable?: boolean;
-  isPensionable?: boolean;
-  formula?: string | null;
+  isStatutory?: boolean;
+  sortOrder?: number;
+  description?: string;
 }
+
+// ============================================================================
+// Worker Pay Elements Types
+// ============================================================================
+
+/** Real backend CalculationMethod enum (common.enum.ts). */
+export type BackendCalculationMethod = 'fixed' | 'percentage_of_basic' | 'percentage_of_gross' | 'formula';
+
+/** Real backend WorkerPayElementStatus enum (common.enum.ts). */
+export type BackendWorkerPayElementStatus = 'active' | 'inactive' | 'expired';
+
+export interface BackendWorkerPayElement {
+  id: string;
+  tenantId: string;
+  workerId: string;
+  payElementId: string;
+  calculationMethod: BackendCalculationMethod;
+  amountMinor: string | null; // Bigint as string, used when calculationMethod = fixed
+  percentage: string | null; // Decimal string, used when calculationMethod = percentage_of_*
+  formulaOverride: string | null;
+  effectiveDate: string;
+  endDate: string | null;
+  status: BackendWorkerPayElementStatus;
+  remarks: string | null;
+  createdAt: string;
+  updatedAt: string;
+  payElement?: BackendPayElement;
+  worker?: BackendWorker;
+}
+
+/** POST /workers/:workerId/pay-elements body (CreateWorkerPayElementDto). */
+export interface CreateWorkerPayElementRequest {
+  payElementId: string;
+  calculationMethod?: BackendCalculationMethod;
+  amountMinor?: number; // Required when calculationMethod = fixed
+  percentage?: number; // 0-1000, required when calculationMethod = percentage_of_*
+  formulaOverride?: string; // Required when calculationMethod = formula
+  effectiveDate: string;
+  endDate?: string;
+  remarks?: string;
+}
+
+export interface UpdateWorkerPayElementRequest extends Partial<CreateWorkerPayElementRequest> {}
 
 // ============================================================================
 // User Types
 // ============================================================================
+
+/** Real backend Role enum (roles.enum.ts) - see @contracts/types/auth for the frontend UserRole union. */
+export type BackendRole =
+  | 'super_admin'
+  | 'tenant_admin'
+  | 'payroll_manager'
+  | 'payroll_officer'
+  | 'hr_manager'
+  | 'hr_officer'
+  | 'finance_manager'
+  | 'auditor'
+  | 'employee_self_service'
+  | 'read_only';
 
 export interface BackendUser {
   id: string;
@@ -285,23 +461,38 @@ export interface BackendUser {
   email: string;
   firstName: string;
   lastName: string;
-  role: string;
-  permissions: string[];
-  status: 'ACTIVE' | 'INACTIVE';
-  workerId: string | null;
+  role: BackendRole;
+  status: BackendStatus;
+  phone: string | null;
+  avatarUrl: string | null;
   lastLoginAt: string | null;
+  workerId: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+/** POST /users body (CreateUserDto) - password is required (this creates the account directly, there is no separate invite-token flow on the backend). */
 export interface CreateUserRequest {
   email: string;
   password: string;
   firstName: string;
   lastName: string;
-  role: string;
-  workerId?: string | null;
-  targetTenantId?: string;  // For SUPER_ADMIN creating users in other tenants
+  role?: BackendRole; // Defaults to READ_ONLY if omitted
+  phone?: string;
+  workerId?: string;
+  targetTenantId?: string; // SUPER_ADMIN only - create a user in another tenant
+}
+
+export interface UpdateUserRequest {
+  firstName?: string;
+  lastName?: string;
+  role?: BackendRole;
+  phone?: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
 }
 
 // ============================================================================
@@ -312,58 +503,67 @@ export interface BackendTenant {
   id: string;
   name: string;
   slug: string;
+  status: BackendStatus;
+  domain: string | null;
+  logoUrl: string | null;
   contactEmail: string;
-  timezone: string;
-  currency: string;
-  status: 'ACTIVE' | 'SUSPENDED' | 'TRIAL';
-  metadata: Record<string, any> | null;
+  contactPhone: string | null;
+  country: string | null;
+  timezone: string | null;
+  currency: string | null;
+  settings: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 }
 
+/** POST /tenants or /platform/tenants body (CreateTenantDto). No `plan`/`adminEmail`/`setupComplete` field exists. */
 export interface CreateTenantRequest {
   name: string;
-  slug: string;
+  slug: string; // lowercase, alphanumeric + hyphens only
   contactEmail: string;
+  contactPhone?: string;
+  country?: string;
   timezone?: string;
   currency?: string;
 }
 
 // ============================================================================
-// Tax Engine Types (NEW - Phase 10)
+// Tax Engine Types
 // ============================================================================
 
 export interface TaxJurisdiction {
   id: string;
-  code: string;  // e.g., 'NG', 'KE'
-  name: string;  // e.g., 'Nigeria', 'Kenya'
-  currency: string;  // e.g., 'NGN', 'KES'
+  code: string; // e.g. 'NG', 'KE'
+  name: string;
+  currency: string;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface TaxRule {
   id: string;
-  code: string;  // e.g., 'NIGERIA_PIT', 'NIGERIA_PENSION'
-  name: string;  // e.g., 'Nigeria Personal Income Tax'
+  code: string; // e.g. 'NIGERIA_PIT'
+  name: string;
   jurisdictionId: string;
   description: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
+export type BackendTaxCalculationBasis = 'annual' | 'monthly';
+
 export interface TaxVersion {
   id: string;
-  code: string;  // e.g., 'NIGERIA_PIT_2026'
+  code: string; // e.g. 'NIGERIA_PIT_2026'
   taxRuleId: string;
   name: string;
-  effectiveDate: string;  // ISO date
-  endDate: string | null;  // ISO date
-  basis: 'annual' | 'monthly';
+  effectiveDate: string;
+  endDate: string | null;
+  basis: BackendTaxCalculationBasis;
   isActive: boolean;
   notes: string | null;
-  bands?: TaxBand[];  // Populated when fetching detail
-  reliefs?: TaxRelief[];  // Populated when fetching detail
+  bands?: TaxBand[];
+  reliefs?: TaxRelief[];
   createdAt: string;
   updatedAt: string;
 }
@@ -372,21 +572,28 @@ export interface TaxBand {
   id: string;
   taxVersionId: string;
   sequence: number;
-  lowerBoundMinor: string;  // Bigint as string (minor units)
-  upperBoundMinor: string | null;  // Bigint as string, null = infinity
-  ratePercent: number;  // e.g., 7.5, 11, 15
+  lowerBoundMinor: string;
+  upperBoundMinor: string | null;
+  ratePercent: number;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Real backend TaxReliefType enum (common.enum.ts). */
+export type BackendTaxReliefType =
+  | 'fixed_amount'
+  | 'percentage_of_gross'
+  | 'percentage_of_gross_capped'
+  | 'greater_of_fixed_or_percentage';
+
 export interface TaxRelief {
   id: string;
   taxVersionId: string;
-  code: string;  // e.g., 'RENT_RELIEF', 'CRA'
-  name: string;  // e.g., 'Rent Relief'
-  type: 'fixed' | 'percentage' | 'percentage_of_gross_capped' | 'formula';
-  value: number;  // Amount (if fixed) or percentage (if percentage-based)
-  capMinor: string | null;  // Bigint as string, cap amount in minor units
+  code: string;
+  name: string;
+  type: BackendTaxReliefType;
+  value: number;
+  capMinor: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -394,72 +601,26 @@ export interface TaxRelief {
 
 export interface CreateTaxVersionRequest {
   code: string;
-  taxRuleCode: string;  // e.g., 'NIGERIA_PIT'
+  taxRuleCode: string;
   name: string;
-  effectiveDate: string;  // ISO date
-  endDate?: string | null;
-  basis?: 'annual' | 'monthly';
-  notes?: string | null;
+  effectiveDate: string;
+  endDate?: string;
+  basis?: BackendTaxCalculationBasis;
+  notes?: string;
   bands: Array<{
     sequence: number;
-    lowerBoundMinor: string;
-    upperBoundMinor: string | null;
+    lowerBoundMinor: number;
+    upperBoundMinor?: number;
     ratePercent: number;
   }>;
-  reliefs: Array<{
+  reliefs?: Array<{
     code: string;
     name: string;
-    type: 'fixed' | 'percentage' | 'percentage_of_gross_capped' | 'formula';
+    type: BackendTaxReliefType;
     value: number;
-    capMinor?: string | null;
+    capMinor?: number;
     isActive?: boolean;
   }>;
-}
-
-// ============================================================================
-// Worker Pay Elements Types (NEW - Phase 10)
-// ============================================================================
-
-export interface WorkerPayElement {
-  id: string;
-  tenantId: string;
-  workerId: string;
-  payElementId: string;
-  calculationMethod: 'fixed' | 'percentage' | 'formula';
-  amountMinor: string | null;  // Bigint as string, for fixed amounts
-  percentage: number | null;  // For percentage-based
-  formulaOverride: string | null;  // Custom formula for this worker
-  effectiveDate: string;  // ISO date
-  endDate: string | null;  // ISO date
-  status: 'active' | 'inactive' | 'pending' | 'ended';
-  remarks: string | null;
-  createdAt: string;
-  updatedAt: string;
-  // Populated relations (when included)
-  payElement?: BackendPayElement;
-  worker?: BackendWorker;
-}
-
-export interface CreateWorkerPayElementRequest {
-  payElementId: string;
-  calculationMethod: 'fixed' | 'percentage' | 'formula';
-  amountMinor?: string | null;  // Required if fixed
-  percentage?: number | null;  // Required if percentage
-  formulaOverride?: string | null;  // Required if formula
-  effectiveDate: string;  // ISO date
-  endDate?: string | null;
-  remarks?: string | null;
-}
-
-export interface UpdateWorkerPayElementRequest {
-  calculationMethod?: 'fixed' | 'percentage' | 'formula';
-  amountMinor?: string | null;
-  percentage?: number | null;
-  formulaOverride?: string | null;
-  effectiveDate?: string;
-  endDate?: string | null;
-  status?: 'active' | 'inactive';
-  remarks?: string | null;
 }
 
 // ============================================================================
@@ -470,7 +631,7 @@ export interface PaginationParams {
   page?: number;
   limit?: number;
   sortBy?: string;
-  sortDir?: 'ASC' | 'DESC';
+  sortDir?: 'asc' | 'desc';
 }
 
 export interface PaginationMeta {
@@ -478,6 +639,8 @@ export interface PaginationMeta {
   page: number;
   limit: number;
   totalPages: number;
+  hasNextPage: boolean;
+  hasPreviousPage: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -502,10 +665,7 @@ export interface ApiErrorResponse {
   error: {
     code: string;
     message: string;
-    fieldErrors?: Array<{
-      field: string;
-      message: string;
-    }>;
+    fieldErrors?: Record<string, string[]>;
   };
   traceId: string;
   correlationId: string;

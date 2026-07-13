@@ -44,7 +44,7 @@ export const settingsHandlers = [
   http.get('/api/settings/users', ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const tenantUsers = mockUsers
       .filter((u) => u.tenantId === user.tenantId)
       .map(({ password: _pw, ...u }) => ({ ...u, status: 'active' }));
@@ -55,7 +55,7 @@ export const settingsHandlers = [
   http.get('/api/settings/invites', ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const tenantInvites = invites.filter((i) => i.tenantId === user.tenantId);
     // Auto-mark expired
     const now = new Date();
@@ -70,7 +70,7 @@ export const settingsHandlers = [
   http.post('/api/settings/invites', async ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const body = (await request.json()) as { email: string; role: string };
     const expires = new Date();
     expires.setDate(expires.getDate() + 7);
@@ -91,7 +91,7 @@ export const settingsHandlers = [
   http.post('/api/settings/invites/:id/resend', ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const idx = invites.findIndex((i) => i.id === params.id);
     if (idx === -1) {
       return HttpResponse.json(
@@ -110,7 +110,7 @@ export const settingsHandlers = [
   http.patch('/api/settings/users/:id/deactivate', ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     return HttpResponse.json({ success: true, data: { status: 'deactivated' } });
   }),
 
@@ -123,7 +123,7 @@ export const settingsHandlers = [
   http.patch('/api/settings/bank', async ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const body = (await request.json()) as Partial<typeof companyBank>;
     companyBank = { ...companyBank, ...body };
     return HttpResponse.json({ success: true, data: companyBank });
@@ -138,7 +138,7 @@ export const settingsHandlers = [
   http.patch('/api/settings/jurisdictions/:code', async ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'COMPANY_SUPER_ADMIN') return forbidden();
+    if (user.role !== 'tenant_admin') return forbidden();
     const body = (await request.json()) as { active: boolean };
     const updated = jurisdictions.map((j) =>
       j.code === params.code ? { ...j, active: body.active } : j,

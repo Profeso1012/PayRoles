@@ -46,10 +46,11 @@ export default function SADashboard() {
     return <ErrorState message="Failed to load tenants." onRetry={refetch} />;
   }
 
-  const active = tenants.filter((t) => t.status === 'active').length;
-  const suspended = tenants.filter((t) => t.status === 'suspended').length;
-  const onboarding = tenants.filter((t) => !t.setupComplete).length;
-  const recent = [...tenants].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
+  const active = tenants.filter((t: any) => t.status === 'active').length;
+  const suspended = tenants.filter((t: any) => t.status === 'suspended').length;
+  // Real Tenant entity has no setupComplete field - approximate "onboarding" as non-active/suspended.
+  const onboarding = tenants.filter((t: any) => t.status !== 'active' && t.status !== 'suspended').length;
+  const recent = [...tenants].sort((a: any, b: any) => b.createdAt.localeCompare(a.createdAt)).slice(0, 5);
 
   const stats = [
     { label: 'Total Companies', value: tenants.length, icon: Building2, color: 'text-fresh-cash', bg: 'bg-mint-light/40' },

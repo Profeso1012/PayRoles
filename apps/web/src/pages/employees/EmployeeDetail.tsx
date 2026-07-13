@@ -30,17 +30,15 @@ const TABS = [
 const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
   inactive: 'info',
-  on_leave: 'warning',
-  terminated: 'error',
-  exited: 'error',
+  suspended: 'warning',
+  archived: 'error',
 };
 
 const statusLabel: Record<string, string> = {
   active: 'Active',
   inactive: 'Inactive',
-  on_leave: 'On Leave',
-  terminated: 'Terminated',
-  exited: 'Terminated',
+  suspended: 'Suspended',
+  archived: 'Archived',
 };
 
 export default function EmployeeDetail() {
@@ -55,10 +53,11 @@ export default function EmployeeDetail() {
       const mapped = mapWorkerFields(worker, 'toFrontend');
       return {
         ...mapped,
-        status: (mapped.status || '').toLowerCase(),
+        status: mapped.status || 'active',
         createdAt: mapped.createdAt || new Date().toISOString(),
-        // Provide default empty arrays for fields that might not exist
-        bankDetails: [], // Backend doesn't return bank details array in same format
+        // Real Worker entity keeps bank fields flat (bankName/bankAccount/bankRoutingCode),
+        // not a bankDetails[] array - keep the array empty for legacy consumers.
+        bankDetails: [],
       } as Employee;
     },
     enabled: !!id,
@@ -86,16 +85,18 @@ export default function EmployeeDetail() {
         const result = await apiClient<BackendCompensation[]>(
           ENDPOINTS.COMPENSATION.LIST(id!)
         );
-        // Transform backend compensation to frontend format
-        return result.map(comp => ({
+        // Transform backend compensation to frontend format. Real field names:
+        // workerId, amountMinor (bigint string), effectiveDate, expiryDate.
+        return result.map((comp) => ({
           id: comp.id,
-          workerId: comp.workerId,
-          effectiveFrom: comp.effectiveFrom,
-          effectiveTo: comp.effectiveTo,
-          grossSalary: parseInt(comp.baseSalaryMinor) / 100,  // Convert from minor units
+          employeeId: comp.workerId,
+          effectiveFrom: comp.effectiveDate,
+          effectiveTo: comp.expiryDate,
+          grossSalary: parseInt(comp.amountMinor, 10) / 100, // Convert from minor units
           currency: comp.currency,
-          createdAt: comp.createdAt,
-        })) as Compensation[];
+          salaryType: comp.salaryType,
+          payFrequency: comp.payFrequency,
+        })) satisfies Compensation[];
       } catch (error) {
         console.error('Failed to fetch compensations:', error);
         return [];
@@ -189,8 +190,12 @@ export default function EmployeeDetail() {
               <dd className="text-deep-cash">{employee.phone}</dd>
               <dt className="text-cash-green/60">Date of Birth</dt>
               <dd className="text-deep-cash">{formatDate(employee.dateOfBirth)}</dd>
-              <dt className="text-cash-green/60">Gender</dt>
-              <dd className="text-deep-cash capitalize">{employee.gender.replace(/_/g, ' ')}</dd>
+              {employee.gender && (
+                <>
+                  <dt className="text-cash-green/60">Gender</dt>
+                  <dd className="text-deep-cash capitalize">{employee.gender.replace(/_/g, ' ')}</dd>
+                </>
+              )}
               <dt className="text-cash-green/60">National ID</dt>
               <dd className="text-deep-cash font-mono text-xs">
                 {employee.nationalId === '****' ? 'Protected' : employee.nationalId}

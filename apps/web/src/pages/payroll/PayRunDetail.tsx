@@ -23,9 +23,13 @@ const statusVariant: Record<PayRunStatus, 'draft' | 'info' | 'warning' | 'succes
   calculating: 'warning',
   calculated: 'info',
   in_review: 'warning',
+  pending_approval: 'warning',
   approved: 'success',
+  processing: 'warning',
   paid: 'success',
-  posted: 'success',
+  completed: 'success',
+  rejected: 'error',
+  cancelled: 'error',
   reversed: 'error',
   failed: 'error',
 };
@@ -35,9 +39,13 @@ const statusLabel: Record<PayRunStatus, string> = {
   calculating: 'Calculating…',
   calculated: 'Calculated',
   in_review: 'In Review',
+  pending_approval: 'In Review',
   approved: 'Approved',
+  processing: 'Processing',
   paid: 'Paid',
-  posted: 'Posted',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
   reversed: 'Reversed',
   failed: 'Failed',
 };
@@ -285,7 +293,7 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      {run.status === 'calculated' && (role === 'PAYROLL_MANAGER' || role === 'COMPANY_SUPER_ADMIN') && (
+      {run.status === 'calculated' && (role === 'payroll_manager' || role === 'payroll_officer' || role === 'tenant_admin' || role === 'super_admin') && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
@@ -309,7 +317,7 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      {run.status === 'in_review' && role === 'FINANCE_DIRECTOR' && (
+      {run.status === 'in_review' && role === 'finance_manager' && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
@@ -343,7 +351,7 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      {run.status === 'in_review' && role !== 'FINANCE_DIRECTOR' && (
+      {run.status === 'in_review' && role !== 'finance_manager' && (
         <div className="bg-white rounded-xl border border-cash-gold/30 p-4 mb-5 flex items-center gap-3">
           <Clock size={16} className="text-cash-gold shrink-0" />
           <p className="text-sm text-cash-green/80">

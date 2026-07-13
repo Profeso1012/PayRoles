@@ -22,7 +22,7 @@ export default function BankDetails() {
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  const canEdit = role === 'COMPANY_SUPER_ADMIN';
+  const canEdit = role === 'tenant_admin' || role === 'super_admin';
 
   const [form, setForm] = useState<BankDetailsData>({
     bankName: '',

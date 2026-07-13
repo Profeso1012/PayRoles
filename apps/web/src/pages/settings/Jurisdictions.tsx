@@ -31,7 +31,7 @@ export default function Jurisdictions() {
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  const canEdit = role === 'COMPANY_SUPER_ADMIN';
+  const canEdit = role === 'tenant_admin' || role === 'super_admin';
 
   const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
   const [togglingCode, setTogglingCode] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, ArrowRight, ExternalLink } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapPayrollStatus, minorToMajor } from '@/lib/api/transforms';
 import { formatPeriod } from '@/lib/utils';
@@ -40,10 +40,10 @@ async function buildFinanceDashboard(): Promise<FinanceDashboardData> {
   // Build from payroll runs API
   const params = buildPaginationParams({ page: 1, limit: 50 });
   params.set('sortBy', 'createdAt');
-  params.set('sortDir', 'DESC');
+  params.set('sortDir', 'desc');
   
-  const response = await apiClient<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
-  const { data: runs } = transformPaginatedResponse(response.data || response, response.meta);
+  const response = await apiClientWithMeta<any[]>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+  const { data: runs } = transformPaginatedResponse<any>(response.data, response.meta);
 
   // Calculate stats
   const now = new Date();

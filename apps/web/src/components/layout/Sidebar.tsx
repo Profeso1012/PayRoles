@@ -18,102 +18,133 @@ interface NavItem {
   children?: NavItem[];
 }
 
+// Nav trees per real backend Role (roles.enum.ts). Officer/manager pairs and
+// auditor/read_only share their manager's nav today - the backend enforces
+// the actual write/read boundary per Permission; a 403 surfaces as a toast.
+const PLATFORM_ADMIN_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+  { label: 'Companies', path: '/admin/companies', icon: Building2 },
+];
+
+const COMPANY_ADMIN_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  {
+    label: 'Organisation', path: '/organisation', icon: FolderTree,
+    children: [
+      { label: 'Overview', path: '/organisation', icon: FolderTree },
+      { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
+      // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
+    ],
+  },
+  { label: 'Employees', path: '/employees', icon: Users },
+  {
+    label: 'Payroll', path: '/payroll', icon: Calculator,
+    children: [
+      { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
+      { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
+    ],
+  },
+  { label: 'Payments', path: '/payments', icon: CreditCard },
+  {
+    label: 'Reports', path: '/reports', icon: BarChart3,
+    children: [
+      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
+      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
+      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
+    ],
+  },
+  {
+    label: 'Settings', path: '/settings', icon: Settings,
+    children: [
+      { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
+      { label: 'Users & Roles', path: '/settings/users', icon: Users },
+      { label: 'Bank Details', path: '/settings/bank', icon: Landmark },
+      { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
+    ],
+  },
+  { label: 'Audit Logs', path: '/audit', icon: History },
+  { label: 'Notifications', path: '/notifications', icon: Bell },
+];
+
+const HR_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  {
+    label: 'Organisation', path: '/organisation', icon: FolderTree,
+    children: [
+      { label: 'Overview', path: '/organisation', icon: FolderTree },
+      { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
+      // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
+    ],
+  },
+  { label: 'Employees', path: '/employees', icon: Users },
+  {
+    label: 'Reports', path: '/reports', icon: BarChart3,
+    children: [
+      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
+      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
+      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
+    ],
+  },
+];
+
+const PAYROLL_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
+  { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
+  {
+    label: 'Reports', path: '/reports', icon: BarChart3,
+    children: [
+      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
+      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
+      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
+    ],
+  },
+];
+
+const FINANCE_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Employees', path: '/employees', icon: Users },
+  { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
+  { label: 'Payments', path: '/payments', icon: CreditCard },
+  {
+    label: 'Reports', path: '/reports', icon: BarChart3,
+    children: [
+      { label: 'Payroll Register', path: '/reports/register', icon: FileText },
+      { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
+      { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
+    ],
+  },
+];
+
+const AUDITOR_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Audit Logs', path: '/audit', icon: History },
+];
+
+const READ_ONLY_NAV: NavItem[] = [
+  { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
+  { label: 'Employees', path: '/employees', icon: Users },
+  { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
+];
+
+const EMPLOYEE_NAV: NavItem[] = [
+  { label: 'My Payslips', path: '/my-payslips', icon: Receipt },
+  { label: 'My Profile', path: '/my-profile', icon: User },
+  { label: 'My Bank Details', path: '/my-bank-details', icon: Landmark },
+];
+
 const NAV_MAP: Record<UserRole, NavItem[]> = {
-  PLATFORM_ADMIN: [
-    { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
-    { label: 'Companies', path: '/admin/companies', icon: Building2 },
-  ],
-  COMPANY_SUPER_ADMIN: [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    {
-      label: 'Organisation', path: '/organisation', icon: FolderTree,
-      children: [
-        { label: 'Overview', path: '/organisation', icon: FolderTree },
-        { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
-        // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
-      ],
-    },
-    { label: 'Employees', path: '/employees', icon: Users },
-    {
-      label: 'Payroll', path: '/payroll', icon: Calculator,
-      children: [
-        { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
-        { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
-      ],
-    },
-    { label: 'Payments', path: '/payments', icon: CreditCard },
-    {
-      label: 'Reports', path: '/reports', icon: BarChart3,
-      children: [
-        { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-        { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-        { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-      ],
-    },
-    {
-      label: 'Settings', path: '/settings', icon: Settings,
-      children: [
-        { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
-        { label: 'Users & Roles', path: '/settings/users', icon: Users },
-        { label: 'Bank Details', path: '/settings/bank', icon: Landmark },
-        { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
-      ],
-    },
-    { label: 'Audit Logs', path: '/audit', icon: History },
-    { label: 'Notifications', path: '/notifications', icon: Bell },
-  ],
-  HR_MANAGER: [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    {
-      label: 'Organisation', path: '/organisation', icon: FolderTree,
-      children: [
-        { label: 'Overview', path: '/organisation', icon: FolderTree },
-        { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
-        // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
-      ],
-    },
-    { label: 'Employees', path: '/employees', icon: Users },
-    {
-      label: 'Reports', path: '/reports', icon: BarChart3,
-      children: [
-        { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-        { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-        { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-      ],
-    },
-  ],
-  PAYROLL_MANAGER: [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
-    { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
-    {
-      label: 'Reports', path: '/reports', icon: BarChart3,
-      children: [
-        { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-        { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-        { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-      ],
-    },
-  ],
-  FINANCE_DIRECTOR: [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Employees', path: '/employees', icon: Users },
-    { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
-    { label: 'Payments', path: '/payments', icon: CreditCard },
-    {
-      label: 'Reports', path: '/reports', icon: BarChart3,
-      children: [
-        { label: 'Payroll Register', path: '/reports/register', icon: FileText },
-        { label: 'Statutory Reports', path: '/reports/statutory', icon: Shield },
-        { label: 'Cost Summary', path: '/reports/cost', icon: TrendingUp },
-      ],
-    },
-  ],
-  EMPLOYEE: [
-    { label: 'My Payslips', path: '/my-payslips', icon: Receipt },
-    { label: 'My Profile', path: '/my-profile', icon: User },
-    { label: 'My Bank Details', path: '/my-bank-details', icon: Landmark },
-  ],
+  PLATFORM_ADMIN: PLATFORM_ADMIN_NAV,
+  super_admin: COMPANY_ADMIN_NAV,
+  tenant_admin: COMPANY_ADMIN_NAV,
+  hr_manager: HR_NAV,
+  hr_officer: HR_NAV,
+  payroll_manager: PAYROLL_NAV,
+  payroll_officer: PAYROLL_NAV,
+  finance_manager: FINANCE_NAV,
+  auditor: AUDITOR_NAV,
+  read_only: READ_ONLY_NAV,
+  employee_self_service: EMPLOYEE_NAV,
 };
 
 interface NavItemProps {
@@ -219,7 +250,7 @@ export default function Sidebar() {
 
           {/* Nav section label */}
           <p className="px-2 mb-2 text-[10px] font-bold uppercase tracking-[0.12em] text-cash-green/60 border-b-2 border-fresh-cash pb-2">
-            {user?.role === 'EMPLOYEE' ? 'My Portal' : user?.role === 'PLATFORM_ADMIN' ? 'Admin Portal' : 'Workspace'}
+            {user?.role === 'employee_self_service' ? 'My Portal' : user?.role === 'PLATFORM_ADMIN' ? 'Admin Portal' : 'Workspace'}
           </p>
 
           <ul className="flex flex-col gap-0.5">

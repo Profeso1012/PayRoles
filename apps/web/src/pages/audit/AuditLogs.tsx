@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Shield, Search, Calendar, User, FileText } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -72,7 +72,11 @@ const ACTION_OPTIONS = [
 
 export default function AuditLogs() {
   const role = useAuthStore((s) => s.user?.role);
-  const canView = role === 'COMPANY_SUPER_ADMIN' || role === 'FINANCE_DIRECTOR';
+  const canView =
+    role === 'tenant_admin' ||
+    role === 'super_admin' ||
+    role === 'finance_manager' ||
+    role === 'auditor';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -80,7 +84,12 @@ export default function AuditLogs() {
   const [actionFilter, setActionFilter] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery<{
+    data: AuditLog[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }>({
     queryKey: ['audit-logs', page, search, entityFilter, actionFilter],
     queryFn: async () => {
       if (!USE_REAL_API) {
@@ -99,8 +108,8 @@ export default function AuditLogs() {
         action: actionFilter,
       });
 
-      const response = await apiClient<any>(`${ENDPOINTS.AUDIT.LIST}?${params}`);
-      return transformPaginatedResponse(response.data || response, response.meta);
+      const response = await apiClientWithMeta<AuditLog[]>(`${ENDPOINTS.AUDIT.LIST}?${params}`);
+      return transformPaginatedResponse(response.data, response.meta);
     },
     enabled: canView,
   });
@@ -305,7 +314,8 @@ export default function AuditLogs() {
           <div style={{ padding: 'clamp(0.75rem, 2vw, 1rem)', borderTop: '1px solid #CDEFD7' }}>
             <Pagination
               page={page}
-              totalPages={totalPages}
+              pageSize={data?.pageSize || 20}
+              total={data?.total || 0}
               onChange={setPage}
             />
           </div>

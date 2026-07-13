@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
-import { apiClient } from '@/lib/api';
+import { apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
-import { transformPaginatedResponse, mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
+import { transformPaginatedResponse, mapPayrollRunFields, mapPayrollStatus } from '@/lib/api/transforms';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
@@ -34,9 +34,13 @@ const statusVariantMap: Record<PayRunStatus, 'draft' | 'info' | 'warning' | 'suc
   calculating: 'warning',
   calculated: 'info',
   in_review: 'warning',
+  pending_approval: 'warning',
   approved: 'success',
+  processing: 'warning',
   paid: 'success',
-  posted: 'success',
+  completed: 'success',
+  rejected: 'error',
+  cancelled: 'error',
   reversed: 'error',
   failed: 'error',
 };
@@ -46,9 +50,13 @@ const statusLabelMap: Record<PayRunStatus, string> = {
   calculating: 'Processing',
   calculated: 'Calculated',
   in_review: 'In Review',
+  pending_approval: 'In Review',
   approved: 'Approved',
+  processing: 'Processing',
   paid: 'Completed',
-  posted: 'Posted',
+  completed: 'Completed',
+  rejected: 'Rejected',
+  cancelled: 'Cancelled',
   reversed: 'Reversed',
   failed: 'Failed',
 };
@@ -65,7 +73,11 @@ function formatPeriod(periodStart?: string, periodEnd?: string, period?: string)
 export default function PayRunList() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.user?.role);
-  const canCreate = role === 'PAYROLL_MANAGER' || role === 'COMPANY_SUPER_ADMIN';
+  const canCreate =
+    role === 'payroll_manager' ||
+    role === 'payroll_officer' ||
+    role === 'tenant_admin' ||
+    role === 'super_admin';
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
@@ -73,15 +85,15 @@ export default function PayRunList() {
   const { data, isLoading, isError } = useQuery<PaginatedResult<PayRun>>({
     queryKey: ['pay-runs-list', page, status],
     queryFn: async () => {
-      const params = buildPaginationParams({ page, limit: 20, sortBy: 'createdAt', sortDir: 'DESC' });
+      const params = buildPaginationParams({ page, limit: 20, sortBy: 'createdAt', sortDir: 'desc' });
       if (status) {
-        addFilterParams(params, { status });
+        addFilterParams(params, { status: mapPayrollStatus(status, 'toBackend') });
       }
       
-      const response = await apiClient<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
-      
+      const response = await apiClientWithMeta<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
+
       // Transform response
-      const paginatedData = transformPaginatedResponse(response.data || response, response.meta);
+      const paginatedData = transformPaginatedResponse(response.data, response.meta);
       
       // Transform each payroll run from backend format to frontend format
       const transformedRuns = paginatedData.data.map((run: any) => {

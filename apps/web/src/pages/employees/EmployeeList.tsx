@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { apiClient } from '@/lib/api';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapWorkerFields } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -16,9 +16,12 @@ import Avatar from '@/components/ui/Avatar';
 import type { Employee } from '@contracts/types/employee';
 import type { BackendWorker } from '@/lib/api/types';
 
+// Matches transformPaginatedResponse's actual (flat) return shape - see lib/api/transforms.ts.
 interface PaginatedResult<T> {
   data: T[];
-  meta: { page: number; pageSize: number; total: number };
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 interface LegalEntity {
@@ -26,34 +29,46 @@ interface LegalEntity {
   name: string;
 }
 
+// Real backend Status enum values (common.enum.ts): active | inactive | suspended | archived.
+// There is no on_leave/terminated status on the wire - "Terminated" below is a derived
+// display label for status === 'inactive' with a terminationDate set.
 const statusOptions = [
   { value: '', label: 'All statuses' },
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
-  { value: 'on_leave', label: 'On Leave' },
-  { value: 'terminated', label: 'Terminated' },
+  { value: 'suspended', label: 'Suspended' },
+  { value: 'archived', label: 'Archived' },
 ];
 
 const statusVariantMap: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
   inactive: 'info',
-  on_leave: 'warning',
-  terminated: 'error',
-  exited: 'error',  // Keep for backward compatibility
+  suspended: 'warning',
+  archived: 'error',
 };
 
 const statusLabelMap: Record<string, string> = {
   active: 'Active',
   inactive: 'Inactive',
-  on_leave: 'On Leave',
-  terminated: 'Terminated',
-  exited: 'Terminated',  // Keep for backward compatibility
+  suspended: 'Suspended',
+  archived: 'Archived',
 };
+
+function displayStatus(row: Employee): { key: string; label: string } {
+  if (row.status === 'inactive' && row.terminationDate) {
+    return { key: 'terminated', label: 'Terminated' };
+  }
+  return { key: row.status, label: statusLabelMap[row.status] ?? row.status };
+}
 
 export default function EmployeeList() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.user?.role);
-  const canAdd = role === 'HR_MANAGER' || role === 'COMPANY_SUPER_ADMIN';
+  const canAdd =
+    role === 'hr_manager' ||
+    role === 'hr_officer' ||
+    role === 'tenant_admin' ||
+    role === 'super_admin';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -91,7 +106,7 @@ export default function EmployeeList() {
     sortDir: 'desc',
   });
   if (search) params.set('search', search);
-  if (status) params.set('status', status.toUpperCase());  // Backend expects uppercase
+  if (status) params.set('status', status);  // Backend Status enum is lowercase - send as-is
   if (legalEntityId) params.set('legalEntityId', legalEntityId);
 
   const { data, isLoading, isError } = useQuery<PaginatedResult<Employee>>({
@@ -99,26 +114,25 @@ export default function EmployeeList() {
     queryFn: async () => {
       try {
         // Call workers endpoint (backend)
-        const response = await apiClient<BackendWorker[]>(
+        const { data: response, meta } = await apiClientWithMeta<BackendWorker[]>(
           `${ENDPOINTS.WORKERS.LIST}?${params}`
         );
 
         // Transform backend response to match frontend structure
         const workers = Array.isArray(response) ? response : [];
-        
+
         // Map worker fields to employee format (handles encrypted fields, etc.)
         const employees = workers.map((worker) => {
           const mapped = mapWorkerFields(worker, 'toFrontend');
           return {
             ...mapped,
-            // Ensure status is lowercase for frontend
-            status: (mapped.status || '').toLowerCase(),
+            status: mapped.status || 'active',
             createdAt: mapped.createdAt || new Date().toISOString(),
           } as Employee;
         });
 
         // Transform pagination
-        return transformPaginatedResponse(employees, (response as any).meta);
+        return transformPaginatedResponse(employees, meta);
       } catch (error) {
         console.error('Failed to fetch workers:', error);
         throw error;
@@ -165,12 +179,10 @@ export default function EmployeeList() {
     {
       key: 'status',
       header: 'Status',
-      render: (row: Employee) => (
-        <Badge
-          variant={statusVariantMap[row.status] ?? 'info'}
-          label={statusLabelMap[row.status] ?? row.status}
-        />
-      ),
+      render: (row: Employee) => {
+        const { key, label } = displayStatus(row);
+        return <Badge variant={statusVariantMap[key] ?? 'info'} label={label} />;
+      },
     },
   ];
 
@@ -233,12 +245,12 @@ export default function EmployeeList() {
         data={data?.data ?? []}
         isLoading={isLoading}
         isError={isError}
-        pagination={data?.meta}
+        pagination={data}
         onPageChange={setPage}
         onRowClick={(row) => navigate(`/employees/${row.id}`)}
         rowKey={(row) => row.id}
         emptyMessage="No employees found"
-        rowClassName={(row) => (row.status === 'terminated' || row.status === 'exited' ? 'opacity-60' : '')}
+        rowClassName={(row) => (row.status === 'inactive' || row.status === 'archived' ? 'opacity-60' : '')}
       />
     </div>
   );

@@ -1,20 +1,36 @@
+// Matches the real backend PayrollRunStatus enum 1:1, plus the frontend's
+// friendlier 'in_review'/'paid' aliases (see lib/api/transforms.ts mapPayrollStatus).
+// There is no 'posted' state on the backend.
 export type PayRunStatus =
   | 'draft'
   | 'calculating'
   | 'calculated'
   | 'in_review'
+  | 'pending_approval'
   | 'approved'
+  | 'processing'
   | 'paid'
-  | 'posted'
+  | 'completed'
+  | 'rejected'
+  | 'cancelled'
   | 'reversed'
   | 'failed';
 
 export interface PayRun {
   id: string;
   tenantId: string;
-  payGroupId: string;
-  payGroupName: string;
+  // The backend has no pay-group concept - runs are scoped directly to a
+  // legal entity (legalEntityId) with a free-text `name`. payGroupId/payGroupName
+  // are kept as optional UI-display fallbacks (pages often mirror `name` into
+  // payGroupName since there is no separate pay group to show).
+  legalEntityId?: string;
+  name?: string;
+  payGroupId?: string;
+  payGroupName?: string;
   period: string;
+  periodStart?: string;
+  periodEnd?: string;
+  payDate?: string;
   status: PayRunStatus;
   employeeCount: number;
   totalGross: number;
@@ -56,12 +72,14 @@ export interface Payslip {
   employeeName: string;
   employeeNumber: string;
   period: string;
-  payGroupName: string;
+  name?: string;
+  payGroupName?: string;
   elements: PayElement[];
   grossPay: number;
   totalDeductions: number;
   netPay: number;
   currency: string;
-  generatedAt: string;
-  issuedAt: string;
+  createdAt?: string;
+  generatedAt?: string;
+  issuedAt?: string;
 }

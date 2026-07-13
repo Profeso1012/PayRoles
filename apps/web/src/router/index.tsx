@@ -24,12 +24,16 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 
 // Public pages
 const Landing = lazy(() => import('@/pages/public/Landing'));
-const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
+// Deprecated: RequestAccess (backend has no company-requests endpoint at all)
+// const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
 const Login = lazy(() => import('@/pages/auth/Login'));
 const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
-const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
-const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
-const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
+// Deprecated: ForgotPassword, ResetPassword, AcceptInvite - the real
+// auth.controller.ts only exposes login/refresh/logout/me, no
+// forgot-password/reset-password/accept-invite routes exist on the backend.
+// const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+// const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
+// const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
 
 // Layout shells
 const AppShell = lazy(() => import('@/components/layout/AppShell'));
@@ -106,16 +110,16 @@ function DashboardRouter() {
   const role = useAuthStore((s) => s.user?.role);
 
   if (role === 'PLATFORM_ADMIN') return <Navigate to={PATHS.ADMIN} replace />;
-  if (role === 'EMPLOYEE') return <Navigate to={PATHS.MY_PAYSLIPS} replace />;
-  if (role === 'FINANCE_DIRECTOR') return w(FinanceDashboard);
-  if (role === 'PAYROLL_MANAGER') return w(PayrollDashboard);
+  if (role === 'employee_self_service') return <Navigate to={PATHS.MY_PAYSLIPS} replace />;
+  if (role === 'finance_manager') return w(FinanceDashboard);
+  if (role === 'payroll_manager' || role === 'payroll_officer') return w(PayrollDashboard);
   return w(HRDashboard);
 }
 
 export const router = createBrowserRouter([
   // Public
   { path: PATHS.HOME, element: <Suspense fallback={<Loading />}><Landing /></Suspense> },
-  { path: PATHS.REQUEST_ACCESS, element: <Suspense fallback={<Loading />}><RequestAccess /></Suspense> },
+  // Deprecated: /request-access (no backend endpoint for company access requests)
   { path: PATHS.UNAUTHORIZED, element: <Unauthorized /> },
 
   // Auth screens (AuthLayout wrapper)
@@ -124,9 +128,7 @@ export const router = createBrowserRouter([
     children: [
       { path: PATHS.LOGIN, element: w(Login) },
       { path: '/platform-login', element: w(PlatformLogin) },
-      { path: PATHS.FORGOT_PASSWORD, element: w(ForgotPassword) },
-      { path: PATHS.RESET_PASSWORD, element: w(ResetPassword) },
-      { path: PATHS.ACCEPT_INVITE, element: w(AcceptInvite) },
+      // Deprecated: forgot-password, reset-password, accept-invite (no backend routes)
     ],
   },
 
@@ -152,7 +154,7 @@ export const router = createBrowserRouter([
     path: PATHS.ONBOARDING,
     element: (
       <AuthGuard>
-        <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN']}>
+        <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}>
           <Suspense fallback={<Loading />}><CompanySetup /></Suspense>
         </RoleGuard>
       </AuthGuard>
@@ -172,7 +174,7 @@ export const router = createBrowserRouter([
       // Organisation
       {
         path: 'organisation',
-        element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'HR_MANAGER']}><Outlet /></RoleGuard>,
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer']}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(OrgOverview) },
           { path: 'legal-entities', element: w(LegalEntities) },
@@ -187,7 +189,7 @@ export const router = createBrowserRouter([
       // Employees
       {
         path: 'employees',
-        element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'HR_MANAGER', 'FINANCE_DIRECTOR']}><Outlet /></RoleGuard>,
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'finance_manager']}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(EmployeeList) },
           { path: 'new', element: <OrgGuard requirePayGroups>{w(AddEmployee)}</OrgGuard> },
@@ -199,7 +201,7 @@ export const router = createBrowserRouter([
       // Payroll
       {
         path: 'payroll',
-        element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'PAYROLL_MANAGER', 'FINANCE_DIRECTOR']}><Outlet /></RoleGuard>,
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager']}><Outlet /></RoleGuard>,
         children: [
           { path: 'pay-elements', element: w(PayElements) },
           { path: 'runs', element: w(PayRunList) },
@@ -210,12 +212,12 @@ export const router = createBrowserRouter([
       },
 
       // Finance
-      { path: 'payments', element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'FINANCE_DIRECTOR']}>{w(PaymentFiles)}</RoleGuard> },
+      { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(PaymentFiles)}</RoleGuard> },
 
       // Reports
       {
         path: 'reports',
-        element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'HR_MANAGER', 'PAYROLL_MANAGER', 'FINANCE_DIRECTOR']}><Outlet /></RoleGuard>,
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'finance_manager']}><Outlet /></RoleGuard>,
         children: [
           { path: 'register', element: w(PayrollRegister) },
           { path: 'statutory', element: w(StatutoryReports) },
@@ -226,7 +228,7 @@ export const router = createBrowserRouter([
       // Settings
       {
         path: 'settings',
-        element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN']}><Outlet /></RoleGuard>,
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}><Outlet /></RoleGuard>,
         children: [
           { path: 'profile', element: w(CompanyProfile) },
           { path: 'users', element: w(UsersAndRoles) },
@@ -236,13 +238,13 @@ export const router = createBrowserRouter([
       },
 
       // Audit & Notifications
-      { path: 'audit', element: <RoleGuard allowedRoles={['COMPANY_SUPER_ADMIN', 'FINANCE_DIRECTOR']}>{w(AuditLogs)}</RoleGuard> },
+      { path: 'audit', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'auditor']}>{w(AuditLogs)}</RoleGuard> },
       { path: 'notifications', element: w(Notifications) },
 
       // Employee self-service
-      { path: 'my-payslips', element: <RoleGuard allowedRoles={['EMPLOYEE']}>{w(MyPayslips)}</RoleGuard> },
-      { path: 'my-profile', element: <RoleGuard allowedRoles={['EMPLOYEE']}>{w(MyProfile)}</RoleGuard> },
-      { path: 'my-bank-details', element: <RoleGuard allowedRoles={['EMPLOYEE']}>{w(MyBankDetails)}</RoleGuard> },
+      { path: 'my-payslips', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyPayslips)}</RoleGuard> },
+      { path: 'my-profile', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyProfile)}</RoleGuard> },
+      { path: 'my-bank-details', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyBankDetails)}</RoleGuard> },
     ],
   },
 ]);

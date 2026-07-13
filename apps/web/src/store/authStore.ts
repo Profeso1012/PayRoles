@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthUser, Permission } from '@contracts/types/auth';
+import type { AuthUser, UserRole } from '@contracts/types/auth';
 import { parseTokenExpiry } from '@/lib/api/transforms';
 
 interface AuthState {
@@ -16,7 +16,12 @@ interface AuthState {
     expiresIn?: string;
   }) => void;
   clearSession: () => void;
-  hasPermission: (permission: Permission) => boolean;
+  /**
+   * Coarse role-based check only - real permission enforcement is server-side
+   * (see AuthUser doc comment in @contracts/types/auth). Useful for hiding UI,
+   * never sufficient on its own for authorization.
+   */
+  hasRole: (...roles: UserRole[]) => boolean;
   isTokenExpired: () => boolean;
 }
 
@@ -57,10 +62,10 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: false,
         }),
 
-      hasPermission: (permission) => {
+      hasRole: (...roles) => {
         const { user } = get();
         if (!user) return false;
-        return user.permissions.includes(permission);
+        return roles.includes(user.role);
       },
 
       isTokenExpired: () => {

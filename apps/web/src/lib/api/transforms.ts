@@ -100,29 +100,49 @@ export function formatCurrency(amount: number, currency: string = 'NGN'): string
 
 /**
  * Payroll Run Status Mapping
- * Mock: 'draft' | 'calculating' | 'calculated' | 'in_review' | 'approved' | 'paid' | 'posted' | 'reversed' | 'failed'
- * Backend: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED'
+ *
+ * Backend enum (e_payroll/src/common/enums/common.enum.ts PayrollRunStatus) is
+ * lowercase snake_case: 'draft' | 'calculating' | 'calculated' |
+ * 'pending_approval' | 'approved' | 'processing' | 'completed' | 'failed' |
+ * 'rejected' | 'cancelled' | 'reversed'.
+ *
+ * The frontend keeps two friendlier aliases for display/filtering
+ * ('in_review' for 'pending_approval', 'paid' for 'completed') and otherwise
+ * uses the real backend values 1:1. Previous versions of this map sent
+ * UPPERCASE values ('DRAFT', 'PENDING_APPROVAL', ...) which do not exist on
+ * the backend's enum and were rejected with a 400 by @IsEnum(PayrollRunStatus).
  */
 export const PAYROLL_STATUS_MAP = {
-  // Frontend (mock) → Backend
+  // Frontend → Backend
   toBackend: {
-    'draft': 'DRAFT',
-    'in_review': 'PENDING_APPROVAL',
-    'approved': 'APPROVED',
-    'calculating': 'PROCESSING',
-    'processed': 'PROCESSING',
-    'paid': 'COMPLETED',
-    'completed': 'COMPLETED',
+    'draft': 'draft',
+    'calculating': 'calculating',
+    'calculated': 'calculated',
+    'in_review': 'pending_approval',
+    'pending_approval': 'pending_approval',
+    'approved': 'approved',
+    'processing': 'processing',
+    'paid': 'completed',
+    'completed': 'completed',
+    'rejected': 'rejected',
+    'cancelled': 'cancelled',
+    'reversed': 'reversed',
+    'failed': 'failed',
   } as Record<string, string>,
-  
+
   // Backend → Frontend (for display)
   toFrontend: {
-    'DRAFT': 'draft',
-    'PENDING_APPROVAL': 'in_review',
-    'APPROVED': 'approved',
-    'PROCESSING': 'calculating',
-    'COMPLETED': 'paid',
-    'REJECTED': 'rejected',
+    'draft': 'draft',
+    'calculating': 'calculating',
+    'calculated': 'calculated',
+    'pending_approval': 'in_review',
+    'approved': 'approved',
+    'processing': 'processing',
+    'completed': 'paid',
+    'rejected': 'rejected',
+    'cancelled': 'cancelled',
+    'reversed': 'reversed',
+    'failed': 'failed',
   } as Record<string, string>,
 };
 
@@ -132,21 +152,28 @@ export function mapPayrollStatus(status: string, direction: 'toBackend' | 'toFro
 }
 
 /**
- * Worker/Employee Status Mapping (both use same values, but just in case)
+ * Worker/Employee Status Mapping
+ *
+ * Backend enum (common.enum.ts Status) is lowercase: 'active' | 'inactive' |
+ * 'suspended' | 'archived'. There is no 'on_leave' or 'terminated' value on
+ * the backend — PATCH /workers/:id/terminate just sets status to 'inactive'
+ * (see worker.service.ts#terminate) and populates terminationDate. Treat
+ * "terminated" as a frontend-only derived label (status === 'inactive' with a
+ * terminationDate set), not a distinct wire value.
  */
 export const WORKER_STATUS_MAP = {
   toBackend: {
-    'active': 'ACTIVE',
-    'inactive': 'INACTIVE',
-    'on_leave': 'ON_LEAVE',
-    'terminated': 'TERMINATED',
+    'active': 'active',
+    'inactive': 'inactive',
+    'suspended': 'suspended',
+    'archived': 'archived',
   } as Record<string, string>,
-  
+
   toFrontend: {
-    'ACTIVE': 'active',
-    'INACTIVE': 'inactive',
-    'ON_LEAVE': 'on_leave',
-    'TERMINATED': 'terminated',
+    'active': 'active',
+    'inactive': 'inactive',
+    'suspended': 'suspended',
+    'archived': 'archived',
   } as Record<string, string>,
 };
 
@@ -187,23 +214,16 @@ export function mapWorkerFields<T extends Record<string, any>>(
   direction: 'toBackend' | 'toFrontend'
 ): any {
   if (!USE_REAL_API) return data;
-  
+
   if (direction === 'toBackend') {
-    // Frontend → Backend
-    const mapped: any = { ...data };
-    
-    // National ID and Bank Account are encrypted in backend
-    if (mapped.nationalId !== undefined) {
-      mapped.nationalIdEncrypted = mapped.nationalId;
-      delete mapped.nationalId;
-    }
-    
-    if (mapped.bankAccount !== undefined) {
-      mapped.bankAccountEncrypted = mapped.bankAccount;
-      delete mapped.bankAccount;
-    }
-    
-    return mapped;
+    // Frontend → Backend: CreateWorkerDto/UpdateWorkerDto declare plain
+    // `nationalId`/`bankAccount` fields (the backend encrypts them at rest
+    // internally as nationalIdEncrypted/bankAccountEncrypted columns, but
+    // that is NOT the request field name). Do NOT rename these before
+    // sending - the previous version renamed nationalId -> nationalIdEncrypted
+    // here, which the DTO's `forbidNonWhitelisted: true` validation rejects
+    // as an unknown field while silently dropping the real value.
+    return { ...data };
   } else {
     // Backend → Frontend
     const mapped: any = { ...data };

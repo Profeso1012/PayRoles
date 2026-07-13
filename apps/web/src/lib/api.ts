@@ -24,7 +24,7 @@ let refreshPromise: Promise<string> | null = null;
  */
 async function refreshAccessToken(): Promise<string> {
   const { refreshToken, setSession, clearSession } = useAuthStore.getState();
-  
+
   if (!refreshToken) {
     throw new ApiError(401, 'No refresh token available');
   }
@@ -75,10 +75,20 @@ async function refreshAccessToken(): Promise<string> {
   return refreshPromise;
 }
 
-export async function apiClient<T>(
+interface EnvelopeResult<T> {
+  data: T;
+  meta?: { total: number; page: number; limit: number; totalPages: number };
+}
+
+/**
+ * Shared fetch + 401/refresh-retry logic. Returns the full parsed envelope
+ * (data + meta) - apiClient()/apiClientWithMeta() below just decide how much
+ * of it to hand back to the caller.
+ */
+async function request<T>(
   path: string,
   options?: RequestInit & { skipAuthRedirect?: boolean },
-): Promise<T> {
+): Promise<EnvelopeResult<T>> {
   const { accessToken, clearSession } = useAuthStore.getState();
 
   const headers: Record<string, string> = {
@@ -105,7 +115,7 @@ export async function apiClient<T>(
     try {
       // Attempt to refresh the token
       const newAccessToken = await refreshAccessToken();
-      
+
       // Retry the original request with new token
       headers['Authorization'] = `Bearer ${newAccessToken}`;
       response = await fetch(`${BASE_URL}${path}`, {
@@ -139,9 +149,31 @@ export async function apiClient<T>(
     throw new ApiError(response.status, message, json);
   }
 
-  // Extract data from response envelope
-  const { data } = extractResponseData<T>(json);
+  return extractResponseData<T>(json);
+}
+
+export async function apiClient<T>(
+  path: string,
+  options?: RequestInit & { skipAuthRedirect?: boolean },
+): Promise<T> {
+  const { data } = await request<T>(path, options);
   return data;
+}
+
+/**
+ * Like apiClient, but also returns the envelope's pagination `meta`.
+ *
+ * apiClient() only returns `.data` and silently drops `.meta` - fine for
+ * detail/create/update calls, but every paginated list endpoint's real
+ * `{ total, page, limit, totalPages, ... }` meta was being lost this way
+ * (callers were reading a non-existent `.meta` property off a plain array).
+ * Use this for any list query that needs true pagination totals.
+ */
+export async function apiClientWithMeta<T>(
+  path: string,
+  options?: RequestInit & { skipAuthRedirect?: boolean },
+): Promise<EnvelopeResult<T>> {
+  return request<T>(path, options);
 }
 
 export { BASE_URL };

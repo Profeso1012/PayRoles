@@ -62,11 +62,13 @@ const genderOptions = [
   { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
+// Real backend EmploymentType enum (common.enum.ts) is lowercase snake_case.
 const employmentTypeOptions = [
-  { value: 'FULL_TIME', label: 'Full Time' },
-  { value: 'PART_TIME', label: 'Part Time' },
-  { value: 'CONTRACT', label: 'Contract' },
-  { value: 'INTERN', label: 'Intern' },
+  { value: 'full_time', label: 'Full Time' },
+  { value: 'part_time', label: 'Part Time' },
+  { value: 'contract', label: 'Contract' },
+  { value: 'temporary', label: 'Temporary' },
+  { value: 'intern', label: 'Intern' },
 ];
 
 export default function AddEmployee() {
@@ -84,7 +86,7 @@ export default function AddEmployee() {
     position: '',
     department: '',
     legalEntityId: '',
-    employmentType: 'FULL_TIME',
+    employmentType: 'full_time',
     hireDate: '',
   });
 
@@ -110,36 +112,40 @@ export default function AddEmployee() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // CreateWorkerDto (worker.dto.ts) has no `gender` field at all - the
+      // real backend does not whitelist it, so it must not be sent.
+      // nationalId/bankAccount are sent plain (backend encrypts at rest);
+      // there is no `*Encrypted` request field.
       const payload = {
         employeeNumber: employment.employeeNumber,
         firstName: personal.firstName,
         lastName: personal.lastName,
-        email: personal.email || null,
-        phone: personal.phone || null,
-        dateOfBirth: personal.dateOfBirth || null,
-        gender: personal.gender || null,
-        nationalIdEncrypted: personal.nationalId || null,
-        position: employment.position || null,
-        department: employment.department || null,
-        legalEntityId: employment.legalEntityId,
+        email: personal.email || undefined,
+        phone: personal.phone || undefined,
+        dateOfBirth: personal.dateOfBirth || undefined,
+        nationalId: personal.nationalId || undefined,
+        position: employment.position || undefined,
+        department: employment.department || undefined,
+        legalEntityId: employment.legalEntityId || undefined,
         employmentType: employment.employmentType,
         hireDate: employment.hireDate,
-        bankName: bank.bankName || null,
-        bankAccountEncrypted: bank.accountNumber || null,
+        bankName: bank.bankName || undefined,
+        bankAccount: bank.accountNumber || undefined,
       };
-      
+
       const employee = await apiClient<Employee>(ENDPOINTS.WORKERS.CREATE, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      
-      // Create compensation if provided
+
+      // Create compensation if provided. CreateCompensationDto's amount field
+      // is `amountMinor`, not `basicSalaryMinor`.
       if (compensation.basicSalary && compensation.effectiveDate) {
         await apiClient(ENDPOINTS.COMPENSATION.CREATE, {
           method: 'POST',
           body: JSON.stringify({
             workerId: employee.id,
-            basicSalaryMinor: String(Math.round(parseFloat(compensation.basicSalary) * 100)),
+            amountMinor: Math.round(parseFloat(compensation.basicSalary) * 100),
             currency: 'NGN',
             effectiveDate: compensation.effectiveDate,
           }),

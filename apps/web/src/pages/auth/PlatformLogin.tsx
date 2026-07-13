@@ -6,6 +6,14 @@ import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import Button from '@/components/ui/Button';
 import type { LoginResponse } from '@/lib/api/types';
+import type { AuthUser } from '@contracts/types/auth';
+
+interface BackendPlatformUserMe {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+}
 
 type Step = 'email' | 'password';
 
@@ -63,17 +71,26 @@ export default function PlatformLogin() {
         expiresIn: loginData.expiresIn,
       });
 
-      // Step 3: Fetch platform user profile (if endpoint exists)
-      // For now, create a minimal user object
-      const platformUser = {
-        id: 'platform-user',
+      // Step 3: Fetch real platform user profile (GET /platform/users/me)
+      let fullName = email;
+      let id = 'platform-user';
+      try {
+        const profile = await apiClient<BackendPlatformUserMe>(ENDPOINTS.PLATFORM_USERS.ME);
+        id = profile.id;
+        fullName = `${profile.firstName} ${profile.lastName}`.trim();
+      } catch {
+        // Non-fatal - fall back to email if /platform/users/me is unavailable.
+      }
+
+      const platformUser: AuthUser = {
+        id,
         email,
-        fullName: 'Platform Admin',
-        role: 'PLATFORM_ADMIN' as const,
+        fullName,
+        role: 'PLATFORM_ADMIN',
         tenantId: null,
         tenantName: null,
         avatarUrl: null,
-        permissions: ['manage:tenants' as const],
+        workerId: null,
       };
 
       // Step 4: Update session with user

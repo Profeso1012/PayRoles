@@ -8,6 +8,44 @@ import Button from '@/components/ui/Button';
 import type { AuthUser } from '@contracts/types/auth';
 import type { LoginResponse } from '@/lib/api/types';
 
+// GET /auth/me returns IAuthUser: { id, email, tenantId, role, isActive, workerId? } -
+// no fullName/tenantName/avatarUrl/permissions. fullName is composed client-side
+// from GET /users/me (firstName/lastName), which does exist on the User entity.
+interface BackendAuthMe {
+  id: string;
+  email: string;
+  tenantId: string;
+  role: string;
+  isActive: boolean;
+  workerId?: string | null;
+}
+
+interface BackendUserMe {
+  firstName: string;
+  lastName: string;
+}
+
+async function buildAuthUser(): Promise<AuthUser> {
+  const me = await apiClient<BackendAuthMe>(ENDPOINTS.AUTH.ME);
+  let fullName = me.email;
+  try {
+    const profile = await apiClient<BackendUserMe>(ENDPOINTS.USERS.ME);
+    fullName = `${profile.firstName} ${profile.lastName}`.trim();
+  } catch {
+    // Non-fatal - fall back to email if /users/me is unavailable.
+  }
+  return {
+    id: me.id,
+    email: me.email,
+    fullName,
+    role: me.role as AuthUser['role'],
+    tenantId: me.tenantId,
+    tenantName: null,
+    avatarUrl: null,
+    workerId: me.workerId ?? null,
+  };
+}
+
 type Step = 'email' | 'tenant' | 'password';
 
 export default function Login() {
@@ -70,16 +108,15 @@ export default function Login() {
         expiresIn: loginData.expiresIn,
       });
 
-      // Step 3: Fetch user profile
-      const user = await apiClient<AuthUser>(ENDPOINTS.AUTH.ME);
+      // Step 3: Fetch user profile (combines /auth/me + /users/me)
+      const user = await buildAuthUser();
 
       // Step 4: Update session with user
       setSession({ user });
 
       // Navigate based on role
       const role = user.role;
-      if (role === 'PLATFORM_ADMIN') navigate('/admin');
-      else if (role === 'EMPLOYEE') navigate('/my-payslips');
+      if (role === 'employee_self_service') navigate('/my-payslips');
       else navigate('/dashboard');
     } catch (err: any) {
       const message = err?.message || 'Invalid credentials or company code';
@@ -105,20 +142,13 @@ export default function Login() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleNext()}
+                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
                 placeholder="you@company.com"
                 autoFocus
               />
             </div>
 
             {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
-
-            <button
-              onClick={() => navigate('/forgot-password')}
-              className="text-sm text-cash-green hover:text-fresh-cash cursor-pointer mt-3 inline-block"
-            >
-              Can't access your account?
-            </button>
 
             <div className="flex justify-end mt-6 mb-8">
               <Button variant="primary" onClick={handleEmailNext} loading={false}>
@@ -128,13 +158,10 @@ export default function Login() {
 
             <div className="h-px bg-cash-green/10 mb-6" />
 
-            <button
-              onClick={() => navigate('/forgot-password')}
-              className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green hover:bg-soft-white hover:border-cash-green/40 transition-colors shadow-sm"
-            >
-              <KeyRound size={20} className="text-cash-green flex-shrink-0" />
-              <span>Forgot your password?</span>
-            </button>
+            <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
+              <KeyRound size={20} className="text-cash-green/50 flex-shrink-0" />
+              <span>Forgot your password? Contact your administrator to reset it.</span>
+            </div>
           </>
         )}
 
@@ -177,13 +204,10 @@ export default function Login() {
 
             <div className="h-px bg-cash-green/10 mb-6" />
 
-            <button
-              onClick={() => navigate('/request-access')}
-              className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green hover:bg-soft-white hover:border-cash-green/40 transition-colors shadow-sm"
-            >
-              <Building2 size={20} className="text-cash-green flex-shrink-0" />
-              <span>Don't have a company code? Request access</span>
-            </button>
+            <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
+              <Building2 size={20} className="text-cash-green/50 flex-shrink-0" />
+              <span>Don't have a company code? Contact your platform administrator.</span>
+            </div>
           </>
         )}
 
@@ -221,12 +245,9 @@ export default function Login() {
               </div>
             </div>
 
-            <button
-              onClick={() => navigate('/forgot-password')}
-              className="text-sm text-cash-green hover:text-fresh-cash mt-3 inline-block"
-            >
-              Forgot my password
-            </button>
+            <p className="text-sm text-cash-green/70 mt-3">
+              Forgot your password? Contact your administrator to reset it.
+            </p>
 
             {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 

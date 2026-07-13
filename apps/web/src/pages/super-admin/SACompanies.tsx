@@ -178,9 +178,9 @@ export default function SACompanies() {
   };
 
   const filtered = (tenants ?? []).filter(
-    (t) =>
+    (t: any) =>
       t.name.toLowerCase().includes(search.toLowerCase()) ||
-      t.adminEmail.toLowerCase().includes(search.toLowerCase()),
+      (t.contactEmail ?? t.adminEmail ?? '').toLowerCase().includes(search.toLowerCase()),
   );
 
   const filteredRequests = (requests ?? []).filter((r) => {
@@ -277,15 +277,15 @@ export default function SACompanies() {
                           </td>
                         </tr>
                       ) : (
-                        filtered.map((t) => (
+                        filtered.map((t: any) => (
                           <tr
                             key={t.id}
                             className="border-b border-mint-light/60 hover:bg-soft-white transition-colors cursor-pointer"
                             onClick={() => navigate(`/admin/companies/${t.id}`)}
                           >
                             <td className="px-6 py-4 font-medium text-deep-cash">{t.name}</td>
-                            <td className="px-6 py-4 text-cash-green/80">{t.adminEmail}</td>
-                            <td className="px-6 py-4 capitalize text-deep-cash">{t.plan}</td>
+                            <td className="px-6 py-4 text-cash-green/80">{t.contactEmail ?? t.adminEmail}</td>
+                            <td className="px-6 py-4 capitalize text-deep-cash">{t.plan ?? '—'}</td>
                             <td className="px-6 py-4 text-cash-green/80">{t.country}</td>
                             <td className="px-6 py-4">
                               {t.setupComplete ? (

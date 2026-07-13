@@ -22,8 +22,8 @@ export const dashboardHandlers = [
   http.get('/api/dashboard/hr', ({ request }) => {
     if (!getAuthUser(request)) return unauthorized();
     const active = mockEmployees.filter((e) => e.status === 'active').length;
-    const onLeave = mockEmployees.filter((e) => e.status === 'on_leave').length;
-    const exited = mockEmployees.filter((e) => e.status === 'exited').length;
+    const onLeave = mockEmployees.filter((e) => e.status === 'suspended').length;
+    const exited = mockEmployees.filter((e) => e.status === 'inactive' || e.status === 'archived').length;
     const missingBank = mockEmployees.filter((e) => e.bankDetails.length === 0).length;
     // "New this month" — created in 2026-06
     const newThisMonth = mockEmployees.filter((e) => e.createdAt.startsWith('2026-06')).length;

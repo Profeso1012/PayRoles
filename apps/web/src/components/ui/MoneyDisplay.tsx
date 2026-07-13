@@ -1,6 +1,7 @@
 import { cn, formatMoney } from '@/lib/utils';
 
 interface MoneyDisplayProps {
+  /** Already-major-unit amount (e.g. naira, not kobo) - see lib/utils.ts#formatMoney. */
   amount: number;
   currency?: string;
   className?: string;

@@ -68,7 +68,7 @@ export const payrunHandlers = [
   http.post('/api/pay-runs', async ({ request }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'PAYROLL_MANAGER' && user.role !== 'COMPANY_SUPER_ADMIN') {
+    if (user.role !== 'payroll_manager' && user.role !== 'tenant_admin') {
       return forbidden('Only Payroll Managers can create pay runs.');
     }
     const body = (await request.json()) as Record<string, unknown>;
@@ -116,7 +116,7 @@ export const payrunHandlers = [
   http.post('/api/pay-runs/:id/calculate', ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'PAYROLL_MANAGER' && user.role !== 'COMPANY_SUPER_ADMIN') {
+    if (user.role !== 'payroll_manager' && user.role !== 'tenant_admin') {
       return forbidden('Only Payroll Managers can trigger calculation.');
     }
 
@@ -149,7 +149,7 @@ export const payrunHandlers = [
   http.post('/api/pay-runs/:id/submit', ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'PAYROLL_MANAGER' && user.role !== 'COMPANY_SUPER_ADMIN') {
+    if (user.role !== 'payroll_manager' && user.role !== 'tenant_admin') {
       return forbidden('Only Payroll Managers can submit pay runs.');
     }
 
@@ -169,7 +169,7 @@ export const payrunHandlers = [
   http.post('/api/pay-runs/:id/approve', ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'FINANCE_DIRECTOR') {
+    if (user.role !== 'finance_manager') {
       return forbidden('Only Finance Directors can approve pay runs.');
     }
 
@@ -194,7 +194,7 @@ export const payrunHandlers = [
   http.post('/api/pay-runs/:id/reject', async ({ request, params }) => {
     const user = getAuthUser(request);
     if (!user) return unauthorized();
-    if (user.role !== 'FINANCE_DIRECTOR') {
+    if (user.role !== 'finance_manager') {
       return forbidden('Only Finance Directors can reject pay runs.');
     }
 

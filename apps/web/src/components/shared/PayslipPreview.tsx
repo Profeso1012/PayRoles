@@ -23,7 +23,9 @@ export default function PayslipPreview({ payslip }: PayslipPreviewProps) {
         <div className="text-right">
           <p className="text-sm font-semibold">{payslip.payGroupName}</p>
           <p className="text-sm text-white/70">{formatPeriod(payslip.period)}</p>
-          <p className="text-xs text-white/50 mt-1">Issued: {formatDate(payslip.issuedAt)}</p>
+          <p className="text-xs text-white/50 mt-1">
+            Issued: {formatDate(payslip.issuedAt || payslip.createdAt || payslip.generatedAt || '')}
+          </p>
         </div>
       </div>
 
