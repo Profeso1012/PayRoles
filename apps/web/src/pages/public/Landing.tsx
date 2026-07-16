@@ -17,6 +17,8 @@ import {
 } from 'lucide-react'
 import MarketingNav from '@/components/marketing/MarketingNav'
 import MarketingFooter from '@/components/marketing/MarketingFooter'
+import { PATHS } from '@/router/paths'
+import { buildGetStartedMailto } from '@/lib/supportContact'
 
 const FEATURES = [
   {
@@ -76,29 +78,21 @@ export default function Landing() {
 
   return (
     <div style={{ fontFamily: 'inherit', overflowX: 'hidden' }}>
-      {/* ─── bounce animation ─── */}
+      {/*
+        Nav/footer responsive rules (.nav-links-desktop, .hamburger-btn,
+        .mobile-menu, .footer-grid, .footer-brand-col, .footer-bar) now live
+        inside MarketingNav/MarketingFooter themselves, so this page only
+        needs the rules for sections unique to the landing page itself.
+      */}
       <style>{`
         @keyframes bounce {
           0%, 80%, 100% { transform: translateX(-50%) translateY(0); }
           40%            { transform: translateX(-50%) translateY(-9px); }
         }
-        @keyframes menuSlideDown {
-          from { opacity: 0; transform: translateY(-12px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        .mobile-menu { animation: menuSlideDown 0.22s ease forwards; }
-        @media (min-width: 768px) {
-          .nav-links-desktop { display: flex !important; }
-          .hamburger-btn { display: none !important; }
-        }
         @media (max-width: 767px) {
-          .nav-links-desktop { display: none !important; }
           .hero-card { right: 32px !important; bottom: 70px !important; max-width: calc(100% - 64px) !important; }
           .hero-content { padding: 0 32px !important; }
           .art-grid { grid-template-columns: 1fr !important; }
-          .footer-grid { grid-template-columns: 1fr 1fr !important; padding: 40px 24px 32px !important; gap: 40px !important; }
-          .footer-brand-col { grid-column: 1 / -1 !important; }
-          .footer-bar { padding: 24px 24px !important; flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
           .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .purp-inner { flex-direction: column !important; }
           .purp-sidebar { flex: unset !important; width: 100% !important; padding-right: 0 !important; padding-bottom: 32px !important; }
@@ -196,8 +190,8 @@ export default function Landing() {
           </p>
 
           <div style={{ marginTop: 32, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-            <Link
-              to="/login"
+            <a
+              href={buildGetStartedMailto()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -215,7 +209,7 @@ export default function Landing() {
             >
               Get Started Free
               <ArrowRight size={16} />
-            </Link>
+            </a>
 
             <a
               href="#how-it-works"
@@ -282,8 +276,8 @@ export default function Landing() {
           >
             Nigeria, United Kingdom, Canada and United States — all in one payroll run
           </h3>
-          <Link
-            to="/login"
+          <a
+            href={buildGetStartedMailto()}
             style={{
               color: '#4FAD72',
               fontSize: 14,
@@ -298,7 +292,7 @@ export default function Landing() {
           >
             Start running payroll
             <ChevronRight size={14} />
-          </Link>
+          </a>
         </div>
 
         {/* Scroll indicator */}
@@ -386,7 +380,7 @@ export default function Landing() {
             </p>
 
             <Link
-              to="/login"
+              to={PATHS.FEATURES}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -714,8 +708,8 @@ export default function Landing() {
               engine calculates, validates and distributes payroll with a single approval.
             </p>
 
-            <Link
-              to="/login"
+            <a
+              href={buildGetStartedMailto()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -732,7 +726,7 @@ export default function Landing() {
               onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
             >
               Get started today
-            </Link>
+            </a>
           </div>
 
           {/* Right col — 3 stat cards */}
@@ -871,8 +865,8 @@ export default function Landing() {
                   {dir === 'left' ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
                 </button>
               ))}
-              <Link
-                to="/login"
+              <a
+                href={buildGetStartedMailto()}
                 style={{
                   background: '#F2B35E',
                   color: '#0F2E23',
@@ -887,7 +881,7 @@ export default function Landing() {
                 onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.opacity = '1' }}
               >
                 Join today
-              </Link>
+              </a>
             </div>
           </div>
 

@@ -94,7 +94,10 @@ export const ENDPOINTS = {
     DETAIL: (id: string) => `${API_VERSION}/pay-elements/${id}`,
     CREATE: `${API_VERSION}/pay-elements`,
     UPDATE: (id: string) => `${API_VERSION}/pay-elements/${id}`,
-    DELETE: (id: string) => `${API_VERSION}/pay-elements/${id}`,
+    // Backend has no DELETE route at all (pay-element.controller.ts) - only
+    // a soft PATCH .../deactivate. The old DELETE entry here 404'd every time
+    // PayElements.tsx's "Delete" button was clicked.
+    DEACTIVATE: (id: string) => `${API_VERSION}/pay-elements/${id}/deactivate`,
   },
 
   // ---------------------------------------------------------------------------
@@ -112,7 +115,12 @@ export const ENDPOINTS = {
   // Compensation
   // ---------------------------------------------------------------------------
   COMPENSATION: {
-    LIST: (workerId: string) => `${API_VERSION}/compensation/workers/${workerId}`,
+    // Real route is singular "worker" (compensation.controller.ts) - was
+    // "workers" here, which silently 404'd (EmployeeDetail's fetch swallows
+    // the error and falls back to an empty array), so every employee's
+    // Compensation tab showed "No records" even when compensation existed.
+    LIST: (workerId: string) => `${API_VERSION}/compensation/worker/${workerId}`,
+    ACTIVE: (workerId: string) => `${API_VERSION}/compensation/worker/${workerId}/active`,
     DETAIL: (id: string) => `${API_VERSION}/compensation/${id}`,
     CREATE: `${API_VERSION}/compensation`,
     UPDATE: (id: string) => `${API_VERSION}/compensation/${id}`,
@@ -230,10 +238,13 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Notifications (New in backend)
   // ---------------------------------------------------------------------------
+  // notification.controller.ts only exposes GET - there is no mark-as-read
+  // or mark-all-read route on the backend at all (the entity has an unused
+  // readAt column, but nothing sets it yet). MARK_READ/MARK_ALL_READ used to
+  // be defined here and called from Notifications.tsx, 404ing every time -
+  // removed until the backend actually adds those routes.
   NOTIFICATIONS: {
     LIST: `${API_VERSION}/notifications`,
-    MARK_READ: (id: string) => `${API_VERSION}/notifications/${id}/read`,
-    MARK_ALL_READ: `${API_VERSION}/notifications/read-all`,
   },
 
   // ---------------------------------------------------------------------------

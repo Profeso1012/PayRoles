@@ -143,14 +143,14 @@ export default function StatutoryReports() {
 
   if (isError) {
     return (
-      <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
         <ErrorState onRetry={refetch} />
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-bold text-deep-cash leading-tight">

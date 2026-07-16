@@ -1,17 +1,18 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { UploadCloud, FileSpreadsheet, Inbox } from 'lucide-react';
-import { apiClient, BASE_URL } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { UploadCloud, FileSpreadsheet, Inbox, KeyRound, Check, AlertCircle } from 'lucide-react';
+import { apiClient, apiClientWithMeta, BASE_URL } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, generateTempPassword } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import EmptyState from '@/components/ui/EmptyState';
-import type { BackendImportJob, BackendImportStatus } from '@/lib/api/types';
+import Modal from '@/components/ui/Modal';
+import type { BackendImportJob, BackendImportStatus, BackendWorker, BackendUser, CreateUserRequest } from '@/lib/api/types';
 
 const TERMINAL_STATUSES: BackendImportStatus[] = ['completed', 'failed', 'partially_completed'];
 
@@ -54,13 +55,33 @@ async function uploadWorkersCsv(file: File): Promise<BackendImportJob> {
   return json.data as BackendImportJob;
 }
 
+interface LoginResult {
+  worker: BackendWorker;
+  status: 'success' | 'error';
+  password?: string;
+  error?: string;
+}
+
 export default function ImportEmployees() {
   const qc = useQueryClient();
   const toast = useToast();
+  const role = useAuthStore((s) => s.user?.role);
+  // Only super_admin/tenant_admin hold user:write on the real backend -
+  // everyone else who can reach this page (payroll/HR managers & officers)
+  // can import workers but can't create logins for them.
+  const canManageLogins = role === 'tenant_admin' || role === 'super_admin';
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+
+  const [bulkLoginOpen, setBulkLoginOpen] = useState(false);
+  const [loadingUnprovisioned, setLoadingUnprovisioned] = useState(false);
+  const [unprovisioned, setUnprovisioned] = useState<BackendWorker[] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [creatingLogins, setCreatingLogins] = useState(false);
+  const [loginResults, setLoginResults] = useState<LoginResult[] | null>(null);
 
   const { data: jobs, isLoading, isError, refetch } = useQuery<BackendImportJob[]>({
     queryKey: ['import-jobs'],
@@ -73,6 +94,10 @@ export default function ImportEmployees() {
       return data?.some((j) => !TERMINAL_STATUSES.includes(j.status)) ? 3000 : false;
     },
   });
+
+  const activeJob = jobs?.find((j) => j.id === activeJobId);
+  const showLoginFollowUp =
+    canManageLogins && activeJob && TERMINAL_STATUSES.includes(activeJob.status) && activeJob.successfulRows > 0;
 
   const handleUpload = async () => {
     if (!selectedFile) return;
@@ -91,8 +116,79 @@ export default function ImportEmployees() {
     }
   };
 
+  // The import job only reports row counts, not which specific workers were
+  // touched, so this can't be scoped to "just this upload's rows" - instead
+  // it shows every worker tenant-wide with no linked login yet, which always
+  // includes whoever was just imported.
+  const openBulkLogin = async () => {
+    setBulkLoginOpen(true);
+    setLoginResults(null);
+    setSelectedIds(new Set());
+    setLoadingUnprovisioned(true);
+    try {
+      const workerParams = buildPaginationParams({ page: 1, limit: 500 });
+      const userParams = buildPaginationParams({ page: 1, limit: 500 });
+      const [{ data: workers }, { data: users }] = await Promise.all([
+        apiClientWithMeta<BackendWorker[]>(`${ENDPOINTS.WORKERS.LIST}?${workerParams}`),
+        apiClientWithMeta<BackendUser[]>(`${ENDPOINTS.USERS.LIST}?${userParams}`),
+      ]);
+      const linkedWorkerIds = new Set(users.filter((u) => u.workerId).map((u) => u.workerId));
+      setUnprovisioned(workers.filter((w) => !linkedWorkerIds.has(w.id)));
+    } catch {
+      toast.error('Failed to load employees');
+      setUnprovisioned([]);
+    } finally {
+      setLoadingUnprovisioned(false);
+    }
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectableWorkers = (unprovisioned ?? []).filter((w) => !!w.email);
+
+  const handleCreateLogins = async () => {
+    const targets = selectableWorkers.filter((w) => selectedIds.has(w.id));
+    if (targets.length === 0) return;
+    setCreatingLogins(true);
+    const outcomes = await Promise.allSettled(
+      targets.map(async (worker): Promise<LoginResult> => {
+        const password = generateTempPassword();
+        await apiClient(ENDPOINTS.USERS.CREATE, {
+          method: 'POST',
+          body: JSON.stringify({
+            email: worker.email!,
+            password,
+            firstName: worker.firstName,
+            lastName: worker.lastName,
+            role: 'employee_self_service',
+            workerId: worker.id,
+          } satisfies CreateUserRequest),
+        });
+        return { worker, status: 'success', password };
+      }),
+    );
+    const results: LoginResult[] = outcomes.map((outcome, i) =>
+      outcome.status === 'fulfilled'
+        ? outcome.value
+        : { worker: targets[i], status: 'error', error: outcome.reason instanceof Error ? outcome.reason.message : 'Failed' },
+    );
+    setLoginResults(results);
+    setCreatingLogins(false);
+    const successCount = results.filter((r) => r.status === 'success').length;
+    if (successCount > 0) {
+      toast.success(`Login access created for ${successCount} employee${successCount === 1 ? '' : 's'}`);
+    }
+  };
+
   return (
-    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Import Employees"
         breadcrumbs={[{ label: 'Employees', path: '/employees' }, { label: 'Import' }]}
@@ -123,6 +219,20 @@ export default function ImportEmployees() {
           </Button>
         </div>
       </div>
+
+      {showLoginFollowUp && (
+        <div className="flex items-center justify-between gap-3 flex-wrap bg-mint-light/30 border border-fresh-cash/40 rounded-xl p-4 mb-6">
+          <div className="flex items-center gap-3">
+            <KeyRound size={18} className="text-cash-green shrink-0" />
+            <p className="text-sm text-deep-cash">
+              Imported employees have no portal login by default. Set up access for anyone who needs it.
+            </p>
+          </div>
+          <Button variant="secondary" size="sm" onClick={openBulkLogin}>
+            Set up login access
+          </Button>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-mint-light overflow-hidden">
         <div className="px-6 py-4 border-b border-mint-light">
@@ -184,6 +294,119 @@ export default function ImportEmployees() {
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={bulkLoginOpen}
+        onClose={() => setBulkLoginOpen(false)}
+        title="Set Up Login Access"
+        size="md"
+      >
+        {loadingUnprovisioned ? (
+          <div className="flex justify-center py-10"><Spinner /></div>
+        ) : loginResults ? (
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-cash-green/70">
+              Share each temporary password with that employee directly — there is no invite email.
+            </p>
+            <div className="max-h-80 overflow-y-auto flex flex-col gap-2">
+              {loginResults.map((r) => (
+                <div key={r.worker.id} className="flex items-center justify-between gap-3 p-3 rounded-lg border border-mint-light bg-soft-white">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-deep-cash truncate">
+                      {r.worker.firstName} {r.worker.lastName}
+                    </p>
+                    <p className="text-xs text-cash-green/70 truncate">{r.worker.email}</p>
+                  </div>
+                  {r.status === 'success' ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Check size={14} className="text-fresh-cash" />
+                      <code className="text-xs bg-mint-light px-2 py-1 rounded font-mono">{r.password}</code>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5 shrink-0 text-red-500">
+                      <AlertCircle size={14} />
+                      <span className="text-xs">{r.error}</span>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button variant="primary" onClick={() => setBulkLoginOpen(false)}>Done</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {unprovisioned && unprovisioned.length === 0 ? (
+              <p className="text-sm text-cash-green/70 py-6 text-center">
+                Every employee already has login access, or none exist yet.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-cash-green/70">
+                    Employees below have no linked login yet. Selected people get an{' '}
+                    <span className="font-medium text-deep-cash">Employee</span> account so they can view their own payslips.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSelectedIds(
+                      selectedIds.size === selectableWorkers.length
+                        ? new Set()
+                        : new Set(selectableWorkers.map((w) => w.id)),
+                    )
+                  }
+                  className="text-xs font-medium text-fresh-cash hover:text-cash-green self-start"
+                >
+                  {selectedIds.size === selectableWorkers.length && selectableWorkers.length > 0 ? 'Deselect all' : 'Select all'}
+                </button>
+                <div className="max-h-80 overflow-y-auto flex flex-col gap-1.5">
+                  {(unprovisioned ?? []).map((w) => {
+                    const hasEmail = !!w.email;
+                    return (
+                      <label
+                        key={w.id}
+                        className={`flex items-center gap-3 p-2.5 rounded-lg border ${
+                          hasEmail ? 'border-mint-light cursor-pointer hover:bg-soft-white' : 'border-mint-light/50 opacity-50'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          disabled={!hasEmail}
+                          checked={selectedIds.has(w.id)}
+                          onChange={() => toggleSelected(w.id)}
+                          className="shrink-0"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-deep-cash truncate">
+                            {w.firstName} {w.lastName}
+                          </p>
+                          <p className="text-xs text-cash-green/70 truncate">
+                            {w.email ?? 'No email on file — cannot create a login'}
+                          </p>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="ghost" onClick={() => setBulkLoginOpen(false)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    loading={creatingLogins}
+                    disabled={selectedIds.size === 0}
+                    onClick={handleCreateLogins}
+                  >
+                    Create Login Access for {selectedIds.size} Selected
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

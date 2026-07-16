@@ -11,14 +11,9 @@ import ErrorState from '@/components/ui/ErrorState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/hooks/useToast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, generateTempPassword } from '@/lib/utils';
 import { useState } from 'react';
 import type { BackendTenant } from '@/lib/api/types';
-
-function generateTempPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
 
 export default function SACompanyDetail() {
   const { id } = useParams<{ id: string }>();

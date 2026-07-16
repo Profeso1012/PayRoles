@@ -186,7 +186,7 @@ export default function PayRunList() {
   ];
 
   return (
-    <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Pay Runs"
         action={

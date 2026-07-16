@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Users, Calculator, Play, CreditCard } from 'lucide-react'
+import { buildGetStartedMailto } from '@/lib/supportContact'
 
 const FEATURE_LINKS = [
   {
@@ -64,6 +65,28 @@ export default function MarketingNav() {
 
   return (
     <>
+      {/*
+        Self-contained so MarketingNav renders identically wherever it's used
+        (Landing, Features pages, etc.) - these rules used to live only in
+        Landing.tsx's own <style> tag, so any other page using this same nav
+        had no CSS backing its .nav-links-desktop/.hamburger-btn/.mobile-menu
+        classes at all (links fell back to inline/block default display).
+      */}
+      <style>{`
+        @keyframes menuSlideDown {
+          from { opacity: 0; transform: translateY(-12px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .mobile-menu { animation: menuSlideDown 0.22s ease forwards; }
+        @media (min-width: 768px) {
+          .nav-links-desktop { display: flex !important; }
+          .hamburger-btn { display: none !important; }
+        }
+        @media (max-width: 767px) {
+          .nav-links-desktop { display: none !important; }
+        }
+      `}</style>
+
       <nav
         style={{
           position: 'fixed',
@@ -247,8 +270,8 @@ export default function MarketingNav() {
             Pricing
           </a>
 
-          <Link
-            to="/login"
+          <a
+            href={buildGetStartedMailto()}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -265,7 +288,7 @@ export default function MarketingNav() {
             onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(79,173,114,0.20)' }}
           >
             Get Started
-          </Link>
+          </a>
 
           <div style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
 
@@ -373,7 +396,7 @@ export default function MarketingNav() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 'auto' }}>
             <button
-              onClick={() => { setMenuOpen(false); navigate('/login') }}
+              onClick={() => { setMenuOpen(false); window.location.href = buildGetStartedMailto() }}
               style={{
                 width: '100%',
                 padding: '15px 24px',

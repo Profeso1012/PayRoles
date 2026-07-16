@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Users, Calculator, Play, CreditCard } from 'lucide-react'
 import FeaturePageShell from '@/components/marketing/FeaturePageShell'
 import { PATHS } from '@/router/paths'
+import { buildGetStartedMailto } from '@/lib/supportContact'
 
 const STEPS = [
   {
@@ -51,8 +52,8 @@ export default function FeaturesOverview() {
               PayRole takes you through four simple steps. No jargon, no guesswork —
               just add your team, set up their pay, run payroll, and get everyone paid.
             </p>
-            <Link
-              to={PATHS.LOGIN}
+            <a
+              href={buildGetStartedMailto()}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -67,7 +68,7 @@ export default function FeaturesOverview() {
               }}
             >
               Get Started <ArrowRight size={16} />
-            </Link>
+            </a>
           </div>
           <img
             src="/assets/features/placeholder-overview.svg"

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, LogOut, User, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useUiStore } from '@/store/uiStore';
 import Avatar from '@/components/ui/Avatar';
@@ -33,8 +35,21 @@ export default function Topbar() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
     setDropdownOpen(false);
+    // Backend invalidates the stored refresh token server-side on logout
+    // (auth.service.ts's logout() calls clearRefreshToken) - calling this
+    // before wiping local state so a captured refresh token can't be replayed
+    // after "signing out". Best-effort: still clear local state and navigate
+    // even if this fails (expired token, offline, etc.) - never block logout.
+    try {
+      await apiClient(
+        user?.role === 'PLATFORM_ADMIN' ? ENDPOINTS.PLATFORM_AUTH.LOGOUT : ENDPOINTS.AUTH.LOGOUT,
+        { method: 'POST', skipAuthRedirect: true },
+      );
+    } catch {
+      // ignore - local session clears regardless
+    }
     clearSession();
     navigate(PATHS.LOGIN);
   };

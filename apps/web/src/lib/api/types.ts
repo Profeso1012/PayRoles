@@ -634,6 +634,9 @@ export interface TaxRule {
 
 export type BackendTaxCalculationBasis = 'annual' | 'monthly';
 
+// Plain shape returned by list endpoints (GET /tax/rules/:code/versions) -
+// never carries bands/reliefs. GET /tax/versions/:code (VERSION_DETAIL)
+// returns a different, wrapped shape - see TaxVersionDetail below.
 export interface TaxVersion {
   id: string;
   code: string; // e.g. 'NIGERIA_PIT_2026'
@@ -644,10 +647,17 @@ export interface TaxVersion {
   basis: BackendTaxCalculationBasis;
   isActive: boolean;
   notes: string | null;
-  bands?: TaxBand[];
-  reliefs?: TaxRelief[];
   createdAt: string;
   updatedAt: string;
+}
+
+/** GET /tax/versions/:code (ENDPOINTS.TAX.VERSION_DETAIL) response shape - a
+ * wrapper object, not a flat TaxVersion. Not consumed anywhere yet; use this
+ * type (not TaxVersion) whenever a "view/create tax version" UI is built. */
+export interface TaxVersionDetail {
+  version: TaxVersion;
+  bands: TaxBand[];
+  reliefs: TaxRelief[];
 }
 
 export interface TaxBand {

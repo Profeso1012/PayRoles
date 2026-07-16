@@ -165,7 +165,7 @@ export default function AddEmployee() {
     'w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors placeholder:text-cash-green/40';
 
   return (
-    <div style={{ width: '100%', maxWidth: '760px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '760px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Add Employee"
         breadcrumbs={[

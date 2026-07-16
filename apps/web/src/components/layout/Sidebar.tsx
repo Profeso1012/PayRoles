@@ -16,6 +16,8 @@ interface NavItem {
   path: string;
   icon: React.ElementType;
   children?: NavItem[];
+  /** Anchor for TourGuide.tsx to point a coach-mark arrow at this item. */
+  tourId?: string;
 }
 
 // Nav trees per real backend Role (roles.enum.ts). Officer/manager pairs and
@@ -29,7 +31,7 @@ const PLATFORM_ADMIN_NAV: NavItem[] = [
 const COMPANY_ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   {
-    label: 'Organisation', path: '/organisation', icon: FolderTree,
+    label: 'Organisation', path: '/organisation', icon: FolderTree, tourId: 'tour-step-1',
     children: [
       { label: 'Overview', path: '/organisation', icon: FolderTree },
       { label: 'Legal Entities', path: '/organisation/legal-entities', icon: Shield },
@@ -37,7 +39,7 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
     ],
   },
   {
-    label: 'Employees', path: '/employees', icon: Users,
+    label: 'Employees', path: '/employees', icon: Users, tourId: 'tour-step-3',
     children: [
       { label: 'All Employees', path: '/employees', icon: Users },
       { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
@@ -54,7 +56,7 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
   { label: 'Exports', path: '/exports', icon: FileOutput },
   // Deprecated: Reports (no backend /reports module)
   {
-    label: 'Settings', path: '/settings', icon: Settings,
+    label: 'Settings', path: '/settings', icon: Settings, tourId: 'tour-step-2',
     children: [
       { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
       { label: 'Users & Roles', path: '/settings/users', icon: Users },
@@ -92,6 +94,10 @@ const PAYROLL_NAV: NavItem[] = [
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
   { label: 'Exports', path: '/exports', icon: FileOutput },
+  // Real backend only grants tax_rule:read to payroll_officer, not
+  // payroll_manager - shown to both like every other officer/manager pair
+  // here, the backend 403s payroll_manager same as any other write attempt.
+  { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
   // Deprecated: Reports (no backend /reports module)
 ];
 
@@ -101,6 +107,7 @@ const FINANCE_NAV: NavItem[] = [
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Payments', path: '/payments', icon: CreditCard },
   { label: 'Exports', path: '/exports', icon: FileOutput },
+  { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
   // Deprecated: Reports (no backend /reports module)
 ];
 
@@ -108,12 +115,14 @@ const AUDITOR_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Audit Logs', path: '/audit', icon: History },
   { label: 'Exports', path: '/exports', icon: FileOutput },
+  { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
 ];
 
 const READ_ONLY_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Employees', path: '/employees', icon: Users },
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
+  { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
 ];
 
 const EMPLOYEE_NAV: NavItem[] = [
@@ -136,22 +145,47 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
   employee_self_service: EMPLOYEE_NAV,
 };
 
+// Collects every path in the tree (parents and children alike) so the
+// "closest match wins" logic below can consider all of them at once.
+function flattenPaths(items: NavItem[]): string[] {
+  const paths: string[] = [];
+  for (const item of items) {
+    paths.push(item.path);
+    if (item.children) paths.push(...flattenPaths(item.children));
+  }
+  return paths;
+}
+
+// A route can match several nav paths at once when one is a prefix of
+// another (e.g. '/admin' and '/admin/companies', or '/organisation' and
+// '/organisation/legal-entities'). Highlighting every match made sibling
+// links light up together - only the single longest (most specific) match
+// should ever be treated as "active".
+function findActivePath(pathname: string, candidatePaths: string[]): string | null {
+  let best: string | null = null;
+  for (const path of candidatePaths) {
+    const matches = pathname === path || pathname.startsWith(path + '/');
+    if (matches && (!best || path.length > best.length)) {
+      best = path;
+    }
+  }
+  return best;
+}
+
 interface NavItemProps {
   item: NavItem;
+  activePath: string | null;
   depth?: number;
 }
 
-function NavEntry({ item, depth = 0 }: NavItemProps) {
-  const location = useLocation();
+function NavEntry({ item, activePath, depth = 0 }: NavItemProps) {
   const [expanded, setExpanded] = useState(() =>
-    item.children?.some((c) => location.pathname.startsWith(c.path)) ?? false
+    item.children?.some((c) => c.path === activePath) ?? false
   );
 
   const isActive = item.children
-    ? location.pathname.startsWith(item.path) && item.path !== '/organisation'
-      ? true
-      : location.pathname === item.path
-    : location.pathname === item.path || location.pathname.startsWith(item.path + '/');
+    ? item.path === activePath || item.children.some((c) => c.path === activePath)
+    : item.path === activePath;
 
   const Icon = item.icon;
 
@@ -159,6 +193,7 @@ function NavEntry({ item, depth = 0 }: NavItemProps) {
     return (
       <li>
         <button
+          data-tour-id={item.tourId}
           onClick={() => setExpanded((e) => !e)}
           className={cn(
             'w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-150',
@@ -178,7 +213,7 @@ function NavEntry({ item, depth = 0 }: NavItemProps) {
         {expanded && (
           <ul className="mt-0.5 ml-3 border-l border-mint-light pl-2 flex flex-col gap-0.5">
             {item.children.map((child) => (
-              <NavEntry key={child.path} item={child} depth={depth + 1} />
+              <NavEntry key={child.path} item={child} activePath={activePath} depth={depth + 1} />
             ))}
           </ul>
         )}
@@ -190,6 +225,7 @@ function NavEntry({ item, depth = 0 }: NavItemProps) {
     <li>
       <Link
         to={item.path}
+        data-tour-id={item.tourId}
         className={cn(
           'flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-150',
           'border-l-[3px]',
@@ -209,8 +245,10 @@ function NavEntry({ item, depth = 0 }: NavItemProps) {
 export default function Sidebar() {
   const user = useAuthStore((s) => s.user);
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
+  const location = useLocation();
 
   const navItems = user ? NAV_MAP[user.role] ?? [] : [];
+  const activePath = findActivePath(location.pathname, flattenPaths(navItems));
 
   return (
     <>
@@ -244,7 +282,7 @@ export default function Sidebar() {
 
           <ul className="flex flex-col gap-0.5">
             {navItems.map((item) => (
-              <NavEntry key={item.path + item.label} item={item} />
+              <NavEntry key={item.path + item.label} item={item} activePath={activePath} />
             ))}
           </ul>
         </div>

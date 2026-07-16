@@ -87,7 +87,7 @@ export default function PayslipViewer() {
   const contributions = payslip.elements.filter((e: PayElement) => e.type === 'employer_contribution');
 
   return (
-    <div style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       {/* Toolbar (hidden when printing) */}
       <div className="flex items-center justify-between mb-6 print:hidden">
         <button

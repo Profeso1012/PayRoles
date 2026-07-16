@@ -11,7 +11,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import { useToast } from '@/hooks/useToast';
-import { formatDate } from '@/lib/utils';
+import { formatDate, generateTempPassword } from '@/lib/utils';
 import type { BackendTenant, CreateTenantRequest } from '@/lib/api/types';
 
 const COUNTRY_OPTIONS = [
@@ -43,11 +43,6 @@ function slugify(name: string): string {
     .replace(/-+/g, '-');
 }
 
-function generateTempPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
-
 const blankForm = {
   name: '',
   slug: '',
@@ -68,6 +63,11 @@ export default function SACompanies() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [formError, setFormError] = useState('');
+  // Slug keeps auto-populating from the name until the user edits the slug
+  // field directly - tracking this separately from `form.slug` itself, since
+  // `form.slug` is non-empty after the very first auto-populated character,
+  // which previously made `f.slug || slugify(...)` freeze after one keystroke.
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
 
   const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
@@ -122,6 +122,7 @@ export default function SACompanies() {
   const resetForm = () => {
     setForm({ ...blankForm, adminPassword: generateTempPassword() });
     setFormError('');
+    setSlugManuallyEdited(false);
     setShowModal(false);
   };
 
@@ -230,7 +231,13 @@ export default function SACompanies() {
               className="w-full bg-transparent border-b border-cash-green/30 py-2.5 text-sm text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
               placeholder="e.g. Zenith Logistics Ltd"
               value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value, slug: f.slug || slugify(e.target.value) }))}
+              onChange={(e) =>
+                setForm((f) => ({
+                  ...f,
+                  name: e.target.value,
+                  slug: slugManuallyEdited ? f.slug : slugify(e.target.value),
+                }))
+              }
               autoFocus
             />
           </div>
@@ -240,7 +247,10 @@ export default function SACompanies() {
               className="w-full bg-transparent border-b border-cash-green/30 py-2.5 text-sm text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40 font-mono"
               placeholder="zenith-logistics"
               value={form.slug}
-              onChange={(e) => setForm((f) => ({ ...f, slug: slugify(e.target.value) }))}
+              onChange={(e) => {
+                setSlugManuallyEdited(true);
+                setForm((f) => ({ ...f, slug: slugify(e.target.value) }));
+              }}
             />
             <p className="text-xs text-cash-green/50 mt-1">Used as the company code at login — lowercase, hyphens only.</p>
           </div>

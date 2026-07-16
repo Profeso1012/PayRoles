@@ -77,14 +77,14 @@ export default function CostSummary() {
 
   if (isError) {
     return (
-      <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
         <ErrorState onRetry={refetch} />
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Cost Summary"
         action={

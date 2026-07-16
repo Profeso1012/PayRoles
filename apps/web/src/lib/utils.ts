@@ -4,6 +4,13 @@ export function cn(...inputs: ClassValue[]): string {
   return clsx(inputs);
 }
 
+/** No invite-email flow exists anywhere in this backend - every new user is
+ * created with a temp password chosen up front and shared with them directly. */
+export function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
+  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
 /**
  * Format an already-major-unit amount (e.g. naira, not kobo) as currency.
  *

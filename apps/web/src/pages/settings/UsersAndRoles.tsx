@@ -5,6 +5,7 @@ import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
+import { generateTempPassword } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -49,11 +50,6 @@ const ROLE_BADGE_VARIANT: Record<string, 'success' | 'info' | 'warning'> = {
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS)
   .filter(([value]) => value !== 'super_admin') // super_admin is reserved, not self-servable here
   .map(([value, label]) => ({ value, label }));
-
-function generateTempPassword(): string {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%';
-  return Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-}
 
 const blankAddUserForm = {
   firstName: '',
@@ -126,7 +122,7 @@ export default function UsersAndRoles() {
 
   if (!isSuperAdmin) {
     return (
-      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
         <PageHeader
           title="Users & Roles"
           breadcrumbs={[{ label: 'Settings' }, { label: 'Users & Roles' }]}
@@ -161,7 +157,7 @@ export default function UsersAndRoles() {
   }
 
   return (
-    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ maxWidth: '960px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Users & Roles"
         breadcrumbs={[{ label: 'Settings' }, { label: 'Users & Roles' }]}

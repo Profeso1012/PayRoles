@@ -216,6 +216,68 @@ dashboard — total employees, active/suspended/inactive counts, recent hires).
 
 # PART 4 — Each Role's Day-to-Day Flow
 
+### Tenant Admin — Managing Tax Rules (`tenant_admin` / `super_admin` write, everyone else read-only)
+
+This is new since the backend's `tax` module landed (a from-scratch feature add,
+not a fix to something older) — it has its own frontend page, so it's covered
+here separately from Part 3's one-time setup steps.
+
+**Frontend:** **Settings → Jurisdictions** (`/settings/jurisdictions`). On load it fires:
+```
+GET {{baseUrl}}/api/v1/tax/jurisdictions
+GET {{baseUrl}}/api/v1/tax/rules
+```
+then, per rule returned, `GET {{baseUrl}}/api/v1/tax/rules/:code/versions` to build a
+jurisdiction → rule → version tree client-side (the backend doesn't return this nested
+shape itself).
+
+The page lists each jurisdiction (country flag, currency, rule count). Click **Show
+rules** to expand one and see its tax rules, and each rule's versions (e.g. "Nigeria
+PIT 2026") with an effective date and an Active/Inactive badge.
+
+If you're `tenant_admin`/`super_admin`, every version also has an **Activate** /
+**Deactivate** button:
+```
+PATCH {{baseUrl}}/api/v1/tax/versions/:code/activate
+PATCH {{baseUrl}}/api/v1/tax/versions/:code/deactivate
+```
+Every other role that can reach this page (payroll, HR, finance, auditor, read_only —
+all of whom hold `tax_rule:read`) sees the identical tree with no buttons, plus a
+banner: "You have read-only access. Contact your Tenant Admin to activate or
+deactivate tax rule versions."
+
+**What this page can't do (yet):** there's no button anywhere to create a new
+jurisdiction, tax rule, or tax rule version. The backend has
+`POST {{baseUrl}}/api/v1/tax/versions` (`tenant_admin`/`super_admin` only, via
+`tax_rule:write`) already implemented, but no frontend form calls it — so today,
+jurisdictions/rules/versions only exist if someone seeded them directly (database or
+Postman), and a tenant_admin's actual day-to-day here is limited to flipping the
+Activate/Deactivate switch on whatever versions already exist (e.g. once a new tax
+year's rates are added, switching from "Nigeria PIT 2026" to "Nigeria PIT 2027"). If
+you need to add a new version yourself for now, it's a Postman call:
+```
+POST {{baseUrl}}/api/v1/tax/versions
+Authorization: Bearer {{accessToken}}
+{
+  "code": "NIGERIA_PIT_2027",
+  "taxRuleCode": "NIGERIA_PIT",
+  "name": "Nigeria PIT 2027",
+  "effectiveDate": "2027-01-01",
+  "basis": "annual",
+  "bands": [
+    { "sequence": 1, "lowerBoundMinor": 0, "upperBoundMinor": 30000000, "ratePercent": 7 },
+    { "sequence": 2, "lowerBoundMinor": 30000001, "ratePercent": 11 }
+  ],
+  "reliefs": [
+    { "code": "CRA", "name": "Consolidated Relief Allowance", "type": "greater_of_fixed_or_percentage", "value": 20 }
+  ]
+}
+```
+Note `GET /api/v1/tax/versions/:code` (a separate single-version lookup, also not
+called by any frontend page yet) returns a different, wrapped shape —
+`{ version, bands, reliefs }`, not a flat version object — worth knowing if you're
+testing it directly in Postman.
+
 ### HR Manager (`hr_manager` / `hr_officer`)
 
 Lands on `/dashboard` → HR Dashboard (headcount, new this month, missing-bank-detail
@@ -261,11 +323,26 @@ by clicking around. Compensation tab is read-only history (`GET /v1/compensation
 with whatever changed (name/email/phone/DOB/national ID — no gender field exists on
 this backend, and status changes are not available through this form).
 
-**Give someone a raise:** there's currently no "Add Compensation" button on the
-employee detail page — compensation history is read-only there today. A new
-compensation record can only be created the same way as above
-(`POST /v1/compensation`), so for now that's a Postman/backend-console action, not yet
-a frontend button.
+**Give someone a raise:** Compensation tab → **Add Compensation** button → same
+`POST /v1/compensation` call shown above. The new record supersedes the old one going
+forward; the old one stays in history with an end date, nothing is overwritten.
+
+**Assign an allowance/deduction to one person:** Pay Elements tab (on the employee
+detail page) → **Assign Pay Element** → pick one of the tenant's pay elements (defined
+under Payroll → Pay Elements), a calculation method (fixed amount / % of basic / % of
+gross / formula), and an effective date.
+```
+POST {{baseUrl}}/api/v1/workers/:workerId/pay-elements
+Authorization: Bearer {{accessToken}}
+{ "payElementId": "{{payElementId}}", "calculationMethod": "fixed", "amountMinor": 5000000, "effectiveDate": "2026-07-01" }
+```
+**Unassign** on that same tab soft-removes it (`PATCH .../pay-elements/:id/unassign`) —
+it stops applying going forward but stays in history.
+
+**Tax rules (read-only for you):** Settings → **Jurisdictions** (`/settings/jurisdictions`)
+shows the same country/tax-rule/version tree as the Tenant Admin section above, but
+without the Activate/Deactivate buttons — only `tenant_admin`/`super_admin` can flip a
+tax version on or off.
 
 ### Payroll Manager (`payroll_manager` / `payroll_officer`)
 
@@ -329,12 +406,15 @@ Depending on your tenant's approval workflow setting, the batch may need **Appro
 streams the bulk bank file: `GET .../disbursement/:batchId/bulk-file?format=csv`. If
 something fails partway, **Retry** re-attempts just the failed transactions.
 
+**Tax rules (read-only):** sidebar → **Jurisdictions** (`/settings/jurisdictions`) —
+same jurisdiction/rule/version tree as everyone else, no Activate/Deactivate buttons.
+
 ### Auditor / Read Only
 
 Land on the default dashboard (HR Dashboard for auditor; a minimal dashboard for
-read_only). Sidebar is limited to **Audit Logs** (auditor) or read-only views of
-Employees/Pay Runs (read_only) — every write button is hidden, and the backend would
-403 anyway if one were clicked directly.
+read_only). Sidebar is limited to **Audit Logs** + **Jurisdictions** (auditor) or
+read-only views of Employees/Pay Runs/**Jurisdictions** (read_only) — every write
+button is hidden, and the backend would 403 anyway if one were clicked directly.
 
 ### Employee (`employee_self_service`)
 
@@ -367,7 +447,9 @@ worker records at all, including their own.
 
 ```
 PUBLIC (no login)
-└── /                          Landing page — "Get Started" links go to /login
+└── /                          Landing page — "Get Started" links open a mailto: to
+│                               support (no self-signup exists); "Sign in" goes to /login
+└── /features                  Marketing walkthrough of the 4-step flow, no login needed
 └── /login                     Tenant login (email → company slug → password)
 └── /platform-login            Platform admin login (email → password)
 

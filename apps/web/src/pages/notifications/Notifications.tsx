@@ -1,38 +1,37 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, BellOff, Check, CheckCheck, Calendar, FileText, AlertCircle, Info } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Bell, BellOff, Calendar, Mail, MessageSquare } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
 import { formatDate } from '@/lib/utils';
-import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
-import Button from '@/components/ui/Button';
-import Badge from '@/components/ui/Badge';
 import Tabs from '@/components/ui/Tabs';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 
+// Real backend Notification entity (notification.entity.ts) fields -
+// this used to assume a mock shape (title/isRead/relatedEntity) that never
+// matched what the API actually returns.
 interface Notification {
   id: string;
-  type: string;
-  title: string;
+  recipientUserId: string | null;
+  type: 'email' | 'sms' | 'in_app'; // delivery channel, not a category
+  subject: string;
   message: string;
-  isRead: boolean;
-  relatedEntity: string | null;
-  relatedEntityId: string | null;
+  readAt: string | null;
+  metadata: Record<string, unknown> | null;
   createdAt: string;
 }
 
-const NOTIFICATION_ICONS: Record<string, React.ReactNode> = {
-  payroll: <FileText size={18} style={{ color: '#4FAD72' }} />,
-  approval: <Check size={18} style={{ color: '#F59E0B' }} />,
-  alert: <AlertCircle size={18} style={{ color: '#EF4444' }} />,
-  info: <Info size={18} style={{ color: '#3B82F6' }} />,
+// `type` is the delivery channel the notification went out on, not a
+// category - shown as a small channel indicator rather than an alert-type icon.
+const NOTIFICATION_ICONS: Record<Notification['type'], React.ReactNode> = {
+  email: <Mail size={18} style={{ color: '#4FAD72' }} />,
+  sms: <MessageSquare size={18} style={{ color: '#4FAD72' }} />,
+  in_app: <Bell size={18} style={{ color: '#4FAD72' }} />,
 };
 
 export default function Notifications() {
-  const qc = useQueryClient();
-  const toast = useToast();
   const [activeTab, setActiveTab] = useState('all');
 
   const { data: notifications, isLoading, isError, refetch } = useQuery({
@@ -44,32 +43,6 @@ export default function Notifications() {
       const response = await apiClient<any>(ENDPOINTS.NOTIFICATIONS.LIST);
       return Array.isArray(response) ? response : (response.data || []);
     },
-  });
-
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) => {
-      if (!USE_REAL_API) {
-        return Promise.resolve();
-      }
-      return apiClient(ENDPOINTS.NOTIFICATIONS.MARK_READ(id), { method: 'PATCH' });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
-    },
-  });
-
-  const markAllReadMutation = useMutation({
-    mutationFn: () => {
-      if (!USE_REAL_API) {
-        return Promise.resolve();
-      }
-      return apiClient(ENDPOINTS.NOTIFICATIONS.MARK_ALL_READ, { method: 'PATCH' });
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['notifications'] });
-      toast.success('All notifications marked as read');
-    },
-    onError: () => toast.error('Failed to mark all as read'),
   });
 
   if (isLoading) {
@@ -85,10 +58,15 @@ export default function Notifications() {
   }
 
   const allNotifications = notifications || [];
-  const unreadNotifications = allNotifications.filter((n: Notification) => !n.isRead);
-  const readNotifications = allNotifications.filter((n: Notification) => n.isRead);
+  // Backend has no "mark as read" endpoint at all yet (notification.entity.ts
+  // has a readAt column, but nothing ever sets it - the controller only
+  // exposes GET) - every notification will show as unread until that's added
+  // server-side. Tabs are kept since they're still a correct read of current
+  // state, but there's deliberately no "mark as read" action anywhere below.
+  const unreadNotifications = allNotifications.filter((n: Notification) => !n.readAt);
+  const readNotifications = allNotifications.filter((n: Notification) => !!n.readAt);
 
-  const displayNotifications = 
+  const displayNotifications =
     activeTab === 'unread' ? unreadNotifications :
     activeTab === 'read' ? readNotifications :
     allNotifications;
@@ -98,19 +76,6 @@ export default function Notifications() {
       <PageHeader
         title="Notifications"
         breadcrumbs={[{ label: 'Notifications' }]}
-        action={
-          unreadNotifications.length > 0 ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => markAllReadMutation.mutate()}
-              loading={markAllReadMutation.isPending}
-            >
-              <CheckCheck size={15} />
-              Mark all as read
-            </Button>
-          ) : undefined
-        }
       />
 
       {/* Tabs */}
@@ -148,8 +113,8 @@ export default function Notifications() {
             <div
               key={notification.id}
               style={{
-                background: notification.isRead ? '#fff' : '#F7FAF8',
-                border: notification.isRead ? '1px solid #CDEFD7' : '1px solid #4FAD72',
+                background: notification.readAt ? '#fff' : '#F7FAF8',
+                border: notification.readAt ? '1px solid #CDEFD7' : '1px solid #4FAD72',
                 borderRadius: '0.75rem',
                 padding: 'clamp(1rem, 3vw, 1.25rem)',
                 display: 'flex',
@@ -163,7 +128,7 @@ export default function Notifications() {
                 e.currentTarget.style.boxShadow = '0 1px 3px rgba(79, 173, 114, 0.1)';
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = notification.isRead ? '#CDEFD7' : '#4FAD72';
+                e.currentTarget.style.borderColor = notification.readAt ? '#CDEFD7' : '#4FAD72';
                 e.currentTarget.style.boxShadow = 'none';
               }}
             >
@@ -172,7 +137,7 @@ export default function Notifications() {
                 width: 'clamp(2.5rem, 5vw, 3rem)',
                 height: 'clamp(2.5rem, 5vw, 3rem)',
                 borderRadius: '0.5rem',
-                background: notification.isRead ? '#F7FAF8' : '#CDEFD7',
+                background: notification.readAt ? '#F7FAF8' : '#CDEFD7',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -190,9 +155,9 @@ export default function Notifications() {
                     color: '#0F2E23',
                     lineHeight: 1.4,
                   }}>
-                    {notification.title}
+                    {notification.subject}
                   </h3>
-                  {!notification.isRead && (
+                  {!notification.readAt && (
                     <div style={{
                       width: '8px',
                       height: '8px',
@@ -213,43 +178,9 @@ export default function Notifications() {
                   {notification.message}
                 </p>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#1F6F4E' }}>
-                    <Calendar size={12} />
-                    {formatDate(notification.createdAt)}
-                  </div>
-
-                  {!notification.isRead && (
-                    <button
-                      onClick={() => markReadMutation.mutate(notification.id)}
-                      disabled={markReadMutation.isPending}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.375rem',
-                        padding: '0.375rem 0.75rem',
-                        fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)',
-                        fontWeight: 500,
-                        color: '#4FAD72',
-                        background: 'transparent',
-                        border: '1px solid #4FAD72',
-                        borderRadius: '0.375rem',
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = '#4FAD72';
-                        e.currentTarget.style.color = '#fff';
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'transparent';
-                        e.currentTarget.style.color = '#4FAD72';
-                      }}
-                    >
-                      <Check size={14} />
-                      Mark as read
-                    </button>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#1F6F4E' }}>
+                  <Calendar size={12} />
+                  {formatDate(notification.createdAt)}
                 </div>
               </div>
             </div>

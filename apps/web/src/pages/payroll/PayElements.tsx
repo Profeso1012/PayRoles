@@ -91,14 +91,14 @@ export default function PayElements() {
     onError: () => toast.error('Failed to save pay element'),
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient(ENDPOINTS.PAY_ELEMENTS.DELETE(id), { method: 'DELETE' }),
+  const deactivateMutation = useMutation({
+    mutationFn: (id: string) => apiClient(ENDPOINTS.PAY_ELEMENTS.DEACTIVATE(id), { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-elements'] });
-      toast.success('Pay element deleted');
+      toast.success('Pay element deactivated');
       setDeleteTarget(null);
     },
-    onError: () => toast.error('Failed to delete pay element'),
+    onError: () => toast.error('Failed to deactivate pay element'),
   });
 
   function openAdd() {
@@ -185,7 +185,7 @@ export default function PayElements() {
                       <button
                         onClick={() => setDeleteTarget(el)}
                         className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                        title="Delete"
+                        title="Deactivate"
                       >
                         <Trash2 size={14} />
                       </button>
@@ -201,7 +201,7 @@ export default function PayElements() {
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Pay Elements"
         action={
@@ -297,12 +297,12 @@ export default function PayElements() {
       <ConfirmModal
         isOpen={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
-        onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-        title="Delete Pay Element"
-        message={`Delete "${deleteTarget?.name}"? This may affect payroll calculations.`}
-        confirmLabel="Delete"
+        onConfirm={() => deleteTarget && deactivateMutation.mutate(deleteTarget.id)}
+        title="Deactivate Pay Element"
+        message={`Deactivate "${deleteTarget?.name}"? It will stop applying to future payroll calculations, but existing history is kept.`}
+        confirmLabel="Deactivate"
         variant="danger"
-        isLoading={deleteMutation.isPending}
+        isLoading={deactivateMutation.isPending}
       />
     </div>
   );

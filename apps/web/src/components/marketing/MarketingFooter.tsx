@@ -40,6 +40,20 @@ function FooterLink({ label }: { label: string }) {
 export default function MarketingFooter() {
   return (
     <footer style={{ background: '#0F2E23', position: 'relative', overflow: 'hidden' }}>
+      {/*
+        Self-contained for the same reason as MarketingNav's <style> tag -
+        these rules used to live only in Landing.tsx's own <style> block, so
+        any other page reusing this footer had no CSS backing .footer-grid/
+        .footer-brand-col/.footer-bar on mobile (columns didn't collapse).
+      */}
+      <style>{`
+        @media (max-width: 767px) {
+          .footer-grid { grid-template-columns: 1fr 1fr !important; padding: 40px 24px 32px !important; gap: 40px !important; }
+          .footer-brand-col { grid-column: 1 / -1 !important; }
+          .footer-bar { padding: 24px 24px !important; flex-direction: column !important; align-items: flex-start !important; gap: 16px !important; }
+        }
+      `}</style>
+
       {/* Dot grid */}
       <div
         style={{

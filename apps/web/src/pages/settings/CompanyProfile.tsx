@@ -93,7 +93,7 @@ export default function CompanyProfile() {
   const isDirty = name !== profile.name || country !== (profile.country || '');
 
   return (
-    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ maxWidth: '800px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Company Profile"
         breadcrumbs={[{ label: 'Settings' }, { label: 'Company Profile' }]}

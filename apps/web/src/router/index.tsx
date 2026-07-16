@@ -243,15 +243,26 @@ export const router = createBrowserRouter([
       // Deprecated: /reports/* (PayrollRegister, StatutoryReports, CostSummary) -
       // no backend /reports module exists at all; these were 100% mock data.
 
-      // Settings
+      // Settings - profile/users stay tenant_admin/super_admin only, but
+      // jurisdictions needs its own wider guard below (backend grants
+      // tax_rule:read to payroll_officer/finance_manager/auditor/read_only
+      // too - Jurisdictions.tsx already has working read-only-banner logic
+      // for them that could never run while this blocked them first).
       {
         path: 'settings',
         element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}><Outlet /></RoleGuard>,
         children: [
           { path: 'profile', element: w(CompanyProfile) },
           { path: 'users', element: w(UsersAndRoles) },
-          { path: 'jurisdictions', element: w(Jurisdictions) },
         ],
+      },
+      {
+        path: 'settings/jurisdictions',
+        element: (
+          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_officer', 'finance_manager', 'auditor', 'read_only']}>
+            {w(Jurisdictions)}
+          </RoleGuard>
+        ),
       },
 
       // Audit & Notifications

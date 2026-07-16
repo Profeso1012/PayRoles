@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import Topbar from './Topbar';
 import Sidebar from './Sidebar';
 import ToastProvider from '@/components/ui/ToastProvider';
+import TourGuide from '@/components/tour/TourGuide';
 
 export default function AppShell() {
   return (
@@ -16,6 +17,7 @@ export default function AppShell() {
         </main>
       </div>
       <ToastProvider />
+      <TourGuide />
     </div>
   );
 }

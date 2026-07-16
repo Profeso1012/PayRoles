@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, Pencil } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
+import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
@@ -37,9 +38,16 @@ const blankForm = { name: '', country: '', taxId: '', address: '' };
 export default function LegalEntities() {
   const qc = useQueryClient();
   const toast = useToast();
+  const role = useAuthStore((s) => s.user?.role);
+  // Real backend permission LEGAL_ENTITY_WRITE (create/update/deactivate) is
+  // only granted to super_admin/tenant_admin - hr_manager/hr_officer can
+  // reach this page (LEGAL_ENTITY_READ) but would 403 on any write.
+  const canWrite = role === 'tenant_admin' || role === 'super_admin';
 
   const [addOpen, setAddOpen] = useState(false);
   const [form, setForm] = useState(blankForm);
+  const [editTarget, setEditTarget] = useState<LegalEntity | null>(null);
+  const [editForm, setEditForm] = useState(blankForm);
   const [deleteTarget, setDeleteTarget] = useState<LegalEntity | null>(null);
 
   const {
@@ -71,6 +79,32 @@ export default function LegalEntities() {
     onError: () => toast.error('Failed to add legal entity'),
   });
 
+  const editMutation = useMutation({
+    mutationFn: () => {
+      // taxId comes back from the backend only as "Protected" (write-only,
+      // encrypted at rest) - leaving the field blank must NOT overwrite an
+      // existing one, so it's only included in the body when actually typed.
+      const body: Record<string, string> = {
+        name: editForm.name,
+        country: editForm.country,
+        address: editForm.address,
+      };
+      if (editForm.taxId.trim()) body.taxId = editForm.taxId.trim();
+      return apiClient(ENDPOINTS.LEGAL_ENTITIES.UPDATE(editTarget!.id), {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['legal-entities'] });
+      qc.invalidateQueries({ queryKey: ['org-overview'] });
+      toast.success('Legal entity updated');
+      setEditTarget(null);
+      setEditForm(blankForm);
+    },
+    onError: () => toast.error('Failed to update legal entity'),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: string) =>
       apiClient(ENDPOINTS.LEGAL_ENTITIES.DEACTIVATE(id), { method: 'PATCH' }),
@@ -96,7 +130,7 @@ export default function LegalEntities() {
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem 1.5rem' }}>
+    <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <div
         style={{
           display: 'flex',
@@ -122,17 +156,23 @@ export default function LegalEntities() {
             Manage the legal entities within your organisation.
           </p>
         </div>
-        <Button variant="primary" onClick={() => setAddOpen(true)}>
-          <Plus size={16} />
-          Add Legal Entity
-        </Button>
+        {canWrite && (
+          <Button variant="primary" onClick={() => setAddOpen(true)}>
+            <Plus size={16} />
+            Add Legal Entity
+          </Button>
+        )}
       </div>
 
       {!legalEntities || legalEntities.length === 0 ? (
         <EmptyState
           title="No legal entities yet."
-          description="Add your first legal entity to get started."
-          action={{ label: 'Add Legal Entity', onClick: () => setAddOpen(true) }}
+          description={
+            canWrite
+              ? 'Add your first legal entity to get started.'
+              : 'Your tenant admin has not added a legal entity yet.'
+          }
+          action={canWrite ? { label: 'Add Legal Entity', onClick: () => setAddOpen(true) } : undefined}
         />
       ) : (
         <div
@@ -217,31 +257,59 @@ export default function LegalEntities() {
                       {formatDate(le.createdAt)}
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
-                      <button
-                        type="button"
-                        onClick={() => setDeleteTarget(le)}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: '0.375rem',
-                          borderRadius: '0.375rem',
-                          border: 'none',
-                          background: 'transparent',
-                          cursor: 'pointer',
-                          color: '#dc2626',
-                          transition: 'background 0.15s',
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background = '#fee2e2')
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.background = 'transparent')
-                        }
-                        title="Delete"
-                      >
-                        <Trash2 size={15} />
-                      </button>
+                      {canWrite && (
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditTarget(le);
+                              setEditForm({ name: le.name, country: le.country, taxId: '', address: le.address });
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.375rem',
+                              borderRadius: '0.375rem',
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              color: '#1F6F4E',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) => (e.currentTarget.style.background = '#CDEFD7')}
+                            onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                            title="Edit"
+                          >
+                            <Pencil size={15} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(le)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              padding: '0.375rem',
+                              borderRadius: '0.375rem',
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              color: '#dc2626',
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.background = '#fee2e2')
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.background = 'transparent')
+                            }
+                            title="Delete"
+                          >
+                            <Trash2 size={15} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -289,6 +357,57 @@ export default function LegalEntities() {
               onClick={() => addMutation.mutate(form)}
             >
               Add Legal Entity
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!editTarget}
+        onClose={() => { setEditTarget(null); setEditForm(blankForm); }}
+        title={`Edit ${editTarget?.name ?? 'Legal Entity'}`}
+        size="md"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <Input
+            label="Name"
+            value={editForm.name}
+            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+          />
+          <Select
+            label="Country"
+            value={editForm.country}
+            options={countryOptions}
+            onChange={(v) => setEditForm((f) => ({ ...f, country: v }))}
+            placeholder="Select a country"
+          />
+          <div>
+            <Input
+              label="Tax ID"
+              value={editForm.taxId}
+              onChange={(e) => setEditForm((f) => ({ ...f, taxId: e.target.value }))}
+              placeholder="Leave blank to keep the current tax ID unchanged"
+            />
+            <p style={{ fontSize: '0.75rem', color: '#1F6F4E', opacity: 0.7, marginTop: '0.25rem' }}>
+              The current tax ID is encrypted and never shown back — only fill this in if you want to replace it.
+            </p>
+          </div>
+          <Input
+            label="Address"
+            value={editForm.address}
+            onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <Button variant="ghost" onClick={() => { setEditTarget(null); setEditForm(blankForm); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={editMutation.isPending}
+              disabled={!editForm.name || !editForm.country}
+              onClick={() => editMutation.mutate()}
+            >
+              Save Changes
             </Button>
           </div>
         </div>
