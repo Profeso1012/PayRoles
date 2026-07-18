@@ -25,6 +25,7 @@ type PersonalForm = {
   dateOfBirth: string;
   gender: string;
   nationalId: string;
+  annualRent: string;
 };
 
 type EmploymentForm = {
@@ -78,7 +79,7 @@ export default function AddEmployee() {
 
   const [personal, setPersonal] = useState<PersonalForm>({
     firstName: '', lastName: '', email: '', phone: '',
-    dateOfBirth: '', gender: '', nationalId: '',
+    dateOfBirth: '', gender: '', nationalId: '', annualRent: '',
   });
 
   const [employment, setEmployment] = useState<EmploymentForm>({
@@ -124,6 +125,8 @@ export default function AddEmployee() {
         phone: personal.phone || undefined,
         dateOfBirth: personal.dateOfBirth || undefined,
         nationalId: personal.nationalId || undefined,
+        // Minor units - feeds the Nigerian PAYE rent relief calc only, not a payroll deduction.
+        annualRentMinor: personal.annualRent ? Math.round(parseFloat(personal.annualRent) * 100) : undefined,
         position: employment.position || undefined,
         department: employment.department || undefined,
         legalEntityId: employment.legalEntityId || undefined,
@@ -158,7 +161,7 @@ export default function AddEmployee() {
       toast.success('Employee added successfully');
       navigate(`/employees/${employee.id}`);
     },
-    onError: () => toast.error('Failed to add employee'),
+    onError: (err) => toast.error('Failed to add employee', err instanceof Error ? err.message : undefined),
   });
 
   const fieldClass =
@@ -261,6 +264,20 @@ export default function AddEmployee() {
                 onChange={(e) => setPersonal((f) => ({ ...f, nationalId: e.target.value }))}
                 placeholder="NIN-000000000"
               />
+            </div>
+            <div className="col-span-2">
+              <p className="text-sm text-cash-green font-medium mb-1">Annual Rent Paid (₦, optional)</p>
+              <input
+                type="number"
+                className={fieldClass}
+                min={0}
+                value={personal.annualRent}
+                onChange={(e) => setPersonal((f) => ({ ...f, annualRent: e.target.value }))}
+                placeholder="e.g. 1000000"
+              />
+              <p className="text-xs text-cash-green/60 mt-1">
+                Used only to calculate this employee's Nigerian PAYE rent relief — not a payroll deduction.
+              </p>
             </div>
           </div>
         </div>

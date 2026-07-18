@@ -227,7 +227,9 @@ export default function EmployeeDetail() {
       setAssignWpeOpen(false);
       setWpeForm(blankWpeForm);
     },
-    onError: () => toast.error('Failed to assign pay element'),
+    // Includes date-overlap conflicts (409) - the backend's message names the
+    // exact conflicting assignment and how to resolve it, worth showing in full.
+    onError: (err) => toast.error('Failed to assign pay element', err instanceof Error ? err.message : undefined),
   });
 
   const unassignPayElementMutation = useMutation({
@@ -237,7 +239,7 @@ export default function EmployeeDetail() {
       qc.invalidateQueries({ queryKey: ['worker-pay-elements', id] });
       toast.success('Pay element unassigned');
     },
-    onError: () => toast.error('Failed to unassign pay element'),
+    onError: (err) => toast.error('Failed to unassign pay element', err instanceof Error ? err.message : undefined),
   });
 
   const addCompensationMutation = useMutation({
@@ -259,7 +261,7 @@ export default function EmployeeDetail() {
       setAddCompOpen(false);
       setCompForm(blankCompForm);
     },
-    onError: () => toast.error('Failed to add compensation'),
+    onError: (err) => toast.error('Failed to add compensation', err instanceof Error ? err.message : undefined),
   });
 
   if (isLoading) {

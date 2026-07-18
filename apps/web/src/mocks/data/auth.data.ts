@@ -11,6 +11,7 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: null,
     avatarUrl: null,
     workerId: null,
+    platformRole: 'super_admin',
   },
   {
     id: 'u-super-1',
@@ -22,6 +23,7 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: 'Dangote Cement Plc',
     avatarUrl: null,
     workerId: null,
+    platformRole: null,
   },
   {
     id: 'u-hr-1',
@@ -33,6 +35,7 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: 'Dangote Cement Plc',
     avatarUrl: null,
     workerId: null,
+    platformRole: null,
   },
   {
     id: 'u-payroll-1',
@@ -44,6 +47,7 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: 'Dangote Cement Plc',
     avatarUrl: null,
     workerId: null,
+    platformRole: null,
   },
   {
     id: 'u-finance-1',
@@ -55,6 +59,7 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: 'Dangote Cement Plc',
     avatarUrl: null,
     workerId: null,
+    platformRole: null,
   },
   {
     id: 'u-employee-1',
@@ -66,5 +71,6 @@ export const mockUsers: Array<AuthUser & { password: string }> = [
     tenantName: 'Dangote Cement Plc',
     avatarUrl: null,
     workerId: 'w-employee-1',
+    platformRole: null,
   },
 ];

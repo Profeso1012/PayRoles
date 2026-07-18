@@ -16,6 +16,7 @@ export const PATHS = {
   ADMIN: '/admin',
   ADMIN_COMPANIES: '/admin/companies',
   ADMIN_COMPANY_DETAIL: (id = ':id') => `/admin/companies/${id}`,
+  ADMIN_TAX: '/admin/tax',
 
   // Onboarding
   ONBOARDING: '/onboarding',

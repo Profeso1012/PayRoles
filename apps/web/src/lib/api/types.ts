@@ -67,6 +67,9 @@ export interface BackendWorker {
   bankAccountEncrypted: string | null;
   bankName: string | null;
   bankRoutingCode: string | null;
+  // Bigint as string (kobo) - annual rent paid, feeds the Nigerian PAYE rent
+  // relief calc only. Not a payroll deduction; unrelated to salary.
+  annualRentMinor: string | null;
   metadata: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
@@ -97,6 +100,8 @@ export interface CreateWorkerRequest {
   bankAccount?: string;
   bankName?: string;
   bankRoutingCode?: string;
+  /** Minor units (e.g. 100000000 = NGN 1,000,000/year). Feeds the Nigerian PAYE rent relief calc only. */
+  annualRentMinor?: number;
 }
 
 export interface UpdateWorkerRequest extends Partial<CreateWorkerRequest> {}
@@ -168,6 +173,9 @@ export interface CreatePayrollRunRequest {
   currency?: string;
   notes?: string;
 }
+
+/** PATCH /payroll/runs/:id - only while draft/calculated/failed/rejected (409 otherwise). */
+export interface UpdatePayrollRunRequest extends Partial<CreatePayrollRunRequest> {}
 
 export interface ApprovePayrollRunRequest {
   notes?: string;
@@ -371,6 +379,10 @@ export interface BackendPayElement {
   type: BackendPayElementType;
   formula: string | null;
   taxRuleCode: string | null; // Only meaningful when type = 'tax'
+  // Only meaningful when type = 'tax'. true: applies to every active worker
+  // automatically (e.g. PAYE). false: only workers with an explicit
+  // WorkerPayElement assignment (e.g. withholding tax on specific contractors).
+  autoApply: boolean;
   isActive: boolean;
   isTaxable: boolean;
   isStatutory: boolean;
@@ -381,13 +393,20 @@ export interface BackendPayElement {
   updatedAt: string;
 }
 
-/** POST /pay-elements body (CreatePayElementDto). There is no `category` or `isPensionable` field. */
+/**
+ * POST /pay-elements body (CreatePayElementDto). There is no `category` or
+ * `isPensionable` field. `autoApply` MUST be explicitly true or false when
+ * type = 'tax' - the backend has no safe default for that case and 400s
+ * with PayElementAutoApplyRequiredException if it's omitted (a prior
+ * silent-default incident applied a "specific workers only" tax to everyone).
+ */
 export interface CreatePayElementRequest {
   code: string; // UPPER_SNAKE_CASE, e.g. 'BASIC_SALARY'
   name: string;
   type: BackendPayElementType;
   formula?: string;
   taxRuleCode?: string;
+  autoApply?: boolean; // Required when type = 'tax'
   isActive?: boolean;
   isTaxable?: boolean;
   isStatutory?: boolean;
@@ -632,6 +651,14 @@ export interface TaxRule {
   updatedAt: string;
 }
 
+/** POST /platform/tax/rules body (CreateTaxRuleDto) - platform-admin-only. */
+export interface CreateTaxRuleRequest {
+  code: string; // UPPER_SNAKE_CASE, e.g. 'NIGERIA_WHT'
+  name: string;
+  jurisdictionCode: string; // TaxJurisdiction.code this rule belongs to, e.g. 'NG'
+  description?: string;
+}
+
 export type BackendTaxCalculationBasis = 'annual' | 'monthly';
 
 // Plain shape returned by list endpoints (GET /tax/rules/:code/versions) -
@@ -676,7 +703,10 @@ export type BackendTaxReliefType =
   | 'fixed_amount'
   | 'percentage_of_gross'
   | 'percentage_of_gross_capped'
-  | 'greater_of_fixed_or_percentage';
+  | 'greater_of_fixed_or_percentage'
+  // A percentage of a worker-supplied fact (e.g. Worker.annualRentMinor),
+  // not gross income - e.g. Nigeria's rent relief: 20% of annual rent, capped.
+  | 'percentage_of_worker_amount_capped';
 
 export interface TaxRelief {
   id: string;

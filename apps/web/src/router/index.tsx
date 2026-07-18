@@ -50,6 +50,7 @@ const AuthLayout = lazy(() => import('@/components/layout/AuthLayout'));
 const SADashboard = lazy(() => import('@/pages/super-admin/SADashboard'));
 const SACompanies = lazy(() => import('@/pages/super-admin/SACompanies'));
 const SACompanyDetail = lazy(() => import('@/pages/super-admin/SACompanyDetail'));
+const SATaxManagement = lazy(() => import('@/pages/super-admin/SATaxManagement'));
 
 // Dashboards
 const HRDashboard = lazy(() => import('@/pages/dashboard/HRDashboard'));
@@ -160,6 +161,7 @@ export const router = createBrowserRouter([
       { index: true, element: w(SADashboard) },
       { path: 'companies', element: w(SACompanies) },
       { path: 'companies/:id', element: w(SACompanyDetail) },
+      { path: 'tax', element: w(SATaxManagement) },
     ],
   },
 

@@ -117,7 +117,16 @@ export default function UsersAndRoles() {
       toast.success('User disabled');
       setDisableTarget(null);
     },
-    onError: () => toast.error('Failed to disable user'),
+    onError: (err) => toast.error('Failed to disable user', err instanceof Error ? err.message : undefined),
+  });
+
+  const enableMutation = useMutation({
+    mutationFn: (id: string) => apiClient(ENDPOINTS.USERS.ENABLE(id), { method: 'PATCH' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings-users'] });
+      toast.success('User re-enabled');
+    },
+    onError: (err) => toast.error('Failed to enable user', err instanceof Error ? err.message : undefined),
   });
 
   if (!isSuperAdmin) {
@@ -246,7 +255,15 @@ export default function UsersAndRoles() {
                           Disable
                         </Button>
                       ) : (
-                        <Badge variant="info" label="Disabled" />
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          loading={enableMutation.isPending && enableMutation.variables === u.id}
+                          onClick={() => enableMutation.mutate(u.id)}
+                        >
+                          <ShieldCheck size={13} />
+                          Enable
+                        </Button>
                       )}
                     </td>
                   </tr>

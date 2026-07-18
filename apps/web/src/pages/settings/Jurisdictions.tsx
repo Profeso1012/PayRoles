@@ -1,10 +1,8 @@
 import { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
-import { useAuthStore } from '@/store/authStore';
-import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
@@ -27,17 +25,13 @@ interface JurisdictionRow {
 }
 
 export default function Jurisdictions() {
-  const qc = useQueryClient();
-  const toast = useToast();
-  const role = useAuthStore((s) => s.user?.role);
-  const canEdit = role === 'tenant_admin' || role === 'super_admin';
-
   const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
-  const [togglingCode, setTogglingCode] = useState<string | null>(null);
 
-  // Real tax module has no "enable/disable jurisdiction" concept - jurisdictions
-  // are just country reference data. The actual configurable/toggleable unit is
-  // a *tax rule version* (e.g. "Nigeria PIT 2026" can be active or inactive).
+  // Tax law is jurisdiction-wide reference data shared by every tenant -
+  // creating/activating/deactivating a version is now a platform-admin-only
+  // capability (see PlatformTaxController, /api/platform/tax). The tenant
+  // Permission.TAX_RULE_WRITE this page used to gate on no longer exists at
+  // all - every tenant role, including tenant_admin, is read-only here now.
   const { data: rows, isLoading, isError, refetch } = useQuery<JurisdictionRow[]>({
     queryKey: ['tax-jurisdictions-with-rules'],
     queryFn: async () => {
@@ -61,21 +55,6 @@ export default function Jurisdictions() {
         }),
       );
     },
-  });
-
-  const activateMutation = useMutation({
-    mutationFn: ({ code, activate }: { code: string; activate: boolean }) =>
-      apiClient(
-        activate ? ENDPOINTS.TAX.ACTIVATE(code) : ENDPOINTS.TAX.DEACTIVATE(code),
-        { method: 'PATCH' },
-      ),
-    onMutate: ({ code }) => setTogglingCode(code),
-    onSuccess: (_, { activate }) => {
-      qc.invalidateQueries({ queryKey: ['tax-jurisdictions-with-rules'] });
-      toast.success(activate ? 'Tax version activated' : 'Tax version deactivated');
-    },
-    onError: () => toast.error('Failed to update tax version'),
-    onSettled: () => setTogglingCode(null),
   });
 
   function toggleExpand(code: string) {
@@ -110,21 +89,20 @@ export default function Jurisdictions() {
         Countries your payroll operates in, and the statutory tax rules configured for each.
       </p>
 
-      {!canEdit && (
-        <div
-          style={{
-            padding: '0.75rem 1rem',
-            background: '#F7FAF8',
-            border: '1px solid #CDEFD7',
-            borderRadius: '0.5rem',
-            marginBottom: '1.25rem',
-            fontSize: '0.8125rem',
-            color: '#1F6F4E',
-          }}
-        >
-          You have read-only access. Contact your Tenant Admin to activate or deactivate tax rule versions.
-        </div>
-      )}
+      <div
+        style={{
+          padding: '0.75rem 1rem',
+          background: '#F7FAF8',
+          border: '1px solid #CDEFD7',
+          borderRadius: '0.5rem',
+          marginBottom: '1.25rem',
+          fontSize: '0.8125rem',
+          color: '#1F6F4E',
+        }}
+      >
+        This is reference data shared across every company on PayRole, so it's read-only here.
+        Reach out to PayRole support if a tax version needs to be added or changed.
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
         {rows.length === 0 && (
@@ -197,52 +175,25 @@ export default function Jurisdictions() {
                             <p style={{ fontSize: '0.75rem', color: '#1F6F4E', paddingLeft: '0.5rem' }}>No versions defined.</p>
                           ) : (
                             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                              {versions.map((v) => {
-                                const isToggling = togglingCode === v.code;
-                                return (
-                                  <li
-                                    key={v.id}
-                                    style={{
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      justifyContent: 'space-between',
-                                      gap: '0.5rem',
-                                      fontSize: '0.8125rem',
-                                      color: '#1F6F4E',
-                                      paddingLeft: '0.5rem',
-                                      opacity: isToggling ? 0.6 : 1,
-                                    }}
-                                  >
-                                    <span>
-                                      {v.name} <span style={{ color: '#4FAD72' }}>· effective {v.effectiveDate}</span>
-                                    </span>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                      <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
-                                      {canEdit && (
-                                        <button
-                                          type="button"
-                                          disabled={isToggling}
-                                          onClick={() =>
-                                            activateMutation.mutate({ code: v.code, activate: !v.isActive })
-                                          }
-                                          style={{
-                                            fontSize: '0.75rem',
-                                            fontWeight: 600,
-                                            color: '#1F6F4E',
-                                            background: 'transparent',
-                                            border: '1px solid #CDEFD7',
-                                            borderRadius: '0.375rem',
-                                            padding: '0.2rem 0.5rem',
-                                            cursor: isToggling ? 'default' : 'pointer',
-                                          }}
-                                        >
-                                          {v.isActive ? 'Deactivate' : 'Activate'}
-                                        </button>
-                                      )}
-                                    </div>
-                                  </li>
-                                );
-                              })}
+                              {versions.map((v) => (
+                                <li
+                                  key={v.id}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: '0.5rem',
+                                    fontSize: '0.8125rem',
+                                    color: '#1F6F4E',
+                                    paddingLeft: '0.5rem',
+                                  }}
+                                >
+                                  <span>
+                                    {v.name} <span style={{ color: '#4FAD72' }}>· effective {v.effectiveDate}</span>
+                                  </span>
+                                  <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
+                                </li>
+                              ))}
                             </ul>
                           )}
                         </div>

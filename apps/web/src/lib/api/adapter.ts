@@ -65,6 +65,9 @@ export const ENDPOINTS = {
       LIST: `${API_VERSION}/payroll/runs`,
       DETAIL: (id: string) => `${API_VERSION}/payroll/runs/${id}`,
       CREATE: `${API_VERSION}/payroll/runs`,
+      // Only allowed while the run is draft/calculated/failed/rejected -
+      // 409s otherwise (see PayrollService.EDITABLE_STATUSES).
+      UPDATE: (id: string) => `${API_VERSION}/payroll/runs/${id}`,
       CALCULATE: (id: string) => `${API_VERSION}/payroll/runs/${id}/calculate`,
       SUBMIT: (id: string) => `${API_VERSION}/payroll/runs/${id}/submit`,
       APPROVE: (id: string) => `${API_VERSION}/payroll/runs/${id}/approve`,
@@ -137,6 +140,7 @@ export const ENDPOINTS = {
     UPDATE: (id: string) => `${API_VERSION}/users/${id}`,
     CHANGE_PASSWORD: `${API_VERSION}/users/me/password`,
     DISABLE: (id: string) => `${API_VERSION}/users/${id}/disable`,
+    ENABLE: (id: string) => `${API_VERSION}/users/${id}/enable`,
   },
 
   // ---------------------------------------------------------------------------
@@ -222,6 +226,16 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Import/Export (New in backend)
   // ---------------------------------------------------------------------------
+  // WORKERS_UPLOAD/LIST/STATUS are deliberately unused by ImportEmployees.tsx.
+  // The batch endpoint runs the whole file in one shared DB transaction with
+  // a per-row try/catch that can't actually isolate failures (Postgres
+  // poisons the entire transaction on the first error, and the final COMMIT
+  // on a poisoned transaction silently rolls back rows that looked
+  // successful) and maps blank optional fields to '' instead of NULL
+  // (colliding with Worker.email's partial unique index). Both need a
+  // backend fix (per-row SAVEPOINTs; `|| null` instead of `?? null`) -
+  // neither is reachable from a differently-shaped upload, so the frontend
+  // parses the file itself and drives individual POST/PATCH /workers calls.
   IMPORTS: {
     LIST: `${API_VERSION}/imports`,
     WORKERS_UPLOAD: `${API_VERSION}/imports/workers/upload`,
@@ -257,14 +271,34 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Tax Engine (NEW - Phase 10)
   // ---------------------------------------------------------------------------
+  // Tenant-facing tax API is now READ-ONLY (tax.controller.ts) - the backend
+  // removed POST/PATCH activate/deactivate from here entirely and moved them
+  // to a platform-admin-only controller (PLATFORM_TAX below). Permission.
+  // TAX_RULE_WRITE no longer exists as a tenant permission at all.
   TAX: {
     JURISDICTIONS: `${API_VERSION}/tax/jurisdictions`,
     RULES: `${API_VERSION}/tax/rules`,
-    RULE_VERSIONS: (code: string) => `${API_VERSION}/tax/rules/${code}/versions`,
+    VERSIONS: (isActive?: boolean) =>
+      `${API_VERSION}/tax/versions${isActive === undefined ? '' : `?isActive=${isActive}`}`,
+    RULE_VERSIONS: (code: string, isActive?: boolean) =>
+      `${API_VERSION}/tax/rules/${code}/versions${isActive === undefined ? '' : `?isActive=${isActive}`}`,
     VERSION_DETAIL: (code: string) => `${API_VERSION}/tax/versions/${code}`,
-    CREATE_VERSION: `${API_VERSION}/tax/versions`,
-    ACTIVATE: (code: string) => `${API_VERSION}/tax/versions/${code}/activate`,
-    DEACTIVATE: (code: string) => `${API_VERSION}/tax/versions/${code}/deactivate`,
+  },
+
+  // Platform-admin-only: create/activate/deactivate tax rules & versions.
+  // Not consumed by any page yet - no Platform Admin UI exists for this.
+  PLATFORM_TAX: {
+    JURISDICTIONS: `${PLATFORM_PREFIX}/tax/jurisdictions`,
+    RULES: `${PLATFORM_PREFIX}/tax/rules`,
+    CREATE_RULE: `${PLATFORM_PREFIX}/tax/rules`,
+    VERSIONS: (isActive?: boolean) =>
+      `${PLATFORM_PREFIX}/tax/versions${isActive === undefined ? '' : `?isActive=${isActive}`}`,
+    RULE_VERSIONS: (code: string, isActive?: boolean) =>
+      `${PLATFORM_PREFIX}/tax/rules/${code}/versions${isActive === undefined ? '' : `?isActive=${isActive}`}`,
+    VERSION_DETAIL: (code: string) => `${PLATFORM_PREFIX}/tax/versions/${code}`,
+    CREATE_VERSION: `${PLATFORM_PREFIX}/tax/versions`,
+    ACTIVATE: (code: string) => `${PLATFORM_PREFIX}/tax/versions/${code}/activate`,
+    DEACTIVATE: (code: string) => `${PLATFORM_PREFIX}/tax/versions/${code}/deactivate`,
   },
 
   // ---------------------------------------------------------------------------

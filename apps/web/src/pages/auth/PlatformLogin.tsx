@@ -13,6 +13,7 @@ interface BackendPlatformUserMe {
   email: string;
   firstName: string;
   lastName: string;
+  platformRole: string;
 }
 
 type Step = 'email' | 'password';
@@ -74,10 +75,12 @@ export default function PlatformLogin() {
       // Step 3: Fetch real platform user profile (GET /platform/users/me)
       let fullName = email;
       let id = 'platform-user';
+      let platformRole: string | null = null;
       try {
         const profile = await apiClient<BackendPlatformUserMe>(ENDPOINTS.PLATFORM_USERS.ME);
         id = profile.id;
         fullName = `${profile.firstName} ${profile.lastName}`.trim();
+        platformRole = profile.platformRole;
       } catch {
         // Non-fatal - fall back to email if /platform/users/me is unavailable.
       }
@@ -91,6 +94,7 @@ export default function PlatformLogin() {
         tenantName: null,
         avatarUrl: null,
         workerId: null,
+        platformRole,
       };
 
       // Step 4: Update session with user

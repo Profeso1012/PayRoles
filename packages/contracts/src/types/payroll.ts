@@ -77,6 +77,11 @@ export interface PayElementDefinition {
   type: 'earning' | 'deduction' | 'employer_contribution' | 'tax' | 'benefit';
   formula: string | null;
   taxRuleCode: string | null; // Only meaningful when type === 'tax'
+  // Only meaningful when type === 'tax'. true: applies to every active
+  // worker automatically (e.g. PAYE). false: only workers with an explicit
+  // WorkerPayElement assignment. Required (no safe default) on create when
+  // type is 'tax' - see CreatePayElementRequest in lib/api/types.ts.
+  autoApply: boolean;
   isActive: boolean;
   isTaxable: boolean;
   isStatutory: boolean;

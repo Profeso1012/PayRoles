@@ -41,7 +41,7 @@ const typeLabel: Record<string, string> = {
   benefit: 'Benefit',
 };
 
-const blank = { code: '', name: '', type: 'earning', formula: '', taxRuleCode: '' };
+const blank = { code: '', name: '', type: 'earning', formula: '', taxRuleCode: '', autoApply: true };
 
 export default function PayElements() {
   const qc = useQueryClient();
@@ -70,7 +70,12 @@ export default function PayElements() {
         type: form.type,
         formula: form.formula || undefined,
       };
-      if (form.type === 'tax') payload.taxRuleCode = form.taxRuleCode || undefined;
+      // autoApply has no safe default for type=tax - the backend 400s
+      // (PayElementAutoApplyRequiredException) if it's omitted here.
+      if (form.type === 'tax') {
+        payload.taxRuleCode = form.taxRuleCode || undefined;
+        payload.autoApply = form.autoApply;
+      }
 
       if (editing) {
         return apiClient<PayElementDefinition>(ENDPOINTS.PAY_ELEMENTS.UPDATE(editing.id), {
@@ -88,7 +93,7 @@ export default function PayElements() {
       toast.success(editing ? 'Pay element updated' : 'Pay element created');
       closeModal();
     },
-    onError: () => toast.error('Failed to save pay element'),
+    onError: (err) => toast.error('Failed to save pay element', err instanceof Error ? err.message : undefined),
   });
 
   const deactivateMutation = useMutation({
@@ -98,7 +103,7 @@ export default function PayElements() {
       toast.success('Pay element deactivated');
       setDeleteTarget(null);
     },
-    onError: () => toast.error('Failed to deactivate pay element'),
+    onError: (err) => toast.error('Failed to deactivate pay element', err instanceof Error ? err.message : undefined),
   });
 
   function openAdd() {
@@ -115,6 +120,7 @@ export default function PayElements() {
       type: el.type,
       formula: el.formula ?? '',
       taxRuleCode: el.taxRuleCode ?? '',
+      autoApply: el.autoApply,
     });
     setModalOpen(true);
   }
@@ -165,6 +171,9 @@ export default function PayElements() {
                         <Lock size={11} />
                         Statutory
                       </span>
+                    )}
+                    {el.type === 'tax' && !el.autoApply && (
+                      <span className="text-xs text-cash-green/60">· assigned only</span>
                     )}
                   </div>
                 </td>
@@ -265,13 +274,24 @@ export default function PayElements() {
             onChange={(v) => setForm((f) => ({ ...f, type: v }))}
           />
           {form.type === 'tax' ? (
-            <Input
-              label="Tax Rule Code"
-              value={form.taxRuleCode}
-              onChange={(e) => setForm((f) => ({ ...f, taxRuleCode: e.target.value.toUpperCase() }))}
-              placeholder="e.g. NIGERIA_PIT"
-              hint="References a tax rule's code instead of evaluating a formula."
-            />
+            <>
+              <Input
+                label="Tax Rule Code"
+                value={form.taxRuleCode}
+                onChange={(e) => setForm((f) => ({ ...f, taxRuleCode: e.target.value.toUpperCase() }))}
+                placeholder="e.g. NIGERIA_PIT"
+                hint="References a tax rule's code instead of evaluating a formula."
+              />
+              <Select
+                label="Applies to"
+                value={form.autoApply ? 'auto' : 'assigned'}
+                options={[
+                  { value: 'auto', label: 'Every employee automatically (e.g. PAYE)' },
+                  { value: 'assigned', label: 'Only employees explicitly assigned this (e.g. withholding tax)' },
+                ]}
+                onChange={(v) => setForm((f) => ({ ...f, autoApply: v === 'auto' }))}
+              />
+            </>
           ) : (
             <Input
               label="Formula (optional)"

@@ -43,6 +43,7 @@ async function buildAuthUser(): Promise<AuthUser> {
     tenantName: null,
     avatarUrl: null,
     workerId: me.workerId ?? null,
+    platformRole: null,
   };
 }
 

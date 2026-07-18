@@ -216,11 +216,12 @@ dashboard — total employees, active/suspended/inactive counts, recent hires).
 
 # PART 4 — Each Role's Day-to-Day Flow
 
-### Tenant Admin — Managing Tax Rules (`tenant_admin` / `super_admin` write, everyone else read-only)
+### Tax Rules — Read-Only for Every Tenant Role (including `tenant_admin`)
 
-This is new since the backend's `tax` module landed (a from-scratch feature add,
-not a fix to something older) — it has its own frontend page, so it's covered
-here separately from Part 3's one-time setup steps.
+**Updated:** a later backend push removed tax version create/activate/deactivate from
+the tenant API entirely. `Permission.TAX_RULE_WRITE` no longer exists as a tenant
+permission at all — tax law is now treated purely as jurisdiction-wide reference data,
+owned exclusively by the platform team (see the Platform Admin section below).
 
 **Frontend:** **Settings → Jurisdictions** (`/settings/jurisdictions`). On load it fires:
 ```
@@ -229,35 +230,38 @@ GET {{baseUrl}}/api/v1/tax/rules
 ```
 then, per rule returned, `GET {{baseUrl}}/api/v1/tax/rules/:code/versions` to build a
 jurisdiction → rule → version tree client-side (the backend doesn't return this nested
-shape itself).
+shape itself). Reachable by `tenant_admin`, `super_admin`, `payroll_officer`,
+`finance_manager`, `auditor`, and `read_only` (whoever holds `tax_rule:read`) —
+**not** `payroll_manager`, `hr_manager`, or `hr_officer`, who don't have that
+permission at all.
 
 The page lists each jurisdiction (country flag, currency, rule count). Click **Show
 rules** to expand one and see its tax rules, and each rule's versions (e.g. "Nigeria
-PIT 2026") with an effective date and an Active/Inactive badge.
+PIT 2026") with an effective date and an Active/Inactive badge — purely informational,
+no buttons for anyone, tenant_admin included. A banner explains this is shared
+reference data and to contact PayRole support for changes.
 
-If you're `tenant_admin`/`super_admin`, every version also has an **Activate** /
-**Deactivate** button:
-```
-PATCH {{baseUrl}}/api/v1/tax/versions/:code/activate
-PATCH {{baseUrl}}/api/v1/tax/versions/:code/deactivate
-```
-Every other role that can reach this page (payroll, HR, finance, auditor, read_only —
-all of whom hold `tax_rule:read`) sees the identical tree with no buttons, plus a
-banner: "You have read-only access. Contact your Tenant Admin to activate or
-deactivate tax rule versions."
+### Platform Admin — Tax Rule/Version Management
 
-**What this page can't do (yet):** there's no button anywhere to create a new
-jurisdiction, tax rule, or tax rule version. The backend has
-`POST {{baseUrl}}/api/v1/tax/versions` (`tenant_admin`/`super_admin` only, via
-`tax_rule:write`) already implemented, but no frontend form calls it — so today,
-jurisdictions/rules/versions only exist if someone seeded them directly (database or
-Postman), and a tenant_admin's actual day-to-day here is limited to flipping the
-Activate/Deactivate switch on whatever versions already exist (e.g. once a new tax
-year's rates are added, switching from "Nigeria PIT 2026" to "Nigeria PIT 2027"). If
-you need to add a new version yourself for now, it's a Postman call:
+Creating tax rules and creating/activating/deactivating tax versions is now
+`super_admin`-only at the **platform** level (`PlatformPermission.TAX_RULE_WRITE` —
+`support_engineer`/`auditor` platform roles get read-only), via a separate controller:
 ```
-POST {{baseUrl}}/api/v1/tax/versions
-Authorization: Bearer {{accessToken}}
+GET    {{baseUrl}}/api/platform/tax/jurisdictions
+GET    {{baseUrl}}/api/platform/tax/rules
+GET    {{baseUrl}}/api/platform/tax/versions?isActive=true|false
+GET    {{baseUrl}}/api/platform/tax/rules/:code/versions?isActive=true|false
+GET    {{baseUrl}}/api/platform/tax/versions/:code
+POST   {{baseUrl}}/api/platform/tax/rules
+POST   {{baseUrl}}/api/platform/tax/versions
+PATCH  {{baseUrl}}/api/platform/tax/versions/:code/activate
+PATCH  {{baseUrl}}/api/platform/tax/versions/:code/deactivate
+```
+**There is no frontend page for this yet** — the Super Admin portal only has
+Companies/Dashboard today. Until one exists, this is Postman-only:
+```
+POST {{baseUrl}}/api/platform/tax/versions
+Authorization: Bearer {{platformAccessToken}}
 {
   "code": "NIGERIA_PIT_2027",
   "taxRuleCode": "NIGERIA_PIT",
@@ -273,10 +277,9 @@ Authorization: Bearer {{accessToken}}
   ]
 }
 ```
-Note `GET /api/v1/tax/versions/:code` (a separate single-version lookup, also not
-called by any frontend page yet) returns a different, wrapped shape —
-`{ version, bands, reliefs }`, not a flat version object — worth knowing if you're
-testing it directly in Postman.
+`GET /api/platform/tax/versions/:code` (and its tenant-facing counterpart,
+`GET /api/v1/tax/versions/:code`) return a wrapped shape — `{ version, bands, reliefs }`,
+not a flat version object — worth knowing if you're testing either directly in Postman.
 
 ### HR Manager (`hr_manager` / `hr_officer`)
 

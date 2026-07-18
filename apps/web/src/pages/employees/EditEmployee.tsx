@@ -24,7 +24,7 @@ export default function EditEmployee() {
     queryFn: async () => {
       const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
       const mapped = mapWorkerFields(worker, 'toFrontend');
-      return { ...mapped, status: mapped.status || 'active' } as Employee;
+      return { ...mapped, status: mapped.status || 'active', annualRentMinor: worker.annualRentMinor } as Employee & { annualRentMinor: string | null };
     },
     enabled: !!id,
   });
@@ -38,10 +38,12 @@ export default function EditEmployee() {
     phone: '',
     dateOfBirth: '',
     nationalId: '',
+    annualRent: '',
   });
 
   useEffect(() => {
     if (employee) {
+      const withRent = employee as Employee & { annualRentMinor: string | null };
       setForm({
         firstName: employee.firstName,
         lastName: employee.lastName,
@@ -49,18 +51,20 @@ export default function EditEmployee() {
         phone: employee.phone,
         dateOfBirth: employee.dateOfBirth,
         nationalId: employee.nationalId === '****' ? '' : employee.nationalId,
+        annualRent: withRent.annualRentMinor ? String(parseInt(withRent.annualRentMinor, 10) / 100) : '',
       });
     }
   }, [employee]);
 
   const updateMutation = useMutation({
     mutationFn: () => {
-      const payload: Record<string, string | undefined> = {
+      const payload: Record<string, string | number | undefined> = {
         firstName: form.firstName,
         lastName: form.lastName,
         email: form.email || undefined,
         phone: form.phone || undefined,
         dateOfBirth: form.dateOfBirth || undefined,
+        annualRentMinor: form.annualRent ? Math.round(parseFloat(form.annualRent) * 100) : undefined,
       };
       // Only send nationalId if the user actually typed a new value (it
       // displays masked as '****' for existing employees - see EmployeeDetail).
@@ -76,7 +80,7 @@ export default function EditEmployee() {
       toast.success('Employee updated');
       navigate(`/employees/${id}`);
     },
-    onError: () => toast.error('Failed to update employee'),
+    onError: (err) => toast.error('Failed to update employee', err instanceof Error ? err.message : undefined),
   });
 
   const fieldClass =
@@ -144,6 +148,20 @@ export default function EditEmployee() {
             value={form.nationalId}
             onChange={(e) => setForm((f) => ({ ...f, nationalId: e.target.value }))}
           />
+          <div className="col-span-2">
+            <p className="text-sm text-cash-green font-medium mb-1">Annual Rent Paid (₦, optional)</p>
+            <input
+              type="number"
+              className={fieldClass}
+              min={0}
+              value={form.annualRent}
+              onChange={(e) => setForm((f) => ({ ...f, annualRent: e.target.value }))}
+              placeholder="e.g. 1000000"
+            />
+            <p className="text-xs text-cash-green/60 mt-1">
+              Used only to calculate this employee's Nigerian PAYE rent relief — not a payroll deduction.
+            </p>
+          </div>
         </div>
 
         <div className="flex justify-end gap-3 mt-6 pt-5 border-t border-mint-light">

@@ -26,6 +26,7 @@ interface NavItem {
 const PLATFORM_ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
   { label: 'Companies', path: '/admin/companies', icon: Building2 },
+  { label: 'Tax Rules', path: '/admin/tax', icon: Landmark },
 ];
 
 const COMPANY_ADMIN_NAV: NavItem[] = [
