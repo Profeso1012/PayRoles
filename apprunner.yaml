@@ -1,0 +1,33 @@
+version: 1.0
+runtime: nodejs20
+
+build:
+  commands:
+    build:
+      - corepack enable
+      - corepack prepare pnpm@9 --activate
+      - pnpm install --frozen-lockfile
+      - pnpm --filter web build
+      - npm install --global serve
+  env:
+    # Baked into the Vite bundle at build time (import.meta.env.VITE_*).
+    # Override per-environment in the App Runner console if these differ
+    # from production defaults.
+    - name: VITE_API_URL
+      value: "http://localhost:3000/api"
+    - name: VITE_APP_NAME
+      value: "PayRole"
+    - name: VITE_APP_ENV
+      value: "production"
+    - name: VITE_USE_REAL_API
+      value: "true"
+
+run:
+  runtime-version: 20
+  command: serve -s apps/web/dist -l $PORT
+  network:
+    port: 8080
+    env: PORT
+  env:
+    - name: NODE_ENV
+      value: "production"
