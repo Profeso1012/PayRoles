@@ -8,6 +8,7 @@
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
+    "serve": "^14.2.6",
     "typescript": "^5.5.0"
   }
 }

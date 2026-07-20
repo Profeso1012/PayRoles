@@ -23,9 +23,7 @@ build:
 
 run:
   runtime-version: 22.14.0
-  pre-run:
-    - npm install --global serve
-  command: serve -s apps/web/dist -l $PORT
+  command: node_modules/.bin/serve -s apps/web/dist -l $PORT
   network:
     port: 8080
     env: PORT
