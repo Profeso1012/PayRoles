@@ -8,7 +8,6 @@ build:
       - corepack prepare pnpm@9 --activate
       - pnpm install --frozen-lockfile
       - pnpm --filter web build
-      - npm install --global serve
   env:
     # Baked into the Vite bundle at build time (import.meta.env.VITE_*).
     # Override per-environment in the App Runner console if these differ
@@ -24,6 +23,8 @@ build:
 
 run:
   runtime-version: 22.14.0
+  pre-run:
+    - npm install --global serve
   command: serve -s apps/web/dist -l $PORT
   network:
     port: 8080
