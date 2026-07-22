@@ -2,7 +2,7 @@ import { useAuthStore } from '@/store/authStore';
 import { API_BASE } from './api/adapter';
 import { extractResponseData } from './api/transforms';
 
-const BASE_URL = API_BASE;
+const BASE_URL = API_BASE.replace(/\/+$/, '');
 
 export class ApiError extends Error {
   constructor(
