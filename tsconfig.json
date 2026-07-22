@@ -18,7 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@contracts/*": ["../../packages/contracts/src/*"]
+      "@contracts/*": ["./src/contracts/*"]
     }
   },
   "include": ["src"],
