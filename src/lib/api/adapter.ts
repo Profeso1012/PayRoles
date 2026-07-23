@@ -10,7 +10,13 @@
 // ============================================================================
 
 export const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
-export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const configuredApiBase = import.meta.env.VITE_API_URL;
+
+if (import.meta.env.PROD && !configuredApiBase) {
+  throw new Error('VITE_API_URL must be configured for production builds.');
+}
+
+export const API_BASE = configuredApiBase || 'http://localhost:3000/api';
 
 // Version prefix for tenant APIs (real backend uses /v1, mock uses none)
 export const API_VERSION = USE_REAL_API ? '/v1' : '';
