@@ -120,22 +120,7 @@ export default function Login() {
       if (role === 'employee_self_service') navigate('/my-payslips');
       else navigate('/dashboard');
     } catch (err: any) {
-      // The backend returns the identical 401 INVALID_CREDENTIALS/"Invalid
-      // email or password" for wrong credentials AND for a suspended tenant
-      // (see auth.service.ts - it checks tenant.status before the password,
-      // but rethrows the same InvalidCredentialsException either way). There
-      // is no signal here to tell those two cases apart, so this message
-      // deliberately avoids asserting "your password is wrong" when it could
-      // just as easily be a suspended company. ACCOUNT_DISABLED (user-level
-      // suspension) is a real, distinguishable code and gets its own message.
-      const code = (err?.data as { error?: { code?: string } } | undefined)?.error?.code;
-      const message =
-        code === 'ACCOUNT_DISABLED'
-          ? 'Your account has been disabled. Contact your administrator for help.'
-          : err?.message
-          ? `${err.message} — double-check your company code, email, and password. If you believe this is a mistake, contact your administrator or support.`
-          : 'We couldn’t sign you in with those details. Double-check your company code, email, and password, or contact your administrator or support if you believe this is a mistake.';
-      setError(message);
+      setError(err?.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

@@ -9,6 +9,7 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public data?: unknown,
+    public isNetworkError: boolean = false,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -37,7 +38,7 @@ async function refreshAccessToken(): Promise<string> {
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      const response = await fetch(`${BASE_URL}/v1/auth/refresh`, {
+      const response = await fetchWithTimeout(`${BASE_URL}/v1/auth/refresh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -80,6 +81,35 @@ interface EnvelopeResult<T> {
   meta?: { total: number; page: number; limit: number; totalPages: number };
 }
 
+const REQUEST_TIMEOUT_MS = 15000;
+
+/**
+ * fetch() never distinguishes CORS/DNS/connection-refused from each other -
+ * browsers deliberately hide that detail from JS. The one failure mode we
+ * *can* name explicitly is our own timeout. Either way, this is not a
+ * backend message, so it must never be presented to the user as one - and
+ * the raw error is always logged so it's actually diagnosable.
+ */
+function describeNetworkError(error: unknown, url: string): string {
+  console.error(`[api] Request to ${url} failed before a response was received:`, error);
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return 'The server took too long to respond. Please try again in a moment.';
+  }
+  return "Couldn't reach the server. Check your internet connection and try again.";
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    throw new ApiError(0, describeNetworkError(error, url), undefined, true);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 /**
  * Shared fetch + 401/refresh-retry logic. Returns the full parsed envelope
  * (data + meta) - apiClient()/apiClientWithMeta() below just decide how much
@@ -100,9 +130,10 @@ async function request<T>(
   }
 
   const { skipAuthRedirect, ...fetchOptions } = options ?? {};
+  const url = `${BASE_URL}${path}`;
 
   // Make the request
-  let response = await fetch(`${BASE_URL}${path}`, {
+  let response = await fetchWithTimeout(url, {
     ...fetchOptions,
     headers: {
       ...headers,
@@ -118,7 +149,7 @@ async function request<T>(
 
       // Retry the original request with new token
       headers['Authorization'] = `Bearer ${newAccessToken}`;
-      response = await fetch(`${BASE_URL}${path}`, {
+      response = await fetchWithTimeout(url, {
         ...fetchOptions,
         headers: {
           ...headers,
@@ -133,6 +164,10 @@ async function request<T>(
         throw new ApiError(401, 'Session expired. Please sign in again.');
       }
     } catch (error) {
+      // A connectivity failure isn't a session/auth problem - don't relabel it as one.
+      if (error instanceof ApiError && error.isNetworkError) {
+        throw error;
+      }
       // Refresh failed, redirect to login
       clearSession();
       window.location.href = '/login';
