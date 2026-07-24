@@ -4,6 +4,7 @@ import { User, KeyRound, CheckCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
+import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Avatar from '@/components/ui/Avatar';
@@ -12,20 +13,34 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { BackendUser } from '@/lib/api/types';
+import type { BackendUser, BackendPlatformUser } from '@/lib/api/types';
 
-// The employee_self_service role only holds payslip:read/payslip:download
-// permissions on the real backend - it has no worker:read/worker:write grant
-// at all, so this page cannot use the Worker endpoints (no employment
-// details, national ID, department, etc. are reachable). GET /users/me and
-// PATCH /users/me/password are the only self-service endpoints available to
-// every authenticated user regardless of role.
+// This page is shared by every role - tenant (super_admin down to
+// employee_self_service) and PLATFORM_ADMIN alike. Tenant roles beyond
+// employee_self_service could technically use the Worker endpoints for
+// richer detail, but employee_self_service itself only holds
+// payslip:read/payslip:download (no worker:read) - so GET /users/me +
+// PATCH /users/me/password (the one pair of self-service endpoints every
+// tenant role can reach) is used uniformly instead. PLATFORM_ADMIN sessions
+// are a separate auth realm entirely (PlatformUser, not User) and hit the
+// /platform/users/me equivalents instead - normalized below into the same
+// shape so the rest of this component doesn't need to branch.
 const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
   inactive: 'info',
   suspended: 'warning',
   archived: 'error',
 };
+
+interface ProfileView {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  status: string;
+  createdAt: string;
+  lastLoginAt: string | null;
+}
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
@@ -38,19 +53,43 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 
 export default function MyProfile() {
   const toast = useToast();
+  const isPlatformAdmin = useAuthStore((s) => s.user?.role === 'PLATFORM_ADMIN');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordChanged, setPasswordChanged] = useState(false);
 
-  const { data: profile, isLoading, isError, refetch } = useQuery<BackendUser>({
-    queryKey: ['my-profile'],
-    queryFn: () => apiClient<BackendUser>(ENDPOINTS.USERS.ME),
+  const { data: profile, isLoading, isError, refetch } = useQuery<ProfileView>({
+    queryKey: ['my-profile', isPlatformAdmin],
+    queryFn: async (): Promise<ProfileView> => {
+      if (isPlatformAdmin) {
+        const p = await apiClient<BackendPlatformUser>(ENDPOINTS.PLATFORM_USERS.ME);
+        return {
+          firstName: p.firstName,
+          lastName: p.lastName,
+          email: p.email,
+          phone: null,
+          status: p.isActive ? 'active' : 'inactive',
+          createdAt: p.createdAt,
+          lastLoginAt: p.lastLoginAt,
+        };
+      }
+      const u = await apiClient<BackendUser>(ENDPOINTS.USERS.ME);
+      return {
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        phone: u.phone,
+        status: u.status,
+        createdAt: u.createdAt,
+        lastLoginAt: u.lastLoginAt,
+      };
+    },
   });
 
   const changePasswordMutation = useMutation({
     mutationFn: () =>
-      apiClient(ENDPOINTS.USERS.CHANGE_PASSWORD, {
+      apiClient(isPlatformAdmin ? ENDPOINTS.PLATFORM_USERS.CHANGE_PASSWORD : ENDPOINTS.USERS.CHANGE_PASSWORD, {
         method: 'PATCH',
         body: JSON.stringify({ currentPassword, newPassword }),
       }),
@@ -172,7 +211,9 @@ export default function MyProfile() {
       </div>
 
       <p className="mt-6 text-xs text-cash-green/40 text-center">
-        Employment details are managed by your HR team. Contact HR to request changes.
+        {isPlatformAdmin
+          ? 'Contact a super admin to change your platform role.'
+          : 'Employment details are managed by your HR team. Contact HR to request changes.'}
       </p>
     </div>
   );

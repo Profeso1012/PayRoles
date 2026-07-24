@@ -28,6 +28,7 @@ import type {
   CreateCompensationRequest,
   BackendWorkerPayElement,
   CreateWorkerPayElementRequest,
+  UpdateWorkerPayElementRequest,
   BackendPayElement,
   BackendCalculationMethod,
 } from '@/lib/api/types';
@@ -115,6 +116,7 @@ export default function EmployeeDetail() {
   const [compForm, setCompForm] = useState(blankCompForm);
   const [assignWpeOpen, setAssignWpeOpen] = useState(false);
   const [wpeForm, setWpeForm] = useState(blankWpeForm);
+  const [editingWpeId, setEditingWpeId] = useState<string | null>(null);
 
   const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
     queryKey: ['worker', id],
@@ -202,7 +204,7 @@ export default function EmployeeDetail() {
 
   const assignPayElementMutation = useMutation({
     mutationFn: () => {
-      const body: CreateWorkerPayElementRequest = {
+      const body: CreateWorkerPayElementRequest | UpdateWorkerPayElementRequest = {
         payElementId: wpeForm.payElementId,
         calculationMethod: wpeForm.calculationMethod,
         effectiveDate: wpeForm.effectiveDate,
@@ -216,21 +218,46 @@ export default function EmployeeDetail() {
       } else if (wpeForm.calculationMethod === 'formula') {
         body.formulaOverride = wpeForm.formulaOverride || undefined;
       }
-      return apiClient(ENDPOINTS.WORKER_PAY_ELEMENTS.ASSIGN(id!), {
-        method: 'POST',
-        body: JSON.stringify(body),
-      });
+      return editingWpeId
+        ? apiClient(ENDPOINTS.WORKER_PAY_ELEMENTS.UPDATE(id!, editingWpeId), {
+            method: 'PATCH',
+            body: JSON.stringify(body),
+          })
+        : apiClient(ENDPOINTS.WORKER_PAY_ELEMENTS.ASSIGN(id!), {
+            method: 'POST',
+            body: JSON.stringify(body),
+          });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['worker-pay-elements', id] });
-      toast.success('Pay element assigned');
+      toast.success(editingWpeId ? 'Pay element updated' : 'Pay element assigned');
       setAssignWpeOpen(false);
       setWpeForm(blankWpeForm);
+      setEditingWpeId(null);
     },
     // Includes date-overlap conflicts (409) - the backend's message names the
     // exact conflicting assignment and how to resolve it, worth showing in full.
-    onError: (err) => toast.error('Failed to assign pay element', err instanceof Error ? err.message : undefined),
+    onError: (err) =>
+      toast.error(
+        editingWpeId ? 'Failed to update pay element' : 'Failed to assign pay element',
+        err instanceof Error ? err.message : undefined,
+      ),
   });
+
+  function openEditWpe(wpe: BackendWorkerPayElement) {
+    setEditingWpeId(wpe.id);
+    setWpeForm({
+      payElementId: wpe.payElementId,
+      calculationMethod: wpe.calculationMethod,
+      amount: wpe.amountMinor != null ? String(parseInt(wpe.amountMinor, 10) / 100) : '',
+      percentage: wpe.percentage != null ? String(wpe.percentage) : '',
+      formulaOverride: wpe.formulaOverride ?? '',
+      effectiveDate: wpe.effectiveDate,
+      endDate: wpe.endDate ?? '',
+      remarks: wpe.remarks ?? '',
+    });
+    setAssignWpeOpen(true);
+  }
 
   const unassignPayElementMutation = useMutation({
     mutationFn: (wpeId: string) =>
@@ -521,15 +548,21 @@ export default function EmployeeDetail() {
                     {wpe.remarks && <p className="text-xs text-cash-green/50 mt-0.5">{wpe.remarks}</p>}
                   </div>
                   {canWritePayElements && wpe.status === 'active' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      loading={unassignPayElementMutation.isPending}
-                      onClick={() => unassignPayElementMutation.mutate(wpe.id)}
-                    >
-                      <X size={13} className="text-red-400" />
-                      Unassign
-                    </Button>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => openEditWpe(wpe)}>
+                        <Pencil size={13} />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        loading={unassignPayElementMutation.isPending}
+                        onClick={() => unassignPayElementMutation.mutate(wpe.id)}
+                      >
+                        <X size={13} className="text-red-400" />
+                        Unassign
+                      </Button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -648,8 +681,8 @@ export default function EmployeeDetail() {
 
       <Modal
         isOpen={assignWpeOpen}
-        onClose={() => { setAssignWpeOpen(false); setWpeForm(blankWpeForm); }}
-        title="Assign Pay Element"
+        onClose={() => { setAssignWpeOpen(false); setWpeForm(blankWpeForm); setEditingWpeId(null); }}
+        title={editingWpeId ? 'Edit Pay Element' : 'Assign Pay Element'}
         size="sm"
       >
         <div className="flex flex-col gap-4">
@@ -716,7 +749,7 @@ export default function EmployeeDetail() {
             onChange={(e) => setWpeForm((f) => ({ ...f, remarks: e.target.value }))}
           />
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="ghost" onClick={() => { setAssignWpeOpen(false); setWpeForm(blankWpeForm); }}>
+            <Button variant="ghost" onClick={() => { setAssignWpeOpen(false); setWpeForm(blankWpeForm); setEditingWpeId(null); }}>
               Cancel
             </Button>
             <Button
@@ -730,7 +763,7 @@ export default function EmployeeDetail() {
               }
               onClick={() => assignPayElementMutation.mutate()}
             >
-              Assign
+              {editingWpeId ? 'Save Changes' : 'Assign'}
             </Button>
           </div>
         </div>

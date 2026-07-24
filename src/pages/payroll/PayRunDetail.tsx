@@ -184,6 +184,7 @@ export default function PayRunDetail() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Pay run approved');
+      setApproveModalOpen(false);
     },
     onError: () => toast.error('Failed to approve'),
   });
@@ -198,12 +199,14 @@ export default function PayRunDetail() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
-      toast.success('Pay run returned to payroll');
+      toast.success('Pay run rejected');
       setRejectModalOpen(false);
       setRejectReason('');
     },
     onError: () => toast.error('Failed to reject'),
   });
+
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
 
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const cancelMutation = useMutation({
@@ -251,6 +254,10 @@ export default function PayRunDetail() {
   const canManage =
     role === 'payroll_manager' || role === 'payroll_officer' || role === 'tenant_admin' || role === 'super_admin';
   const canReverse = role === 'tenant_admin' || role === 'super_admin' || role === 'finance_manager';
+  // Mirrors the backend's actual PAYROLL_APPROVE/PAYROLL_REJECT grants
+  // (roles.enum.ts ROLE_PERMISSIONS) - finance_manager does NOT hold these
+  // permissions there, payroll_manager does.
+  const canApprove = role === 'payroll_manager' || role === 'tenant_admin' || role === 'super_admin';
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -405,7 +412,7 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      {run.status === 'in_review' && role === 'finance_manager' && (
+      {run.status === 'in_review' && canApprove && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
           <div className="flex items-start gap-4">
             <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
@@ -414,13 +421,12 @@ export default function PayRunDetail() {
             <div className="flex-1">
               <p className="font-semibold text-deep-cash mb-1">Awaiting your approval</p>
               <p className="text-sm text-cash-green/70 mb-4">
-                Review the payroll register and approve or return it to the payroll team.
+                Review the payroll register, then approve or reject this pay run.
               </p>
               <div className="flex gap-3">
                 <Button
                   variant="primary"
-                  loading={approveMutation.isPending}
-                  onClick={() => approveMutation.mutate()}
+                  onClick={() => setApproveModalOpen(true)}
                 >
                   <ThumbsUp size={15} />
                   Approve Pay Run
@@ -430,7 +436,7 @@ export default function PayRunDetail() {
                   onClick={() => setRejectModalOpen(true)}
                 >
                   <ThumbsDown size={15} />
-                  Return to Payroll
+                  Reject
                 </Button>
               </div>
             </div>
@@ -438,11 +444,11 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      {run.status === 'in_review' && role !== 'finance_manager' && (
+      {run.status === 'in_review' && !canApprove && (
         <div className="bg-white rounded-xl border border-cash-gold/30 p-4 mb-5 flex items-center gap-3">
           <Clock size={16} className="text-cash-gold shrink-0" />
           <p className="text-sm text-cash-green/80">
-            Submitted for Finance Director approval. Awaiting review.
+            Submitted for approval. Awaiting review.
           </p>
         </div>
       )}
@@ -556,10 +562,10 @@ export default function PayRunDetail() {
         </div>
       )}
 
-      <Modal isOpen={rejectModalOpen} onClose={() => setRejectModalOpen(false)} title="Return to Payroll" size="sm">
+      <Modal isOpen={rejectModalOpen} onClose={() => setRejectModalOpen(false)} title="Reject Pay Run" size="sm">
         <div className="flex flex-col gap-4">
           <p className="text-sm text-cash-green/70">
-            Explain why this pay run is being returned — the payroll team will see this reason.
+            Explain why this pay run is being rejected — the payroll team will see this reason.
           </p>
           <textarea
             className="w-full border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
@@ -576,11 +582,21 @@ export default function PayRunDetail() {
               disabled={!rejectReason.trim()}
               onClick={() => rejectMutation.mutate()}
             >
-              Return to Payroll
+              Reject
             </Button>
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        isOpen={approveModalOpen}
+        onClose={() => setApproveModalOpen(false)}
+        onConfirm={() => approveMutation.mutate()}
+        title="Approve Pay Run"
+        message="Approve this pay run? It will move to disbursement and cannot be undone from here."
+        confirmLabel="Approve"
+        isLoading={approveMutation.isPending}
+      />
 
       <ConfirmModal
         isOpen={cancelModalOpen}

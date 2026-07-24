@@ -572,6 +572,23 @@ export interface BackendUser {
   updatedAt: string;
 }
 
+/**
+ * GET /platform/users/me (PlatformUser entity). A separate auth realm from
+ * BackendUser - no tenantId/phone/workerId, and status is a plain boolean
+ * (isActive) rather than the tenant User's status enum.
+ */
+export interface BackendPlatformUser {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  platformRole: string;
+  isActive: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** POST /users body (CreateUserDto) - password is required (this creates the account directly, there is no separate invite-token flow on the backend). */
 export interface CreateUserRequest {
   email: string;

@@ -273,7 +273,10 @@ export const router = createBrowserRouter([
 
       // Employee self-service
       { path: 'my-payslips', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyPayslips)}</RoleGuard> },
-      { path: 'my-profile', element: <RoleGuard allowedRoles={['employee_self_service']}>{w(MyProfile)}</RoleGuard> },
+      // Every authenticated role reaches this - MyProfile.tsx itself branches
+      // on tenant vs PLATFORM_ADMIN session and hits the matching self-service
+      // /users/me or /platform/users/me endpoints. No RoleGuard here.
+      { path: 'my-profile', element: w(MyProfile) },
     ],
   },
 ]);

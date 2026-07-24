@@ -181,6 +181,7 @@ export const ENDPOINTS = {
   PLATFORM_USERS: {
     LIST: `${PLATFORM_PREFIX}/users`,
     ME: `${PLATFORM_PREFIX}/users/me`,
+    CHANGE_PASSWORD: `${PLATFORM_PREFIX}/users/me/password`,
     DETAIL: (id: string) => `${PLATFORM_PREFIX}/users/${id}`,
     CREATE: `${PLATFORM_PREFIX}/users`,
     UPDATE: (id: string) => `${PLATFORM_PREFIX}/users/${id}`,
