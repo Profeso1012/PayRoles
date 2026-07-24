@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Bell, BellOff, Calendar, Mail, MessageSquare } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Bell, BellOff, Calendar, Mail, MessageSquare, CheckCheck } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
 import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Tabs from '@/components/ui/Tabs';
+import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 
@@ -32,6 +33,7 @@ const NOTIFICATION_ICONS: Record<Notification['type'], React.ReactNode> = {
 };
 
 export default function Notifications() {
+  const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState('all');
 
   const { data: notifications, isLoading, isError, refetch } = useQuery({
@@ -43,6 +45,16 @@ export default function Notifications() {
       const response = await apiClient<any>(ENDPOINTS.NOTIFICATIONS.LIST);
       return Array.isArray(response) ? response : (response.data || []);
     },
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => apiClient(ENDPOINTS.NOTIFICATIONS.MARK_READ(id), { method: 'PATCH' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: () => apiClient(ENDPOINTS.NOTIFICATIONS.MARK_ALL_READ, { method: 'PATCH' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
   if (isLoading) {
@@ -58,11 +70,6 @@ export default function Notifications() {
   }
 
   const allNotifications = notifications || [];
-  // Backend has no "mark as read" endpoint at all yet (notification.entity.ts
-  // has a readAt column, but nothing ever sets it - the controller only
-  // exposes GET) - every notification will show as unread until that's added
-  // server-side. Tabs are kept since they're still a correct read of current
-  // state, but there's deliberately no "mark as read" action anywhere below.
   const unreadNotifications = allNotifications.filter((n: Notification) => !n.readAt);
   const readNotifications = allNotifications.filter((n: Notification) => !!n.readAt);
 
@@ -76,6 +83,19 @@ export default function Notifications() {
       <PageHeader
         title="Notifications"
         breadcrumbs={[{ label: 'Notifications' }]}
+        action={
+          unreadNotifications.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={markAllReadMutation.isPending}
+              onClick={() => markAllReadMutation.mutate()}
+            >
+              <CheckCheck size={14} />
+              Mark all as read
+            </Button>
+          ) : undefined
+        }
       />
 
       {/* Tabs */}
@@ -122,6 +142,10 @@ export default function Notifications() {
                 alignItems: 'flex-start',
                 position: 'relative',
                 transition: 'all 0.2s',
+                cursor: notification.readAt ? 'default' : 'pointer',
+              }}
+              onClick={() => {
+                if (!notification.readAt) markReadMutation.mutate(notification.id);
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = '#4FAD72';

@@ -10,12 +10,14 @@ differently in ways that matter for how you use and demo the app. Read this part
 - Invite emails — there is no invite-token flow anywhere. When you "add a user," the
   backend creates their account immediately with the password you typed. You tell them
   the password yourself (Slack, phone call, whatever). There is no email step.
-- Forgot password / reset password — **there is no recovery path at all** if a user
-  forgets their password while logged out. Not for platform admins, not for tenant
-  admins, not for anyone. The only password-related endpoint is "change my own
-  password while I'm already logged in" (`PATCH /users/me/password`, requires knowing
-  your *current* password). If someone is fully locked out, the only fix today is
-  going into the database directly. Worth knowing before you rely on this in a demo.
+- Self-service forgot password — there is **still** no recovery path if a user forgets
+  their password while logged out and nobody helps them. But a `tenant_admin`/
+  `super_admin` can now reset another user *in their own tenant* from the UI (Settings
+  → Users & Roles → **Reset Password** button on any active user) — see PART 5. There
+  is **no equivalent for platform admins**: a locked-out platform admin still requires
+  direct database access, since `platform-user.controller.ts` only exposes a
+  self-service `PATCH /platform/users/me/password` (needs your current password), no
+  admin-issued reset for *other* platform users.
 - Company self-service setup wizard — a company cannot onboard itself. The Platform
   Admin creates the tenant *and* its first user in one motion (two API calls back to
   back). There's no "welcome, let's set up your company" wizard on first login.
@@ -65,9 +67,9 @@ Log in at `/login`. Ten possible roles:
 | `tenant_admin` | Users, workers, legal entities, compensation, pay elements, payroll (read/create/approve/reject/process/reverse), payslips, audit, import/export. **Cannot** edit the company's own tenant profile (that PATCH is `super_admin`-only) |
 | `hr_manager` | Full worker/compensation/legal-entity read+write |
 | `hr_officer` | Same area as hr_manager, narrower permission set |
-| `payroll_manager` | Pay elements, worker pay elements, payroll read/create/process, payslips |
-| `payroll_officer` | Same area as payroll_manager, narrower permission set |
-| `finance_manager` | Payroll approve/reject, payslip read/download, audit read |
+| `payroll_manager` | Pay elements, worker pay elements, payroll read/create/**approve/reject**/process, payslips |
+| `payroll_officer` | Same area as payroll_manager, narrower permission set — **no** approve/reject |
+| `finance_manager` | Payroll **read-only** (cannot approve/reject — a common mix-up, see PART 4), payslip read/download, audit read |
 | `auditor` | Read-only: audit logs, tax rules |
 | `read_only` | Read-only: workers, payroll, payslips, legal entities, compensation, pay elements, tax rules |
 | `employee_self_service` | **Only** `payslip:read` and `payslip:download`. That's it — no worker profile access, no bank details access, nothing else |
@@ -75,6 +77,15 @@ Log in at `/login`. Ten possible roles:
 That last row matters a lot: an employee cannot view or edit their own worker profile
 or bank details through this backend at all. Their whole world is payslips, plus the
 universal `GET /users/me` and `PATCH /users/me/password` that every role gets.
+
+**Gotcha worth knowing:** it's tempting to assume Finance approves payroll and Payroll
+just submits it (classic maker/checker). The real backend does **not** implement that
+split — `payroll_manager` holds both `PAYROLL_CREATE` and `PAYROLL_APPROVE`/
+`PAYROLL_REJECT` (`roles.enum.ts`), while `finance_manager` holds neither. The frontend
+used to gate the approve/reject buttons on `finance_manager` (matching the assumption,
+not the backend), which meant finance managers saw nothing to approve and payroll
+managers who *could* approve never saw the buttons either. Fixed to match the actual
+permission grants — see PART 4.
 
 ---
 
@@ -167,6 +178,31 @@ name/contact email/country/currency/member-since, plus:
   `PATCH /api/platform/tenants/:id/suspend` or `.../activate`. A suspended tenant's
   users are immediately blocked from logging in.
 
+### Step 5 — Manage platform staff (super_admin / platform_admin)
+
+**Frontend:** sidebar → **Platform Users** (`/admin/users`). Lists every platform user
+(name, email, platform role, active/disabled, last login). Visible to `super_admin`,
+`platform_admin`, and `support_engineer` (read-only for the latter — matches
+`PLATFORM_USER_READ`); `auditor`/`devops` don't hold that permission and see a
+"you don't have permission" message instead.
+
+- **Add Platform User** button (super_admin/platform_admin only) → modal: first/last
+  name, email, platform role (`super_admin`/`platform_admin`/`support_engineer`/
+  `auditor`/`devops`), a temp password (auto-generated, editable).
+  ```
+  POST {{baseUrl}}/api/platform/users
+  Authorization: Bearer {{platformAccessToken}}
+  { "email": "support@payrolles.com", "password": "Sp9#kLp2mQ8r", "firstName": "Tunde", "lastName": "Bello", "platformRole": "support_engineer" }
+  ```
+  This is the same call from PART 2's earlier Postman-only workaround — now there's a
+  UI for it, no Postman required.
+- **Disable / Enable** (super_admin only — `PlatformRole.SUPER_ADMIN` gate on the
+  backend, not just `PLATFORM_USER_WRITE`) → `PATCH /api/platform/users/:id/disable`
+  or `.../enable`. You can't disable yourself (button is hidden on your own row).
+- There is still no admin-issued password *reset* for platform users (see PART 0/5) —
+  disabling and creating a fresh account is the only recourse for a locked-out one
+  today, short of a direct database fix.
+
 ---
 
 # PART 3 — Company Admin's First Login (tenant_admin)
@@ -257,8 +293,11 @@ POST   {{baseUrl}}/api/platform/tax/versions
 PATCH  {{baseUrl}}/api/platform/tax/versions/:code/activate
 PATCH  {{baseUrl}}/api/platform/tax/versions/:code/deactivate
 ```
-**There is no frontend page for this yet** — the Super Admin portal only has
-Companies/Dashboard today. Until one exists, this is Postman-only:
+**Frontend:** sidebar → **Tax Rules** (`/admin/tax`) — this page already exists and
+already implements the full flow below (an earlier version of this doc claimed it
+didn't; it does). Lists jurisdictions → rules → versions (same tree shape as the
+tenant-facing read-only page), with **Create Rule**, **Create Version**, and an
+Active/Inactive toggle per version, all firing the platform-write calls below:
 ```
 POST {{baseUrl}}/api/platform/tax/versions
 Authorization: Bearer {{platformAccessToken}}
@@ -340,7 +379,20 @@ Authorization: Bearer {{accessToken}}
 { "payElementId": "{{payElementId}}", "calculationMethod": "fixed", "amountMinor": 5000000, "effectiveDate": "2026-07-01" }
 ```
 **Unassign** on that same tab soft-removes it (`PATCH .../pay-elements/:id/unassign`) —
-it stops applying going forward but stays in history.
+it stops applying going forward but stays in history. **Edit** (next to Unassign) opens
+the same modal pre-filled and fires `PATCH .../pay-elements/:id` instead — change the
+amount/percentage/end date without unassigning and reassigning from scratch.
+
+**Terminate an employee:** on the employee detail page (top right, next to Edit) —
+**Terminate** button (hidden once the employee is already inactive). Asks for a
+termination date and optional reason in a modal.
+```
+PATCH {{baseUrl}}/api/v1/workers/:id/terminate
+Authorization: Bearer {{accessToken}}
+{ "terminationDate": "2026-08-31", "reason": "Resigned" }
+```
+Sets the worker's status to `inactive` — there's no separate `terminated` status on
+this backend.
 
 **Tax rules (read-only for you):** Settings → **Jurisdictions** (`/settings/jurisdictions`)
 shows the same country/tax-rule/version tree as the Tenant Admin section above, but
@@ -379,22 +431,35 @@ PATCH {{baseUrl}}/api/v1/payroll/runs/:id/submit
 Run moves to `pending_approval` (shown in the UI as "In Review"). You can also
 **Cancel Run** from draft/calculated states — `PATCH .../cancel`.
 
-### Finance Manager (`finance_manager`)
-
-Lands on the Finance Dashboard (awaiting-approval count, cost-this-month, approval
-queue). Click a queued run → `/payroll/runs/:id` (read-only except the approval
-actions). **Approve Pay Run**:
+**Approve or reject** — once a run is In Review, `payroll_manager` (also
+`tenant_admin`/`super_admin`) sees the approval panel on `/payroll/runs/:id` — not
+`finance_manager` (see the PART 1 gotcha above). **Approve Pay Run** now opens a
+confirm dialog first (it used to fire immediately):
 ```
 PATCH {{baseUrl}}/api/v1/payroll/runs/:id/approve
 {}
 ```
-or **Return to Payroll** (requires a reason, shown in a modal):
+**Reject** (labeled plainly now — it used to say "Return to Payroll", which read like
+a distinct workflow step when it's the same `reject` call) requires a reason in a
+modal:
 ```
 PATCH {{baseUrl}}/api/v1/payroll/runs/:id/reject
 { "reason": "Missing overtime hours for Lagos branch" }
 ```
 After approval, the run can also be **Reversed** later (with a reason) if something
 was genuinely wrong — historical records are kept, corrections require a new run.
+Reverse is `tenant_admin`/`super_admin` **only** — `PAYROLL_REVERSE` is never
+explicitly granted to any other role in `roles.enum.ts` (not `payroll_manager`, not
+`finance_manager`), it only reaches super_admin/tenant_admin implicitly through their
+blanket permission grants.
+
+### Finance Manager (`finance_manager`)
+
+Lands on the Finance Dashboard (awaiting-approval count, cost-this-month, approval
+queue). Click a queued run → `/payroll/runs/:id` — **fully read-only** on the payroll
+run itself: no approve/reject, no reverse (neither permission is granted to this role
+on the backend, see PART 1) — just a "Submitted for approval. Awaiting review." banner
+while it's in that state.
 
 **Disbursement (actually paying people):** sidebar → **Payments** (`/payments`) —
 lists every approved-or-later pay run alongside its disbursement batch (or "Not
@@ -425,22 +490,56 @@ Lands on **`/dashboard`**, which for this role is a small "Hello, {name}!" scree
 their latest payslip summary — built entirely from `GET /users/me` (name) and
 `GET /v1/workers/:workerId/payslips` (payslip data), because this role has no access
 to anything else. Quick links: **My Payslips** (`/my-payslips`, full history) and
-**My Profile** (`/my-profile` — just their account email/name plus a **Change
-Password** form using `PATCH /v1/users/me/password` with `currentPassword`/
-`newPassword`). There is no "My Bank Details" page — this role cannot read or edit
-worker records at all, including their own.
+**My Profile** (`/my-profile` — account email/name plus a **Change Password** form
+using `PATCH /v1/users/me/password` with `currentPassword`/`newPassword`). There is no
+"My Bank Details" page — this role cannot read or edit worker records at all,
+including their own.
+
+**`/my-profile` is no longer employee-only** — it used to 404/Access-Denied for every
+other role (payroll/HR/finance/tenant_admin all got bounced), since it was hard-gated
+to `employee_self_service` even though the page itself only ever called the universal
+`GET/PATCH /users/me*` endpoints every role can already reach. Now every tenant role
+reaches it from the same Topbar dropdown link, and platform admins reach it too — for
+them it transparently calls `GET /platform/users/me` / `PATCH /platform/users/me/password`
+instead, normalized into the same UI.
+
+**Payslip PDF:** on `/payroll/runs/:runId/payslips/:payslipId` (reachable from My
+Payslips → any row → View, or from a payroll run's Employee Register), **Download
+PDF** now calls the real backend PDF generator (previously unused — the only option
+was the browser's own Print dialog):
+```
+POST {{baseUrl}}/api/v1/payroll/runs/:runId/payslips/:payslipId/pdf
+Authorization: Bearer {{accessToken}}
+```
+Returns `{ pdfUrl }` — generated on first call, cached (same URL returned) on
+subsequent calls. **Print** (browser print-to-PDF of the on-screen page) is still
+there separately, for a quick look without waiting on generation.
 
 ---
 
 # PART 5 — Password & Account Reality, Restated
 
-- **Nobody resets their own password from a logged-out state.** If you're locked out,
-  someone with `tenant_admin`/`super_admin` (or a platform admin, for platform users)
-  has to create you a *fresh* account, or someone with direct database access has to
-  intervene. There is no email-based recovery anywhere in this system today.
+- **Nobody resets their own password from a logged-out state.** There is no email-
+  based recovery anywhere in this system.
+- **Tenant admin-issued reset now exists in the UI.** Settings → Users & Roles → any
+  active user → **Reset Password** button (tenant_admin/super_admin only, matches
+  `Permission.USER_WRITE`). Confirms, then:
+  ```
+  PATCH {{baseUrl}}/api/v1/users/:id/reset-password
+  Authorization: Bearer {{accessToken}}
+  ```
+  Generates a random temp password server-side, returns it **once** in the response
+  (`temporaryPassword`) — never emailed or stored — relay it to the user yourself. Also
+  invalidates their refresh token, forcing re-login. This existed on the backend
+  already but had no button anywhere in the frontend until now.
+- **Still no equivalent for platform admins.** A locked-out platform admin (any
+  `platformRole`) has no admin-issued reset path at all — only self-service
+  `PATCH /platform/users/me/password`, which requires knowing your current password.
+  Direct database access is the only recourse today.
 - **Changing your own password while logged in** works for everyone, any role:
-  `PATCH /v1/users/me/password` with `{ currentPassword, newPassword }` (tenant users)
-  or `PATCH /platform/users/me/password` (platform users).
+  `PATCH /v1/users/me/password` with `{ currentPassword, newPassword }` (tenant users,
+  via `/my-profile`) or `PATCH /platform/users/me/password` (platform users, also via
+  `/my-profile` now — see PART 4).
 - **Nobody signs themselves up.** Every account — platform or tenant — is created by
   someone else calling a `POST .../users` endpoint with a password they chose.
 
@@ -463,6 +562,10 @@ PLATFORM ADMIN
 └── /admin/companies/:id                   GET /platform/tenants/:id
       "Add User"                           POST /platform/tenants/:id/users
       "Suspend / Reactivate"               PATCH /platform/tenants/:id/suspend|activate
+└── /admin/tax                             GET/POST /platform/tax/jurisdictions|rules|versions, PATCH .../activate|deactivate
+└── /admin/users                           GET /platform/users (super_admin/platform_admin/support_engineer)
+      "Add Platform User"                  POST /platform/users (super_admin/platform_admin)
+      "Disable / Enable"                   PATCH /platform/users/:id/disable|enable (super_admin only)
 
 TENANT — everyone lands on /dashboard, content depends on role
 └── /dashboard                             role-dependent: HR / Payroll / Finance / Employee view
@@ -474,15 +577,19 @@ TENANT — everyone lands on /dashboard, content depends on role
   Employees (tenant_admin, hr_manager, hr_officer, finance_manager)
   └── /employees                           GET /workers
   └── /employees/new                       POST /workers  →  POST /compensation
-  └── /employees/:id                       GET /workers/:id, /compensation/worker/:id, /workers/:id/payslips
+  └── /employees/:id                       GET /workers/:id, /compensation/worker/:id, /workers/:id/payslips, /workers/:id/pay-elements
+      "Terminate"                          PATCH /workers/:id/terminate (hr_manager/hr_officer/tenant_admin/super_admin)
+      "Assign/Edit/Unassign Pay Element"   POST /workers/:id/pay-elements  ·  PATCH .../pay-elements/:peId(/unassign)
   └── /employees/:id/edit                  PATCH /workers/:id
 
   Payroll (tenant_admin, payroll_manager, payroll_officer, finance_manager)
   └── /payroll/pay-elements                GET/POST/PATCH /pay-elements
   └── /payroll/runs                        GET /payroll/runs
   └── /payroll/runs/new                    POST /payroll/runs
-  └── /payroll/runs/:id                    calculate / submit / approve / reject / cancel / reverse
-  └── /payroll/runs/:runId/payslips/:payslipId    GET /payroll/runs/:runId/payslips/:payslipId
+  └── /payroll/runs/:id                    calculate / submit / cancel (payroll_manager/payroll_officer/tenant_admin/super_admin)
+                                            approve / reject (payroll_manager/tenant_admin/super_admin — NOT finance_manager)
+                                            reverse (tenant_admin/super_admin only — NOT finance_manager, NOT payroll_manager)
+  └── /payroll/runs/:runId/payslips/:payslipId    GET .../payslips/:payslipId  ·  "Download PDF" → POST .../payslips/:payslipId/pdf
 
   Payments (tenant_admin, finance_manager)
   └── /payments                            GET /payroll/runs/:id/disbursement per approved run
@@ -490,7 +597,8 @@ TENANT — everyone lands on /dashboard, content depends on role
 
   Settings (tenant_admin only)
   └── /settings/profile                    GET /tenants/:id  (edit is super_admin-only)
-  └── /settings/users                      GET /users, POST /users, PATCH /users/:id/disable
+  └── /settings/users                      GET /users, POST /users, PATCH /users/:id/disable|enable
+      "Reset Password"                     PATCH /users/:id/reset-password
   └── /settings/jurisdictions              GET /tax/jurisdictions, /tax/rules, /tax/rules/:code/versions
 
   Audit (tenant_admin, finance_manager, auditor)
@@ -498,10 +606,14 @@ TENANT — everyone lands on /dashboard, content depends on role
 
   Notifications (everyone)
   └── /notifications                       GET /notifications
+      "Mark all as read" / click a card     PATCH /notifications/read-all  ·  PATCH /notifications/:id/read
 
   Employee self-service (employee_self_service only)
   └── /my-payslips                         GET /workers/:workerId/payslips
-  └── /my-profile                          GET /users/me, PATCH /users/me/password
+
+My Profile (everyone, tenant and platform alike — not employee-only anymore)
+└── /my-profile                            tenant: GET/PATCH /users/me(/password)
+                                            platform: GET /platform/users/me, PATCH /platform/users/me/password
 ```
 
 ---
@@ -528,7 +640,16 @@ Quickest smoke-test sequence to prove the whole system end to end in Postman alo
 8. `POST /api/v1/pay-elements`
 9. `POST /api/v1/payroll/runs` (`legalEntityId` from step 5) → grab `id` as `{{payRunId}}`
 10. `PATCH /api/v1/payroll/runs/{{payRunId}}/calculate`, then `.../submit`
-11. Log in as a `finance_manager` user, `PATCH .../approve`
+11. Log in as a `payroll_manager` user (not `finance_manager` — see PART 1), `PATCH .../approve`
 12. `POST /api/v1/payroll/runs/{{payRunId}}/disbursement`
 
 If all twelve succeed, the backend and the frontend's expectations of it agree end to end.
+
+**Newly-wired endpoints worth smoke-testing too (previously defined but never called
+from the frontend, or missing a UI entirely — all fixed this round):**
+13. `PATCH /api/v1/users/:id/reset-password` (as tenant_admin, on a non-yourself user) → returns `temporaryPassword`
+14. `PATCH /api/v1/workers/:id/terminate` `{ "terminationDate": "2026-08-31" }`
+15. `POST /api/v1/payroll/runs/{{payRunId}}/payslips/{{payslipId}}/pdf` → returns `{ pdfUrl }`
+16. `PATCH /api/v1/notifications/:id/read` and `PATCH /api/v1/notifications/read-all`
+17. `POST /api/platform/users` (as super_admin or platform_admin) → new platform staff account
+18. `PATCH /api/platform/users/:id/disable` / `.../enable` (super_admin only)

@@ -51,6 +51,7 @@ const SADashboard = lazy(() => import('@/pages/super-admin/SADashboard'));
 const SACompanies = lazy(() => import('@/pages/super-admin/SACompanies'));
 const SACompanyDetail = lazy(() => import('@/pages/super-admin/SACompanyDetail'));
 const SATaxManagement = lazy(() => import('@/pages/super-admin/SATaxManagement'));
+const SAUsers = lazy(() => import('@/pages/super-admin/SAUsers'));
 
 // Dashboards
 const HRDashboard = lazy(() => import('@/pages/dashboard/HRDashboard'));
@@ -116,6 +117,16 @@ function Unauthorized() {
   );
 }
 
+function NotFound() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-soft-white gap-4">
+      <p className="text-3xl font-bold text-deep-cash">Page Not Found</p>
+      <p className="text-cash-green">The page you're looking for doesn't exist.</p>
+      <a href={PATHS.HOME} className="text-fresh-cash underline">Go to homepage</a>
+    </div>
+  );
+}
+
 function DashboardRouter() {
   const role = useAuthStore((s) => s.user?.role);
 
@@ -162,6 +173,7 @@ export const router = createBrowserRouter([
       { path: 'companies', element: w(SACompanies) },
       { path: 'companies/:id', element: w(SACompanyDetail) },
       { path: 'tax', element: w(SATaxManagement) },
+      { path: 'users', element: w(SAUsers) },
     ],
   },
 
@@ -279,4 +291,8 @@ export const router = createBrowserRouter([
       { path: 'my-profile', element: w(MyProfile) },
     ],
   },
+
+  // Catch-all - must stay last. Without this, react-router's own default
+  // "Unexpected Application Error! 404 Not Found" fallback renders instead.
+  { path: '*', element: <NotFound /> },
 ]);

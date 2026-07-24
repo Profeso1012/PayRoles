@@ -253,7 +253,11 @@ export default function PayRunDetail() {
   const period = run.period || formatPeriod(run.periodStart, run.periodEnd);
   const canManage =
     role === 'payroll_manager' || role === 'payroll_officer' || role === 'tenant_admin' || role === 'super_admin';
-  const canReverse = role === 'tenant_admin' || role === 'super_admin' || role === 'finance_manager';
+  // PAYROLL_REVERSE is never explicitly granted to any role in roles.enum.ts -
+  // only super_admin (all permissions) and tenant_admin (all non-tenant:*
+  // permissions) end up with it. finance_manager does NOT hold it, despite
+  // holding PAYSLIP_READ/DOWNLOAD and PAYROLL_READ for the same runs.
+  const canReverse = role === 'tenant_admin' || role === 'super_admin';
   // Mirrors the backend's actual PAYROLL_APPROVE/PAYROLL_REJECT grants
   // (roles.enum.ts ROLE_PERMISSIONS) - finance_manager does NOT hold these
   // permissions there, payroll_manager does.

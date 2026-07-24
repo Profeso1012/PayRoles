@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldOff, ShieldCheck } from 'lucide-react';
+import { UserPlus, ShieldOff, ShieldCheck, KeyRound } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -16,7 +16,7 @@ import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { BackendUser, BackendRole, CreateUserRequest } from '@/lib/api/types';
+import type { BackendUser, BackendRole, BackendWorker, CreateUserRequest } from '@/lib/api/types';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -57,6 +57,7 @@ const blankAddUserForm = {
   email: '',
   password: generateTempPassword(),
   role: 'read_only' as BackendRole,
+  workerId: '',
 };
 
 export default function UsersAndRoles() {
@@ -69,6 +70,7 @@ export default function UsersAndRoles() {
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [form, setForm] = useState(blankAddUserForm);
   const [disableTarget, setDisableTarget] = useState<BackendUser | null>(null);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<BackendUser | null>(null);
 
   const {
     data: users = [],
@@ -89,6 +91,22 @@ export default function UsersAndRoles() {
     enabled: isSuperAdmin,
   });
 
+  // Only needed to populate the "Link to Employee" picker, which only
+  // applies to the employee_self_service role - an employee_self_service
+  // account with no workerId can never resolve its own payslips (My
+  // Payslips/Dashboard both key off it), so linking a worker here is
+  // mandatory for that role, not optional.
+  const { data: workerCatalog } = useQuery<BackendWorker[]>({
+    queryKey: ['workers-catalog'],
+    queryFn: async () => {
+      const { data } = await apiClientWithMeta<BackendWorker[]>(
+        `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ limit: 200 })}`,
+      );
+      return data;
+    },
+    enabled: addUserOpen && form.role === 'employee_self_service',
+  });
+
   const createUserMutation = useMutation({
     mutationFn: (body: CreateUserRequest) => {
       if (!USE_REAL_API) {
@@ -102,7 +120,7 @@ export default function UsersAndRoles() {
       setForm({ ...blankAddUserForm, password: generateTempPassword() });
       setAddUserOpen(false);
     },
-    onError: () => toast.error('Failed to create user'),
+    onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
   });
 
   const disableMutation = useMutation({
@@ -127,6 +145,22 @@ export default function UsersAndRoles() {
       toast.success('User re-enabled');
     },
     onError: (err) => toast.error('Failed to enable user', err instanceof Error ? err.message : undefined),
+  });
+
+  // Generates a random temp password server-side and returns it once - never
+  // emailed/stored - so it has to be relayed to the user out-of-band. Also
+  // invalidates their refresh token, forcing them to log back in.
+  const resetPasswordMutation = useMutation({
+    mutationFn: (id: string) =>
+      apiClient<{ temporaryPassword: string }>(ENDPOINTS.USERS.RESET_PASSWORD(id), { method: 'PATCH' }),
+    onSuccess: (result) => {
+      toast.success(
+        `Password reset for ${resetPasswordTarget?.email}`,
+        `Share this with them directly: ${result.temporaryPassword}`,
+      );
+      setResetPasswordTarget(null);
+    },
+    onError: (err) => toast.error('Failed to reset password', err instanceof Error ? err.message : undefined),
   });
 
   if (!isSuperAdmin) {
@@ -244,27 +278,35 @@ export default function UsersAndRoles() {
                       <Badge variant={isActive ? 'success' : 'error'} label={isActive ? 'Active' : u.status} />
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
-                      {isActive ? (
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          disabled={isCurrentUser}
-                          onClick={() => setDisableTarget(u)}
-                        >
-                          <ShieldOff size={13} />
-                          Disable
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          loading={enableMutation.isPending && enableMutation.variables === u.id}
-                          onClick={() => enableMutation.mutate(u.id)}
-                        >
-                          <ShieldCheck size={13} />
-                          Enable
-                        </Button>
-                      )}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        {isActive && (
+                          <Button variant="ghost" size="sm" onClick={() => setResetPasswordTarget(u)}>
+                            <KeyRound size={13} />
+                            Reset Password
+                          </Button>
+                        )}
+                        {isActive ? (
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            disabled={isCurrentUser}
+                            onClick={() => setDisableTarget(u)}
+                          >
+                            <ShieldOff size={13} />
+                            Disable
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={enableMutation.isPending && enableMutation.variables === u.id}
+                            onClick={() => enableMutation.mutate(u.id)}
+                          >
+                            <ShieldCheck size={13} />
+                            Enable
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -314,9 +356,26 @@ export default function UsersAndRoles() {
             label="Role"
             value={form.role}
             options={ROLE_OPTIONS}
-            onChange={(v) => setForm((f) => ({ ...f, role: v as BackendRole }))}
+            onChange={(v) => setForm((f) => ({ ...f, role: v as BackendRole, workerId: '' }))}
             placeholder="Select a role"
           />
+          {form.role === 'employee_self_service' && (
+            <div>
+              <Select
+                label="Link to Employee"
+                value={form.workerId}
+                options={(workerCatalog ?? []).map((w) => ({
+                  value: w.id,
+                  label: `${w.firstName} ${w.lastName}${w.employeeNumber ? ` (${w.employeeNumber})` : ''}`,
+                }))}
+                onChange={(v) => setForm((f) => ({ ...f, workerId: v }))}
+                placeholder={workerCatalog ? 'Select an employee' : 'Loading...'}
+              />
+              <p className="text-xs text-cash-green/60 mt-1">
+                Required — without this, the employee can't see their own payslips.
+              </p>
+            </div>
+          )}
           <Input
             label="Temporary password"
             value={form.password}
@@ -336,8 +395,24 @@ export default function UsersAndRoles() {
             <Button
               variant="primary"
               loading={createUserMutation.isPending}
-              disabled={!form.firstName || !form.lastName || !form.email || !form.password || createUserMutation.isPending}
-              onClick={() => createUserMutation.mutate(form)}
+              disabled={
+                !form.firstName ||
+                !form.lastName ||
+                !form.email ||
+                !form.password ||
+                (form.role === 'employee_self_service' && !form.workerId) ||
+                createUserMutation.isPending
+              }
+              onClick={() =>
+                createUserMutation.mutate({
+                  firstName: form.firstName,
+                  lastName: form.lastName,
+                  email: form.email,
+                  password: form.password,
+                  role: form.role,
+                  workerId: form.role === 'employee_self_service' ? form.workerId : undefined,
+                })
+              }
             >
               <ShieldCheck size={14} />
               Create User
@@ -355,6 +430,17 @@ export default function UsersAndRoles() {
         confirmLabel="Disable"
         variant="danger"
         isLoading={disableMutation.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!resetPasswordTarget}
+        onClose={() => setResetPasswordTarget(null)}
+        onConfirm={() => resetPasswordTarget && resetPasswordMutation.mutate(resetPasswordTarget.id)}
+        title="Reset Password"
+        message={`Generate a new temporary password for ${resetPasswordTarget ? `${resetPasswordTarget.firstName} ${resetPasswordTarget.lastName}` : 'this user'}? Their current password stops working immediately and they'll be signed out everywhere.`}
+        confirmLabel="Reset Password"
+        variant="danger"
+        isLoading={resetPasswordMutation.isPending}
       />
     </div>
   );

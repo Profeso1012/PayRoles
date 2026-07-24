@@ -111,6 +111,12 @@ export default function EmployeeDetail() {
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
   const canWritePayElements = role === 'hr_manager' || role === 'tenant_admin' || role === 'super_admin';
+  // Matches Permission.WORKER_WRITE grants (roles.enum.ts): hr_manager,
+  // hr_officer, tenant_admin, super_admin.
+  const canWriteWorker = role === 'hr_manager' || role === 'hr_officer' || role === 'tenant_admin' || role === 'super_admin';
+  const [terminateModalOpen, setTerminateModalOpen] = useState(false);
+  const [terminationDate, setTerminationDate] = useState('');
+  const [terminationReason, setTerminationReason] = useState('');
   const [tab, setTab] = useState('profile');
   const [addCompOpen, setAddCompOpen] = useState(false);
   const [compForm, setCompForm] = useState(blankCompForm);
@@ -133,6 +139,22 @@ export default function EmployeeDetail() {
       } as Employee;
     },
     enabled: !!id,
+  });
+
+  const terminateMutation = useMutation({
+    mutationFn: () =>
+      apiClient(ENDPOINTS.WORKERS.TERMINATE(id!), {
+        method: 'PATCH',
+        body: JSON.stringify({ terminationDate, reason: terminationReason || undefined }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['worker', id] });
+      toast.success('Employee terminated');
+      setTerminateModalOpen(false);
+      setTerminationDate('');
+      setTerminationReason('');
+    },
+    onError: (err) => toast.error('Failed to terminate employee', err instanceof Error ? err.message : undefined),
   });
 
   // Note: Backend doesn't have assignments endpoint yet
@@ -314,10 +336,18 @@ export default function EmployeeDetail() {
           { label: fullName },
         ]}
         action={
-          <Button variant="secondary" onClick={() => navigate(`/employees/${id}/edit`)}>
-            <Pencil size={15} />
-            Edit
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => navigate(`/employees/${id}/edit`)}>
+              <Pencil size={15} />
+              Edit
+            </Button>
+            {canWriteWorker && employee.status === 'active' && (
+              <Button variant="danger" onClick={() => setTerminateModalOpen(true)}>
+                <X size={15} />
+                Terminate
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -764,6 +794,49 @@ export default function EmployeeDetail() {
               onClick={() => assignPayElementMutation.mutate()}
             >
               {editingWpeId ? 'Save Changes' : 'Assign'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={terminateModalOpen}
+        onClose={() => { setTerminateModalOpen(false); setTerminationDate(''); setTerminationReason(''); }}
+        title="Terminate Employee"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            This ends {employee.firstName}'s employment record. Their status moves to Inactive.
+          </p>
+          <div>
+            <p className="text-sm text-cash-green font-medium mb-1">Termination date</p>
+            <input
+              type="date"
+              className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+              value={terminationDate}
+              onChange={(e) => setTerminationDate(e.target.value)}
+            />
+          </div>
+          <Input
+            label="Reason (optional)"
+            value={terminationReason}
+            onChange={(e) => setTerminationReason(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => { setTerminateModalOpen(false); setTerminationDate(''); setTerminationReason(''); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={terminateMutation.isPending}
+              disabled={!terminationDate}
+              onClick={() => terminateMutation.mutate()}
+            >
+              Terminate
             </Button>
           </div>
         </div>

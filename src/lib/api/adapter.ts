@@ -145,6 +145,7 @@ export const ENDPOINTS = {
     CREATE: `${API_VERSION}/users`,
     UPDATE: (id: string) => `${API_VERSION}/users/${id}`,
     CHANGE_PASSWORD: `${API_VERSION}/users/me/password`,
+    RESET_PASSWORD: (id: string) => `${API_VERSION}/users/${id}/reset-password`,
     DISABLE: (id: string) => `${API_VERSION}/users/${id}/disable`,
     ENABLE: (id: string) => `${API_VERSION}/users/${id}/enable`,
   },
@@ -257,15 +258,12 @@ export const ENDPOINTS = {
   },
 
   // ---------------------------------------------------------------------------
-  // Notifications (New in backend)
+  // Notifications
   // ---------------------------------------------------------------------------
-  // notification.controller.ts only exposes GET - there is no mark-as-read
-  // or mark-all-read route on the backend at all (the entity has an unused
-  // readAt column, but nothing sets it yet). MARK_READ/MARK_ALL_READ used to
-  // be defined here and called from Notifications.tsx, 404ing every time -
-  // removed until the backend actually adds those routes.
   NOTIFICATIONS: {
     LIST: `${API_VERSION}/notifications`,
+    MARK_READ: (id: string) => `${API_VERSION}/notifications/${id}/read`,
+    MARK_ALL_READ: `${API_VERSION}/notifications/read-all`,
   },
 
   // ---------------------------------------------------------------------------

@@ -589,6 +589,18 @@ export interface BackendPlatformUser {
   updatedAt: string;
 }
 
+/** super_admin, platform_admin, support_engineer, auditor, devops (platform-roles.enum.ts). */
+export type BackendPlatformRole = 'super_admin' | 'platform_admin' | 'support_engineer' | 'auditor' | 'devops';
+
+/** POST /platform/users body (CreatePlatformUserDto). */
+export interface CreatePlatformUserRequest {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  platformRole: BackendPlatformRole;
+}
+
 /** POST /users body (CreateUserDto) - password is required (this creates the account directly, there is no separate invite-token flow on the backend). */
 export interface CreateUserRequest {
   email: string;

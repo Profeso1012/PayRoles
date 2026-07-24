@@ -1,10 +1,11 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { ArrowLeft, Printer, Download } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatMoney, formatDate } from '@/lib/utils';
+import { useToast } from '@/hooks/useToast';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Button from '@/components/ui/Button';
@@ -23,6 +24,17 @@ function formatPeriod(periodStart?: string, periodEnd?: string, period?: string)
 export default function PayslipViewer() {
   const { runId, payslipId } = useParams<{ runId: string; payslipId: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
+
+  // Generates (or returns the cached) server-rendered PDF, distinct from the
+  // Print button below (which is just the browser's own print-to-PDF of this
+  // page's markup).
+  const downloadPdfMutation = useMutation({
+    mutationFn: () =>
+      apiClient<{ pdfUrl: string }>(ENDPOINTS.PAYROLL.PAYSLIPS.PDF(runId!, payslipId!), { method: 'POST' }),
+    onSuccess: (result) => window.open(result.pdfUrl, '_blank'),
+    onError: (err) => toast.error('Failed to generate PDF', err instanceof Error ? err.message : undefined),
+  });
 
   const { data: payslip, isLoading, isError, refetch } = useQuery<Payslip>({
     queryKey: ['payslip', runId, payslipId],
@@ -97,10 +109,20 @@ export default function PayslipViewer() {
           <ArrowLeft size={16} />
           Back
         </button>
-        <Button variant="secondary" onClick={() => window.print()}>
-          <Printer size={15} />
-          Print / Save PDF
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            loading={downloadPdfMutation.isPending}
+            onClick={() => downloadPdfMutation.mutate()}
+          >
+            <Download size={15} />
+            Download PDF
+          </Button>
+          <Button variant="ghost" onClick={() => window.print()}>
+            <Printer size={15} />
+            Print
+          </Button>
+        </div>
       </div>
 
       {/* Payslip document */}
