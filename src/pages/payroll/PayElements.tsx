@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Lock } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
@@ -55,7 +55,9 @@ export default function PayElements() {
   const { data: elements, isLoading, isError, refetch } = useQuery<PayElementDefinition[]>({
     queryKey: ['pay-elements'],
     queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.PAY_ELEMENTS.LIST);
+      // No params here defaults to PaginationDto's limit: 20, silently
+      // truncating this page for any tenant with more than 20 pay elements.
+      const response = await apiClient<any>(`${ENDPOINTS.PAY_ELEMENTS.LIST}?${buildPaginationParams({ limit: 100 })}`);
       const items = Array.isArray(response) ? response : (response.data || []);
       return items;
     },
@@ -104,6 +106,20 @@ export default function PayElements() {
       setDeleteTarget(null);
     },
     onError: (err) => toast.error('Failed to deactivate pay element', err instanceof Error ? err.message : undefined),
+  });
+
+  // No dedicated /activate route exists, but UpdatePayElementDto (unlike
+  // Worker/LegalEntity's update DTOs) does include isActive - so the generic
+  // update endpoint can flip it back on. Without this, a deactivated element
+  // still shows up in GET /pay-elements forever (findAll doesn't filter by
+  // isActive) with no way to bring it back.
+  const reactivateMutation = useMutation({
+    mutationFn: (id: string) => apiClient(ENDPOINTS.PAY_ELEMENTS.UPDATE(id), { method: 'PATCH', body: JSON.stringify({ isActive: true }) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pay-elements'] });
+      toast.success('Pay element reactivated');
+    },
+    onError: (err) => toast.error('Failed to reactivate pay element', err instanceof Error ? err.message : undefined),
   });
 
   function openAdd() {
@@ -166,6 +182,7 @@ export default function PayElements() {
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-deep-cash">{el.name}</span>
+                    {!el.isActive && <Badge variant="error" label="Inactive" />}
                     {el.isStatutory && (
                       <span className="inline-flex items-center gap-1 text-xs text-cash-green/60">
                         <Lock size={11} />
@@ -183,21 +200,34 @@ export default function PayElements() {
                 <td className="px-5 py-3 font-mono text-xs text-cash-green/70">{el.formula ?? '—'}</td>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-1 justify-end">
-                    <button
-                      onClick={() => openEdit(el)}
-                      className="p-1.5 rounded hover:bg-mint-light text-cash-green transition-colors"
-                      title="Edit"
-                    >
-                      <Pencil size={14} />
-                    </button>
-                    {!el.isStatutory && (
-                      <button
-                        onClick={() => setDeleteTarget(el)}
-                        className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                        title="Deactivate"
+                    {el.isActive ? (
+                      <>
+                        <button
+                          onClick={() => openEdit(el)}
+                          className="p-1.5 rounded hover:bg-mint-light text-cash-green transition-colors"
+                          title="Edit"
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        {!el.isStatutory && (
+                          <button
+                            onClick={() => setDeleteTarget(el)}
+                            className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                            title="Deactivate"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </>
+                    ) : (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={reactivateMutation.isPending && reactivateMutation.variables === el.id}
+                        onClick={() => reactivateMutation.mutate(el.id)}
                       >
-                        <Trash2 size={14} />
-                      </button>
+                        Reactivate
+                      </Button>
                     )}
                   </div>
                 </td>

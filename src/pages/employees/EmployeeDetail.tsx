@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers, X } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
@@ -218,7 +218,9 @@ export default function EmployeeDetail() {
   const { data: payElementCatalog } = useQuery<BackendPayElement[]>({
     queryKey: ['pay-elements'],
     queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.PAY_ELEMENTS.LIST);
+      // No params here defaults to PaginationDto's limit: 20, silently
+      // truncating the picker for any tenant with more than 20 pay elements.
+      const response = await apiClient<any>(`${ENDPOINTS.PAY_ELEMENTS.LIST}?${buildPaginationParams({ limit: 100 })}`);
       return Array.isArray(response) ? response : (response.data || []);
     },
     enabled: assignWpeOpen,
@@ -312,6 +314,42 @@ export default function EmployeeDetail() {
     },
     onError: (err) => toast.error('Failed to add compensation', err instanceof Error ? err.message : undefined),
   });
+
+  // UpdateCompensationDto is a full PartialType of create, so any field is
+  // editable - useful for fixing a data-entry mistake without creating a
+  // confusing extra supersession record in the history.
+  const [editCompTarget, setEditCompTarget] = useState<Compensation | null>(null);
+  const [editCompForm, setEditCompForm] = useState(blankCompForm);
+  const editCompensationMutation = useMutation({
+    mutationFn: () =>
+      apiClient(ENDPOINTS.COMPENSATION.UPDATE(editCompTarget!.id), {
+        method: 'PATCH',
+        body: JSON.stringify({
+          amountMinor: Math.round(parseFloat(editCompForm.amount) * 100),
+          currency: editCompForm.currency,
+          salaryType: editCompForm.salaryType as CreateCompensationRequest['salaryType'],
+          payFrequency: editCompForm.payFrequency as CreateCompensationRequest['payFrequency'],
+          effectiveDate: editCompForm.effectiveDate,
+        } satisfies Partial<CreateCompensationRequest>),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['worker-compensations', id] });
+      toast.success('Compensation updated');
+      setEditCompTarget(null);
+    },
+    onError: (err) => toast.error('Failed to update compensation', err instanceof Error ? err.message : undefined),
+  });
+
+  function openEditCompensation(comp: Compensation) {
+    setEditCompTarget(comp);
+    setEditCompForm({
+      amount: String(comp.grossSalary),
+      currency: comp.currency,
+      salaryType: comp.salaryType ?? 'fixed',
+      payFrequency: comp.payFrequency ?? 'monthly',
+      effectiveDate: comp.effectiveFrom.slice(0, 10),
+    });
+  }
 
   if (isLoading) {
     return (
@@ -509,7 +547,18 @@ export default function EmployeeDetail() {
                     <div className="bg-soft-white rounded-lg p-4 border border-mint-light">
                       <div className="flex items-start justify-between gap-2 flex-wrap">
                         <MoneyDisplay amount={comp.grossSalary} currency={comp.currency} size="md" />
-                        {!comp.effectiveTo && <Badge variant="success" label="Current" />}
+                        <div className="flex items-center gap-2">
+                          {!comp.effectiveTo && <Badge variant="success" label="Current" />}
+                          {canWritePayElements && (
+                            <button
+                              onClick={() => openEditCompensation(comp)}
+                              className="p-1 rounded hover:bg-mint-light text-cash-green transition-colors"
+                              title="Edit"
+                            >
+                              <Pencil size={13} />
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-xs text-cash-green/60 mt-1">
                         {formatDate(comp.effectiveFrom)}
@@ -704,6 +753,67 @@ export default function EmployeeDetail() {
               onClick={() => addCompensationMutation.mutate()}
             >
               Add Compensation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!editCompTarget}
+        onClose={() => setEditCompTarget(null)}
+        title="Edit Compensation"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Corrects this record directly — use this for a data-entry mistake, not for a raise (add a
+            new Compensation record for that instead, so history stays accurate).
+          </p>
+          <Input
+            label="Amount"
+            type="number"
+            value={editCompForm.amount}
+            onChange={(e) => setEditCompForm((f) => ({ ...f, amount: e.target.value }))}
+            placeholder="e.g. 500000"
+          />
+          <Input
+            label="Currency"
+            value={editCompForm.currency}
+            onChange={(e) => setEditCompForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
+            placeholder="NGN"
+          />
+          <Select
+            label="Salary Type"
+            value={editCompForm.salaryType}
+            options={SALARY_TYPE_OPTIONS}
+            onChange={(v) => setEditCompForm((f) => ({ ...f, salaryType: v }))}
+          />
+          <Select
+            label="Pay Frequency"
+            value={editCompForm.payFrequency}
+            options={PAY_FREQUENCY_OPTIONS}
+            onChange={(v) => setEditCompForm((f) => ({ ...f, payFrequency: v }))}
+          />
+          <div>
+            <p className="text-sm text-cash-green font-medium mb-1">Effective from</p>
+            <input
+              type="date"
+              className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+              value={editCompForm.effectiveDate}
+              onChange={(e) => setEditCompForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setEditCompTarget(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={editCompensationMutation.isPending}
+              disabled={!editCompForm.amount || !editCompForm.effectiveDate}
+              onClick={() => editCompensationMutation.mutate()}
+            >
+              Save Changes
             </Button>
           </div>
         </div>

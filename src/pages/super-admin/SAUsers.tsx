@@ -1,19 +1,25 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, ShieldOff, ShieldCheck } from 'lucide-react';
+import { Plus, ShieldOff, ShieldCheck, Pencil } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import { formatDate, generateTempPassword } from '@/lib/utils';
 import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
 import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { BackendPlatformUser, CreatePlatformUserRequest, BackendPlatformRole } from '@/lib/api/types';
+import type {
+  BackendPlatformUser,
+  CreatePlatformUserRequest,
+  UpdatePlatformUserRequest,
+  BackendPlatformRole,
+} from '@/lib/api/types';
 
 const ROLE_LABELS: Record<BackendPlatformRole, string> = {
   super_admin: 'Super Admin',
@@ -52,6 +58,8 @@ export default function SAUsers() {
   const [form, setForm] = useState(blankForm);
   const [formError, setFormError] = useState('');
   const [disableTarget, setDisableTarget] = useState<BackendPlatformUser | null>(null);
+  const [editTarget, setEditTarget] = useState<BackendPlatformUser | null>(null);
+  const [editForm, setEditForm] = useState<UpdatePlatformUserRequest>({});
 
   const { data: users, isLoading, isError, refetch } = useQuery<BackendPlatformUser[]>({
     queryKey: ['platform-users'],
@@ -73,6 +81,23 @@ export default function SAUsers() {
     },
     onError: (err) => toast.error('Failed to create platform user', err instanceof Error ? err.message : undefined),
   });
+
+  // UpdatePlatformUserDto only supports firstName/lastName/platformRole - no
+  // email/password change here.
+  const updateMutation = useMutation({
+    mutationFn: () => apiClient(ENDPOINTS.PLATFORM_USERS.UPDATE(editTarget!.id), { method: 'PATCH', body: JSON.stringify(editForm) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-users'] });
+      toast.success('Platform user updated');
+      setEditTarget(null);
+    },
+    onError: (err) => toast.error('Failed to update platform user', err instanceof Error ? err.message : undefined),
+  });
+
+  function openEdit(u: BackendPlatformUser) {
+    setEditTarget(u);
+    setEditForm({ firstName: u.firstName, lastName: u.lastName, platformRole: u.platformRole as BackendPlatformRole });
+  }
 
   const disableMutation = useMutation({
     mutationFn: (id: string) => apiClient(ENDPOINTS.PLATFORM_USERS.DISABLE(id), { method: 'PATCH' }),
@@ -185,6 +210,13 @@ export default function SAUsers() {
                       </td>
                       <td className="px-6 py-4 text-cash-green/70">{u.lastLoginAt ? formatDate(u.lastLoginAt) : 'Never'}</td>
                       <td className="px-6 py-4">
+                        <div className="flex items-center gap-2">
+                        {canWrite && (
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                            <Pencil size={13} />
+                            Edit
+                          </Button>
+                        )}
                         {canDisable && !isCurrentUser && (
                           u.isActive ? (
                             <Button variant="danger" size="sm" onClick={() => setDisableTarget(u)}>
@@ -203,6 +235,7 @@ export default function SAUsers() {
                             </Button>
                           )
                         )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -261,6 +294,40 @@ export default function SAUsers() {
             <Button variant="ghost" onClick={resetForm}>Cancel</Button>
             <Button variant="primary" onClick={handleSubmit} loading={createMutation.isPending}>
               Create Platform User
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit Platform User">
+        <div className="flex flex-col gap-5 pt-2">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <Input
+              label="First name"
+              value={editForm.firstName ?? ''}
+              onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+            />
+            <Input
+              label="Last name"
+              value={editForm.lastName ?? ''}
+              onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+            />
+          </div>
+          <Select
+            label="Platform Role"
+            value={editForm.platformRole ?? ''}
+            options={ROLE_OPTIONS}
+            onChange={(v) => setEditForm((f) => ({ ...f, platformRole: v as BackendPlatformRole }))}
+          />
+          <div className="flex justify-end gap-3 pt-2 border-t border-mint-light">
+            <Button variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={updateMutation.isPending}
+              disabled={!editForm.firstName?.trim() || !editForm.lastName?.trim()}
+              onClick={() => updateMutation.mutate()}
+            >
+              Save Changes
             </Button>
           </div>
         </div>

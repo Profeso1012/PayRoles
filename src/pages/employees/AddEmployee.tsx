@@ -15,6 +15,7 @@ interface LegalEntity {
   id: string;
   name: string;
   country: string;
+  status: string;
 }
 
 type PersonalForm = {
@@ -109,7 +110,12 @@ export default function AddEmployee() {
     },
   });
 
-  const leOptions = (legalEntities ?? []).map((le) => ({ value: le.id, label: le.name }));
+  // GET /legal-entities returns deactivated entities too (no server-side
+  // filter) - excluded here so a new employee can't be assigned to a
+  // retired legal entity.
+  const leOptions = (legalEntities ?? [])
+    .filter((le) => le.status !== 'inactive')
+    .map((le) => ({ value: le.id, label: le.name }));
 
   const createMutation = useMutation({
     mutationFn: async () => {

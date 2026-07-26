@@ -166,7 +166,7 @@ export default function PayRunDetail() {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Calculation started');
     },
-    onError: () => toast.error('Failed to start calculation'),
+    onError: (err) => toast.error('Failed to start calculation', err instanceof Error ? err.message : undefined),
   });
 
   const submitMutation = useMutation({
@@ -175,7 +175,7 @@ export default function PayRunDetail() {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Submitted for review');
     },
-    onError: () => toast.error('Failed to submit'),
+    onError: (err) => toast.error('Failed to submit', err instanceof Error ? err.message : undefined),
   });
 
   const approveMutation = useMutation({
@@ -186,7 +186,7 @@ export default function PayRunDetail() {
       toast.success('Pay run approved');
       setApproveModalOpen(false);
     },
-    onError: () => toast.error('Failed to approve'),
+    onError: (err) => toast.error('Failed to approve', err instanceof Error ? err.message : undefined),
   });
 
   const [rejectReason, setRejectReason] = useState('');
@@ -203,7 +203,7 @@ export default function PayRunDetail() {
       setRejectModalOpen(false);
       setRejectReason('');
     },
-    onError: () => toast.error('Failed to reject'),
+    onError: (err) => toast.error('Failed to reject', err instanceof Error ? err.message : undefined),
   });
 
   const [approveModalOpen, setApproveModalOpen] = useState(false);
@@ -217,7 +217,7 @@ export default function PayRunDetail() {
       toast.success('Pay run cancelled');
       setCancelModalOpen(false);
     },
-    onError: () => toast.error('Failed to cancel pay run'),
+    onError: (err) => toast.error('Failed to cancel pay run', err instanceof Error ? err.message : undefined),
   });
 
   const [reverseModalOpen, setReverseModalOpen] = useState(false);
@@ -234,7 +234,7 @@ export default function PayRunDetail() {
       setReverseModalOpen(false);
       setReverseReason('');
     },
-    onError: () => toast.error('Failed to reverse pay run'),
+    onError: (err) => toast.error('Failed to reverse pay run', err instanceof Error ? err.message : undefined),
   });
 
   if (isLoading) {

@@ -50,7 +50,7 @@ export default function SACompanyDetail() {
       toast.success(`Company ${action}`, `${tenant?.name} has been ${action}.`);
       setShowConfirm(false);
     },
-    onError: () => toast.error('Action failed', 'Please try again.'),
+    onError: (err) => toast.error('Action failed', err instanceof Error ? err.message : undefined),
   });
 
   const addUserMutation = useMutation({
@@ -64,7 +64,7 @@ export default function SACompanyDetail() {
       setAddUserOpen(false);
       setUserForm({ firstName: '', lastName: '', email: '', password: generateTempPassword() });
     },
-    onError: () => toast.error('Failed to create user', 'Please try again.'),
+    onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
   });
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>;

@@ -95,7 +95,7 @@ export default function Exports() {
       toast.success('Export queued — this usually takes a few seconds');
       qc.invalidateQueries({ queryKey: ['export-jobs'] });
     },
-    onError: () => toast.error('Failed to queue export'),
+    onError: (err) => toast.error('Failed to queue export', err instanceof Error ? err.message : undefined),
   });
 
   const handleDownload = async (job: BackendExportJob) => {

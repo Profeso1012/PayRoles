@@ -16,6 +16,7 @@ interface LegalEntity {
   id: string;
   name: string;
   country: string;
+  status: string;
 }
 
 export default function PayRunCreate() {
@@ -37,7 +38,12 @@ export default function PayRunCreate() {
     },
   });
 
-  const entityOptions = (legalEntities ?? []).map((e) => ({ value: e.id, label: e.name }));
+  // GET /legal-entities returns deactivated entities too (no server-side
+  // filter) - excluded here so a new pay run can't be created against a
+  // retired legal entity.
+  const entityOptions = (legalEntities ?? [])
+    .filter((e) => e.status !== 'inactive')
+    .map((e) => ({ value: e.id, label: e.name }));
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -62,7 +68,7 @@ export default function PayRunCreate() {
       toast.success('Pay run created');
       navigate(`/payroll/runs/${run.id}`);
     },
-    onError: () => toast.error('Failed to create pay run'),
+    onError: (err) => toast.error('Failed to create pay run', err instanceof Error ? err.message : undefined),
   });
 
   const selectedEntity = (legalEntities ?? []).find((e) => e.id === legalEntityId);

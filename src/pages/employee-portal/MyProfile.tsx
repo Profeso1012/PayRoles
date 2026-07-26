@@ -100,7 +100,7 @@ export default function MyProfile() {
       setConfirmPassword('');
       setTimeout(() => setPasswordChanged(false), 5000);
     },
-    onError: () => toast.error('Failed to change password', 'Check your current password and try again.'),
+    onError: (err) => toast.error('Failed to change password', err instanceof Error ? err.message : undefined),
   });
 
   if (isLoading) {

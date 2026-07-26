@@ -601,6 +601,13 @@ export interface CreatePlatformUserRequest {
   platformRole: BackendPlatformRole;
 }
 
+/** PATCH /platform/users/:id body (UpdatePlatformUserDto) - no email/password. */
+export interface UpdatePlatformUserRequest {
+  firstName?: string;
+  lastName?: string;
+  platformRole?: BackendPlatformRole;
+}
+
 /** POST /users body (CreateUserDto) - password is required (this creates the account directly, there is no separate invite-token flow on the backend). */
 export interface CreateUserRequest {
   email: string;
@@ -799,6 +806,79 @@ export type BackendBatchStatus =
   | 'awaiting_confirmation';
 
 export type BackendProviderType = 'manual_bank_file' | 'monnify' | 'paystack' | 'flutterwave' | 'remita';
+export type BackendExecutionPolicy = 'manual' | 'scheduled' | 'immediate';
+export type BackendApprovalWorkflowType = 'none' | 'single' | 'dual' | 'finance' | 'ceo' | 'multi_level';
+
+export interface BackendRetryPolicy {
+  enabled: boolean;
+  maxRetries: number;
+  retryIntervalMinutes: number;
+  maxRetryWindowHours: number;
+  retryOnlyFailed: boolean;
+}
+
+export interface BackendNotificationSettings {
+  email: boolean;
+  sms: boolean;
+  inApp: boolean;
+  webhook: boolean;
+  webhookUrl?: string | null;
+  events: Record<string, boolean>;
+}
+
+/** GET/PATCH /disbursement/settings - disbursement-settings.entity.ts */
+export interface BackendDisbursementSettings {
+  id: string;
+  tenantId: string;
+  defaultProvider: BackendProviderType;
+  executionPolicy: BackendExecutionPolicy;
+  retryPolicy: BackendRetryPolicy;
+  notificationSettings: BackendNotificationSettings;
+  approvalWorkflow: BackendApprovalWorkflowType;
+  timezone: string;
+  autoReconcile: boolean;
+  releasePayslipsOnComplete: boolean;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateDisbursementSettingsRequest {
+  defaultProvider?: BackendProviderType;
+  executionPolicy?: BackendExecutionPolicy;
+  approvalWorkflow?: BackendApprovalWorkflowType;
+  timezone?: string;
+  autoReconcile?: boolean;
+  releasePayslipsOnComplete?: boolean;
+  retryPolicy?: Partial<BackendRetryPolicy>;
+  notificationSettings?: Partial<Pick<BackendNotificationSettings, 'email' | 'sms' | 'inApp' | 'webhook' | 'webhookUrl'>>;
+}
+
+/** GET /disbursement/settings/providers - disbursement-provider-config.entity.ts.
+ * credentialsEncrypted is never decrypted for display - treat as write-only. */
+export interface BackendDisbursementProviderConfig {
+  id: string;
+  tenantId: string;
+  providerType: BackendProviderType;
+  credentialsEncrypted: string | null;
+  environment: 'sandbox' | 'production';
+  isDefault: boolean;
+  enabled: boolean;
+  webhookSecret: string | null;
+  metadata: Record<string, unknown> | null;
+  lastValidatedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConfigureProviderRequest {
+  environment?: 'sandbox' | 'production';
+  isDefault?: boolean;
+  enabled?: boolean;
+  credentials?: Record<string, string>;
+  webhookSecret?: string;
+  metadata?: Record<string, unknown>;
+}
 
 export interface BackendDisbursementBatch {
   id: string;
@@ -869,6 +949,57 @@ export interface BackendDisbursementTransaction {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/** GET /disbursement/dashboard/summary */
+export interface BackendDisbursementSummary {
+  pendingExecution: number;
+  scheduled: number;
+  awaitingConfirmation: number;
+  totalBatches: number;
+  completedBatches: number;
+  failedBatches: number;
+  recentWebhooks: number;
+  today: {
+    amountMinor: number;
+    successfulTransactions: number;
+  };
+}
+
+/** GET /disbursement/dashboard/webhooks - webhook-event.entity.ts */
+export interface BackendWebhookEvent {
+  id: string;
+  providerType: BackendProviderType;
+  idempotencyKey: string;
+  eventType: string | null;
+  transactionReference: string | null;
+  processed: boolean;
+  processingTimeMs: number | null;
+  errorMessage: string | null;
+  receivedAt: string;
+}
+
+/** GET /disbursement/dashboard/reconciliation - reconciliation-record.entity.ts */
+export interface BackendReconciliationRecord {
+  id: string;
+  batchId: string;
+  providerType: BackendProviderType;
+  status: 'matched' | 'partially_matched' | 'unmatched';
+  totalTransactions: number;
+  matchedCount: number;
+  unmatchedCount: number;
+  varianceMinor: number;
+  isAutomatic: boolean;
+  reconciledAt: string;
+}
+
+/** GET /disbursement/dashboard/provider-health - raw groupBy query result. */
+export interface BackendProviderHealth {
+  provider: BackendProviderType;
+  totalBatches: string;
+  successfulTransactions: string | null;
+  failedTransactions: string | null;
+  totalAmountMinor: string | null;
 }
 
 // ============================================================================

@@ -116,7 +116,7 @@ export default function SACompanies() {
       );
       resetForm();
     },
-    onError: () => toast.error('Failed to onboard company', 'Please check the details and try again.'),
+    onError: (err) => toast.error('Failed to onboard company', err instanceof Error ? err.message : undefined),
   });
 
   const resetForm = () => {

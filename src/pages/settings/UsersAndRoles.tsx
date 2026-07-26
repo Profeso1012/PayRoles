@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldOff, ShieldCheck, KeyRound } from 'lucide-react';
+import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -16,7 +16,7 @@ import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { BackendUser, BackendRole, BackendWorker, CreateUserRequest } from '@/lib/api/types';
+import type { BackendUser, BackendRole, BackendWorker, CreateUserRequest, UpdateUserRequest } from '@/lib/api/types';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -71,6 +71,8 @@ export default function UsersAndRoles() {
   const [form, setForm] = useState(blankAddUserForm);
   const [disableTarget, setDisableTarget] = useState<BackendUser | null>(null);
   const [resetPasswordTarget, setResetPasswordTarget] = useState<BackendUser | null>(null);
+  const [editTarget, setEditTarget] = useState<BackendUser | null>(null);
+  const [editForm, setEditForm] = useState<UpdateUserRequest>({});
 
   const {
     data: users = [],
@@ -122,6 +124,26 @@ export default function UsersAndRoles() {
     },
     onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
   });
+
+  // UpdateUserDto (backend) only supports firstName/lastName/role/phone - there
+  // is no workerId field on the update path, only on create. A user created
+  // without a worker link (or created as a different role, later switched to
+  // employee_self_service) can never be linked after the fact through this
+  // endpoint - the only fix is creating a fresh, correctly-linked account.
+  const updateUserMutation = useMutation({
+    mutationFn: () => apiClient(ENDPOINTS.USERS.UPDATE(editTarget!.id), { method: 'PATCH', body: JSON.stringify(editForm) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['settings-users'] });
+      toast.success('User updated');
+      setEditTarget(null);
+    },
+    onError: (err) => toast.error('Failed to update user', err instanceof Error ? err.message : undefined),
+  });
+
+  function openEdit(u: BackendUser) {
+    setEditTarget(u);
+    setEditForm({ firstName: u.firstName, lastName: u.lastName, role: u.role, phone: u.phone ?? '' });
+  }
 
   const disableMutation = useMutation({
     mutationFn: (id: string) => {
@@ -279,6 +301,10 @@ export default function UsersAndRoles() {
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                          <Pencil size={13} />
+                          Edit
+                        </Button>
                         {isActive && (
                           <Button variant="ghost" size="sm" onClick={() => setResetPasswordTarget(u)}>
                             <KeyRound size={13} />
@@ -416,6 +442,56 @@ export default function UsersAndRoles() {
             >
               <ShieldCheck size={14} />
               Create User
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit User" size="sm">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <Input
+              label="First name"
+              value={editForm.firstName ?? ''}
+              onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+            />
+            <Input
+              label="Last name"
+              value={editForm.lastName ?? ''}
+              onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+            />
+          </div>
+          <Input
+            label="Phone (optional)"
+            value={editForm.phone ?? ''}
+            onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+          />
+          <Select
+            label="Role"
+            value={editForm.role ?? ''}
+            options={ROLE_OPTIONS}
+            onChange={(v) => setEditForm((f) => ({ ...f, role: v as BackendRole }))}
+          />
+          {editForm.role === 'employee_self_service' && editTarget?.role !== 'employee_self_service' && (
+            <p className="text-xs text-red-500">
+              Can't switch to Employee here — this role needs a linked employee record, and there's no way to
+              set that on an existing account. Create a new Employee user instead (Add User) and disable this
+              one.
+            </p>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+            <Button variant="ghost" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={updateUserMutation.isPending}
+              disabled={
+                !editForm.firstName ||
+                !editForm.lastName ||
+                (editForm.role === 'employee_self_service' && editTarget?.role !== 'employee_self_service')
+              }
+              onClick={() => updateUserMutation.mutate()}
+            >
+              Save Changes
             </Button>
           </div>
         </div>

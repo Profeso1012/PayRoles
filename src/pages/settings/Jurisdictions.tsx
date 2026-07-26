@@ -3,11 +3,22 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronUp, Globe } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
+import { minorToMajor } from '@/lib/api/transforms';
+import { formatMoney } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
+import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { TaxJurisdiction, TaxRule, TaxVersion } from '@/lib/api/types';
+import type { TaxJurisdiction, TaxRule, TaxVersion, TaxVersionDetail } from '@/lib/api/types';
+
+const RELIEF_TYPE_LABEL: Record<string, string> = {
+  fixed_amount: 'Fixed amount',
+  percentage_of_gross: '% of gross',
+  percentage_of_gross_capped: '% of gross (capped)',
+  greater_of_fixed_or_percentage: 'Greater of fixed or %',
+  percentage_of_worker_amount_capped: '% of worker-supplied amount (capped)',
+};
 
 const FLAG_EMOJI: Record<string, string> = {
   NG: '🇳🇬',
@@ -26,6 +37,16 @@ interface JurisdictionRow {
 
 export default function Jurisdictions() {
   const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
+  const [detailTarget, setDetailTarget] = useState<{ code: string; name: string; currency: string } | null>(null);
+
+  // GET /tax/versions/:code was never called anywhere - the list view above
+  // only ever shows a version's name/date/active-status, never the bands
+  // and reliefs that actually determine someone's tax deduction.
+  const { data: versionDetail, isLoading: detailLoading } = useQuery<TaxVersionDetail>({
+    queryKey: ['tax-version-detail', detailTarget?.code],
+    queryFn: () => apiClient<TaxVersionDetail>(ENDPOINTS.TAX.VERSION_DETAIL(detailTarget!.code)),
+    enabled: !!detailTarget,
+  });
 
   // Tax law is jurisdiction-wide reference data shared by every tenant -
   // creating/activating/deactivating a version is now a platform-admin-only
@@ -191,7 +212,16 @@ export default function Jurisdictions() {
                                   <span>
                                     {v.name} <span style={{ color: '#4FAD72' }}>· effective {v.effectiveDate}</span>
                                   </span>
-                                  <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
+                                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDetailTarget({ code: v.code, name: v.name, currency: jurisdiction.currency })}
+                                      style={{ background: 'none', border: 'none', padding: 0, color: '#1D8A5C', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}
+                                    >
+                                      View rates
+                                    </button>
+                                    <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
+                                  </span>
                                 </li>
                               ))}
                             </ul>
@@ -206,6 +236,83 @@ export default function Jurisdictions() {
           );
         })}
       </div>
+
+      <Modal
+        isOpen={!!detailTarget}
+        onClose={() => setDetailTarget(null)}
+        title={detailTarget?.name ?? 'Tax version details'}
+        size="sm"
+      >
+        {detailLoading || !versionDetail ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem 0' }}>
+            <Spinner />
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1F6F4E', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.5rem' }}>
+                Tax Bands
+              </p>
+              {versionDetail.bands.length === 0 ? (
+                <p style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>No bands defined — likely a flat-rate rule.</p>
+              ) : (
+                <table style={{ width: '100%', fontSize: '0.8125rem', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #CDEFD7' }}>
+                      <th style={{ textAlign: 'left', padding: '0.375rem 0', color: '#1F6F4E', fontWeight: 600 }}>Range</th>
+                      <th style={{ textAlign: 'right', padding: '0.375rem 0', color: '#1F6F4E', fontWeight: 600 }}>Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...versionDetail.bands]
+                      .sort((a, b) => a.sequence - b.sequence)
+                      .map((band) => (
+                        <tr key={band.id} style={{ borderBottom: '1px solid #F0F0F0' }}>
+                          <td style={{ padding: '0.375rem 0', color: '#0F2E23' }}>
+                            {formatMoney(minorToMajor(band.lowerBoundMinor), detailTarget!.currency)}
+                            {' – '}
+                            {band.upperBoundMinor
+                              ? formatMoney(minorToMajor(band.upperBoundMinor), detailTarget!.currency)
+                              : 'and above'}
+                          </td>
+                          <td style={{ padding: '0.375rem 0', textAlign: 'right', fontWeight: 600, color: '#0F2E23' }}>
+                            {Number(band.ratePercent)}%
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#1F6F4E', textTransform: 'uppercase', letterSpacing: '0.03em', marginBottom: '0.5rem' }}>
+                Reliefs
+              </p>
+              {versionDetail.reliefs.length === 0 ? (
+                <p style={{ fontSize: '0.8125rem', color: '#1F6F4E' }}>No pre-tax reliefs defined for this version.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                  {versionDetail.reliefs.map((relief) => (
+                    <div key={relief.id} style={{ fontSize: '0.8125rem', display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                      <span style={{ color: '#0F2E23' }}>{relief.name}</span>
+                      <span style={{ color: '#1F6F4E', textAlign: 'right' }}>
+                        {RELIEF_TYPE_LABEL[relief.type] ?? relief.type}
+                        {/* value is a decimal(18,4) column - can carry a fractional part,
+                            which BigInt()-based minorToMajor would throw on. */}
+                        {relief.type === 'fixed_amount'
+                          ? ` · ${formatMoney(Number(relief.value) / 100, detailTarget!.currency)}`
+                          : ` · ${Number(relief.value)}%`}
+                        {relief.capMinor ? ` (cap ${formatMoney(minorToMajor(relief.capMinor), detailTarget!.currency)})` : ''}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

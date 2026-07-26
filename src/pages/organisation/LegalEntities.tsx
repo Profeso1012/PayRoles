@@ -23,6 +23,11 @@ interface LegalEntity {
   country: string;
   taxIdEncrypted: string | null; // Backend never returns the decrypted value
   address: string;
+  // 'active' | 'inactive' - set by /deactivate, PATCH-able nowhere else.
+  // CreateLegalEntityDto/UpdateLegalEntityDto have no isActive/status field
+  // at all, so there is no way to reactivate one once deactivated - not a
+  // frontend gap, a real backend limitation.
+  status: string;
   createdAt: string;
 }
 
@@ -76,7 +81,7 @@ export default function LegalEntities() {
       setForm(blankForm);
       setAddOpen(false);
     },
-    onError: () => toast.error('Failed to add legal entity'),
+    onError: (err) => toast.error('Failed to add legal entity', err instanceof Error ? err.message : undefined),
   });
 
   const editMutation = useMutation({
@@ -102,7 +107,7 @@ export default function LegalEntities() {
       setEditTarget(null);
       setEditForm(blankForm);
     },
-    onError: () => toast.error('Failed to update legal entity'),
+    onError: (err) => toast.error('Failed to update legal entity', err instanceof Error ? err.message : undefined),
   });
 
   const deleteMutation = useMutation({
@@ -114,7 +119,7 @@ export default function LegalEntities() {
       toast.success('Legal entity deactivated');
       setDeleteTarget(null);
     },
-    onError: () => toast.error('Failed to deactivate legal entity'),
+    onError: (err) => toast.error('Failed to deactivate legal entity', err instanceof Error ? err.message : undefined),
   });
 
   if (isLoading) {
@@ -221,6 +226,11 @@ export default function LegalEntities() {
                       }}
                     >
                       {le.name}
+                      {le.status === 'inactive' && (
+                        <span style={{ marginLeft: '0.5rem' }}>
+                          <Badge variant="error" label="Inactive" />
+                        </span>
+                      )}
                     </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
                       <Badge variant="info" label={le.country} />
@@ -283,31 +293,33 @@ export default function LegalEntities() {
                           >
                             <Pencil size={15} />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => setDeleteTarget(le)}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              padding: '0.375rem',
-                              borderRadius: '0.375rem',
-                              border: 'none',
-                              background: 'transparent',
-                              cursor: 'pointer',
-                              color: '#dc2626',
-                              transition: 'background 0.15s',
-                            }}
-                            onMouseEnter={(e) =>
-                              (e.currentTarget.style.background = '#fee2e2')
-                            }
-                            onMouseLeave={(e) =>
-                              (e.currentTarget.style.background = 'transparent')
-                            }
-                            title="Delete"
-                          >
-                            <Trash2 size={15} />
-                          </button>
+                          {le.status !== 'inactive' && (
+                            <button
+                              type="button"
+                              onClick={() => setDeleteTarget(le)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                padding: '0.375rem',
+                                borderRadius: '0.375rem',
+                                border: 'none',
+                                background: 'transparent',
+                                cursor: 'pointer',
+                                color: '#dc2626',
+                                transition: 'background 0.15s',
+                              }}
+                              onMouseEnter={(e) =>
+                                (e.currentTarget.style.background = '#fee2e2')
+                              }
+                              onMouseLeave={(e) =>
+                                (e.currentTarget.style.background = 'transparent')
+                              }
+                              title="Deactivate — permanent, the backend has no way to undo this"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          )}
                         </div>
                       )}
                     </td>
@@ -418,7 +430,7 @@ export default function LegalEntities() {
         onClose={() => setDeleteTarget(null)}
         onConfirm={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
         title="Deactivate Legal Entity"
-        message={`Are you sure you want to deactivate "${deleteTarget?.name}"? Workers assigned to this entity will need to be reassigned.`}
+        message={`Are you sure you want to deactivate "${deleteTarget?.name}"? Workers assigned to this entity will need to be reassigned. This cannot be undone — there is no reactivate option.`}
         confirmLabel="Deactivate"
         variant="danger"
         isLoading={deleteMutation.isPending}

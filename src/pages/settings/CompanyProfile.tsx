@@ -71,9 +71,9 @@ export default function CompanyProfile() {
       toast.success('Company profile saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
-    onError: () => {
+    onError: (err) => {
       setSaveStatus('error');
-      toast.error('Failed to save company profile');
+      toast.error('Failed to save company profile', err instanceof Error ? err.message : undefined);
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
   });

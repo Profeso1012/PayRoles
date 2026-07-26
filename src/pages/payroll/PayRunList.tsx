@@ -5,8 +5,8 @@ import { Plus } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
 import { apiClientWithMeta } from '@/lib/api';
-import { ENDPOINTS, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
-import { transformPaginatedResponse, mapPayrollRunFields, mapPayrollStatus } from '@/lib/api/transforms';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
+import { transformPaginatedResponse, mapPayrollRunFields } from '@/lib/api/transforms';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
@@ -85,41 +85,62 @@ export default function PayRunList() {
   const { data, isLoading, isError } = useQuery<PaginatedResult<PayRun>>({
     queryKey: ['pay-runs-list', page, status],
     queryFn: async () => {
-      const params = buildPaginationParams({ page, limit: 20, sortBy: 'createdAt', sortDir: 'desc' });
-      if (status) {
-        addFilterParams(params, { status: mapPayrollStatus(status, 'toBackend') });
-      }
-      
+      // GET /payroll/runs binds @Query() to plain PaginationDto (page/limit/
+      // sortBy/sortDir only) - there is no status field on it, and the global
+      // ValidationPipe's forbidNonWhitelisted rejects the WHOLE request if an
+      // unknown query key like "status" is present. So status can't be sent
+      // to the server at all - filtered client-side below instead. Fetch the
+      // max page size (100) when a status filter is active to make that
+      // client-side filter useful, since without it we'd only ever be
+      // filtering within one 20-row page.
+      const params = buildPaginationParams({
+        page: status ? 1 : page,
+        limit: status ? 100 : 20,
+        sortBy: 'createdAt',
+        sortDir: 'desc',
+      });
+
       const response = await apiClientWithMeta<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
 
       // Transform response
       const paginatedData = transformPaginatedResponse(response.data, response.meta);
-      
+
       // Transform each payroll run from backend format to frontend format
-      const transformedRuns = paginatedData.data.map((run: any) => {
+      let transformedRuns = paginatedData.data.map((run: any) => {
         const transformed = mapPayrollRunFields(run, 'toFrontend');
-        
+
         // Build period string from dates if not present
         if (!transformed.period && transformed.periodStart) {
           transformed.period = formatPeriod(transformed.periodStart, transformed.periodEnd);
         }
-        
+
         // Handle missing employeeCount (not in backend response)
         if (!transformed.employeeCount) {
           transformed.employeeCount = 0;
         }
-        
+
         // Map payGroupName to name if present
         if (transformed.name && !transformed.payGroupName) {
           transformed.payGroupName = transformed.name;
         }
-        
+
         return transformed;
       });
-      
+
+      if (status) {
+        // run.status is already frontend-normalized by mapPayrollRunFields
+        // above (e.g. 'pending_approval' -> 'in_review'), and `status` here
+        // comes from the same frontend-facing statusOptions list - compare
+        // directly, no mapPayrollStatus conversion needed (that would wrongly
+        // convert 'in_review' -> 'pending_approval' and mismatch).
+        transformedRuns = transformedRuns.filter((run) => run.status === status);
+      }
+
       return {
         data: transformedRuns,
-        meta: paginatedData,
+        meta: status
+          ? { page: 1, pageSize: transformedRuns.length, total: transformedRuns.length }
+          : paginatedData,
       };
     },
   });

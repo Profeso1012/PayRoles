@@ -217,11 +217,16 @@ export const ENDPOINTS = {
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/transactions/${transactionId}/mark-paid`,
     SETTINGS: `${API_VERSION}/disbursement/settings`,
     PROVIDERS: `${API_VERSION}/disbursement/settings/providers`,
+    PROVIDER_CONFIGURE: (providerType: string) => `${API_VERSION}/disbursement/settings/providers/${providerType}`,
+    PROVIDER_VALIDATE: (providerType: string) => `${API_VERSION}/disbursement/settings/providers/${providerType}/validate`,
     DASHBOARD: {
       SUMMARY: `${API_VERSION}/disbursement/dashboard/summary`,
-      BATCHES: `${API_VERSION}/disbursement/dashboard/batches`,
+      BATCHES: (limit = 10) => `${API_VERSION}/disbursement/dashboard/batches?limit=${limit}`,
       PENDING_APPROVAL: `${API_VERSION}/disbursement/dashboard/pending-approval`,
       RETRY_QUEUE: `${API_VERSION}/disbursement/dashboard/retry-queue`,
+      WEBHOOKS: (limit = 20) => `${API_VERSION}/disbursement/dashboard/webhooks?limit=${limit}`,
+      RECONCILIATION: `${API_VERSION}/disbursement/dashboard/reconciliation`,
+      PROVIDER_HEALTH: `${API_VERSION}/disbursement/dashboard/provider-health`,
     },
     REPORTS: {
       BATCH: (batchId: string, format: 'csv' | 'excel' | 'pdf' = 'csv') =>
@@ -234,16 +239,13 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Import/Export (New in backend)
   // ---------------------------------------------------------------------------
-  // WORKERS_UPLOAD/LIST/STATUS are deliberately unused by ImportEmployees.tsx.
-  // The batch endpoint runs the whole file in one shared DB transaction with
-  // a per-row try/catch that can't actually isolate failures (Postgres
-  // poisons the entire transaction on the first error, and the final COMMIT
-  // on a poisoned transaction silently rolls back rows that looked
-  // successful) and maps blank optional fields to '' instead of NULL
-  // (colliding with Worker.email's partial unique index). Both need a
-  // backend fix (per-row SAVEPOINTs; `|| null` instead of `?? null`) -
-  // neither is reachable from a differently-shaped upload, so the frontend
-  // parses the file itself and drives individual POST/PATCH /workers calls.
+  // WORKERS_UPLOAD/LIST/STATUS are unused by ImportEmployees.tsx, which
+  // parses the file itself and drives individual POST/PATCH /workers calls
+  // instead. Originally worked around two backend bugs (transaction
+  // poisoning on row failure; blank fields stored as '' instead of NULL,
+  // colliding with Worker.email's unique index) - both are now fixed
+  // (per-row SAVEPOINTs; `|| null`), but the bypass is being kept
+  // deliberately for now. See ImportEmployees.tsx's own comment.
   IMPORTS: {
     LIST: `${API_VERSION}/imports`,
     WORKERS_UPLOAD: `${API_VERSION}/imports/workers/upload`,

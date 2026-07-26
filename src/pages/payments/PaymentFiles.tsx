@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle } from 'lucide-react';
+import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, ListChecks, BadgeCheck, Settings2, LayoutDashboard } from 'lucide-react';
 import { apiClient, apiClientWithMeta, BASE_URL } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
@@ -10,11 +11,41 @@ import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
+import Input from '@/components/ui/Input';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
-import type { BackendDisbursementBatch, BackendBatchStatus } from '@/lib/api/types';
+import Spinner from '@/components/ui/Spinner';
+import type { BackendDisbursementBatch, BackendBatchStatus, BackendDisbursementTransaction, BackendTransactionStatus } from '@/lib/api/types';
 import type { PayRun } from '@contracts/types/payroll';
+
+const txStatusVariant: Record<BackendTransactionStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
+  pending: 'draft',
+  scheduled: 'info',
+  queued: 'info',
+  processing: 'warning',
+  successful: 'success',
+  failed: 'error',
+  retried: 'warning',
+  cancelled: 'error',
+  reversed: 'error',
+  manual: 'success',
+  skipped: 'info',
+};
+
+const txStatusLabel: Record<BackendTransactionStatus, string> = {
+  pending: 'Pending',
+  scheduled: 'Scheduled',
+  queued: 'Queued',
+  processing: 'Processing',
+  successful: 'Successful',
+  failed: 'Failed',
+  retried: 'Retried',
+  cancelled: 'Cancelled',
+  reversed: 'Reversed',
+  manual: 'Manually Confirmed',
+  skipped: 'Skipped',
+};
 
 // Helper to format period from start/end dates or single period string
 function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
@@ -93,6 +124,7 @@ async function downloadFile(path: string, fallbackFilename: string) {
 }
 
 export default function PaymentFiles() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
@@ -102,6 +134,13 @@ export default function PaymentFiles() {
   const [rejectTarget, setRejectTarget] = useState<DisbursementRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [cancelTarget, setCancelTarget] = useState<DisbursementRow | null>(null);
+  const [transactionsTarget, setTransactionsTarget] = useState<DisbursementRow | null>(null);
+  const [markPaidTarget, setMarkPaidTarget] = useState<BackendDisbursementTransaction | null>(null);
+  const [markPaidReference, setMarkPaidReference] = useState('');
+  const [markPaidNote, setMarkPaidNote] = useState('');
+  const [confirmTarget, setConfirmTarget] = useState<DisbursementRow | null>(null);
+  const [confirmReference, setConfirmReference] = useState('');
+  const [confirmRemarks, setConfirmRemarks] = useState('');
 
   const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
@@ -131,6 +170,61 @@ export default function PaymentFiles() {
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['disbursement-batches'] });
 
+  const { data: transactions, isLoading: transactionsLoading } = useQuery<BackendDisbursementTransaction[]>({
+    queryKey: ['disbursement-transactions', transactionsTarget?.batch?.id],
+    queryFn: () =>
+      apiClient<BackendDisbursementTransaction[]>(
+        ENDPOINTS.DISBURSEMENT.TRANSACTIONS(transactionsTarget!.run.id, transactionsTarget!.batch!.id),
+      ),
+    enabled: !!transactionsTarget?.batch,
+  });
+
+  const markPaidMutation = useMutation({
+    mutationFn: () =>
+      apiClient(
+        ENDPOINTS.DISBURSEMENT.MARK_TRANSACTION_PAID(
+          transactionsTarget!.run.id,
+          transactionsTarget!.batch!.id,
+          markPaidTarget!.id,
+        ),
+        {
+          method: 'PATCH',
+          body: JSON.stringify({
+            transactionReference: markPaidReference || undefined,
+            note: markPaidNote || undefined,
+          }),
+        },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['disbursement-transactions', transactionsTarget?.batch?.id] });
+      invalidate();
+      toast.success('Transaction marked as paid');
+      setMarkPaidTarget(null);
+      setMarkPaidReference('');
+      setMarkPaidNote('');
+    },
+    onError: (err) => toast.error('Failed to mark transaction paid', err instanceof Error ? err.message : undefined),
+  });
+
+  const confirmMutation = useMutation({
+    mutationFn: () =>
+      apiClient(ENDPOINTS.DISBURSEMENT.CONFIRM(confirmTarget!.run.id, confirmTarget!.batch!.id), {
+        method: 'POST',
+        body: JSON.stringify({
+          reference: confirmReference,
+          remarks: confirmRemarks || undefined,
+        }),
+      }),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Payment confirmed');
+      setConfirmTarget(null);
+      setConfirmReference('');
+      setConfirmRemarks('');
+    },
+    onError: (err) => toast.error('Failed to confirm payment', err instanceof Error ? err.message : undefined),
+  });
+
   const initiateMutation = useMutation({
     mutationFn: (runId: string) =>
       apiClient(ENDPOINTS.DISBURSEMENT.INITIATE(runId), {
@@ -141,7 +235,7 @@ export default function PaymentFiles() {
       toast.success('Disbursement initiated');
       invalidate();
     },
-    onError: () => toast.error('Failed to initiate disbursement'),
+    onError: (err) => toast.error('Failed to initiate disbursement', err instanceof Error ? err.message : undefined),
   });
 
   const approveMutation = useMutation({
@@ -154,7 +248,7 @@ export default function PaymentFiles() {
       toast.success('Batch approved');
       invalidate();
     },
-    onError: () => toast.error('Failed to approve batch'),
+    onError: (err) => toast.error('Failed to approve batch', err instanceof Error ? err.message : undefined),
   });
 
   const rejectMutation = useMutation({
@@ -169,7 +263,7 @@ export default function PaymentFiles() {
       setRejectReason('');
       invalidate();
     },
-    onError: () => toast.error('Failed to reject batch'),
+    onError: (err) => toast.error('Failed to reject batch', err instanceof Error ? err.message : undefined),
   });
 
   const executeMutation = useMutation({
@@ -179,7 +273,7 @@ export default function PaymentFiles() {
       toast.success('Execution started');
       invalidate();
     },
-    onError: () => toast.error('Failed to execute batch'),
+    onError: (err) => toast.error('Failed to execute batch', err instanceof Error ? err.message : undefined),
   });
 
   const retryMutation = useMutation({
@@ -189,7 +283,7 @@ export default function PaymentFiles() {
       toast.success('Retry started');
       invalidate();
     },
-    onError: () => toast.error('Failed to retry batch'),
+    onError: (err) => toast.error('Failed to retry batch', err instanceof Error ? err.message : undefined),
   });
 
   const cancelMutation = useMutation({
@@ -203,7 +297,7 @@ export default function PaymentFiles() {
       setCancelTarget(null);
       invalidate();
     },
-    onError: () => toast.error('Failed to cancel batch'),
+    onError: (err) => toast.error('Failed to cancel batch', err instanceof Error ? err.message : undefined),
   });
 
   const handleDownload = async (row: DisbursementRow) => {
@@ -299,6 +393,17 @@ export default function PaymentFiles() {
               Retry
             </Button>
           )}
+          {row.batch?.status === 'awaiting_confirmation' && canManage && (
+            <Button variant="secondary" size="sm" onClick={() => setConfirmTarget(row)}>
+              <BadgeCheck size={13} />
+              Confirm
+            </Button>
+          )}
+          {row.batch && row.batch.totalCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => setTransactionsTarget(row)}>
+              <ListChecks size={13} />
+            </Button>
+          )}
           {row.batch && row.batch.totalCount > 0 && (
             <Button variant="ghost" size="sm" onClick={() => handleDownload(row)}>
               <DownloadCloud size={13} />
@@ -319,9 +424,23 @@ export default function PaymentFiles() {
       <PageHeader
         title="Payments"
         action={
-          <p className="text-sm text-cash-green/70 pt-1">
-            Initiate and track salary disbursement for approved pay runs
-          </p>
+          <div className="flex items-center gap-4">
+            <p className="text-sm text-cash-green/70">
+              Initiate and track salary disbursement for approved pay runs
+            </p>
+            {canManage && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/overview')}>
+                <LayoutDashboard size={14} />
+                Overview
+              </Button>
+            )}
+            {canApprove && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/settings')}>
+                <Settings2 size={14} />
+                Settings
+              </Button>
+            )}
+          </div>
         }
       />
 
@@ -415,6 +534,134 @@ export default function PaymentFiles() {
         variant="danger"
         isLoading={cancelMutation.isPending}
       />
+
+      <Modal
+        isOpen={!!transactionsTarget}
+        onClose={() => setTransactionsTarget(null)}
+        title="Batch Transactions"
+      >
+        <div className="flex flex-col gap-3">
+          {transactionsLoading ? (
+            <div className="flex justify-center py-8"><Spinner /></div>
+          ) : !transactions || transactions.length === 0 ? (
+            <p className="text-sm text-cash-green/60 py-4">No transactions in this batch yet.</p>
+          ) : (
+            <div className="overflow-x-auto -mx-1">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-mint-light">
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Worker</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Account</th>
+                    <th className="text-right px-3 py-2 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Amount</th>
+                    <th className="text-left px-3 py-2 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Status</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.map((tx) => (
+                    <tr key={tx.id} className="border-b border-mint-light/50">
+                      <td className="px-3 py-2.5">
+                        <p className="font-medium text-deep-cash">{tx.workerName}</p>
+                        {tx.failureReason && <p className="text-xs text-red-500 mt-0.5">{tx.failureReason}</p>}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-cash-green/70">
+                        {tx.bankName ?? tx.bankCode}
+                        <br />
+                        <span className="font-mono">{tx.accountNumber}</span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        <MoneyDisplay amount={minorToMajor(tx.amountMinor)} currency={tx.currency} size="sm" />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <Badge variant={txStatusVariant[tx.status]} label={txStatusLabel[tx.status]} />
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        {(tx.status === 'failed' || tx.status === 'pending') && canManage && (
+                          <Button variant="ghost" size="sm" onClick={() => setMarkPaidTarget(tx)}>
+                            Mark Paid
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!markPaidTarget}
+        onClose={() => { setMarkPaidTarget(null); setMarkPaidReference(''); setMarkPaidNote(''); }}
+        title="Mark Transaction Paid"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Manually record {markPaidTarget?.workerName}'s payment as complete outside the normal flow.
+          </p>
+          <Input
+            label="Reference (optional)"
+            value={markPaidReference}
+            onChange={(e) => setMarkPaidReference(e.target.value)}
+            placeholder="e.g. TRF-20260710-001"
+          />
+          <Input
+            label="Note (optional)"
+            value={markPaidNote}
+            onChange={(e) => setMarkPaidNote(e.target.value)}
+            placeholder="e.g. Paid via bank transfer"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setMarkPaidTarget(null); setMarkPaidReference(''); setMarkPaidNote(''); }}>
+              Cancel
+            </Button>
+            <Button variant="primary" loading={markPaidMutation.isPending} onClick={() => markPaidMutation.mutate()}>
+              Mark Paid
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={!!confirmTarget}
+        onClose={() => { setConfirmTarget(null); setConfirmReference(''); setConfirmRemarks(''); }}
+        title="Confirm Payment"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Confirm this manual bank file batch was actually paid — e.g. once you've checked the bank
+            statement. This moves the batch to completed.
+          </p>
+          <Input
+            label="Bank reference"
+            value={confirmReference}
+            onChange={(e) => setConfirmReference(e.target.value)}
+            placeholder="e.g. TRF-20260710-001"
+          />
+          <Input
+            label="Remarks (optional)"
+            value={confirmRemarks}
+            onChange={(e) => setConfirmRemarks(e.target.value)}
+            placeholder="e.g. Confirmed via GTB statement"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setConfirmTarget(null); setConfirmReference(''); setConfirmRemarks(''); }}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={confirmMutation.isPending}
+              disabled={!confirmReference.trim()}
+              onClick={() => confirmMutation.mutate()}
+            >
+              Confirm Payment
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

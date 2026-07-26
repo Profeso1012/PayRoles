@@ -90,7 +90,7 @@ export default function AuditLogs() {
     page: number;
     pageSize: number;
   }>({
-    queryKey: ['audit-logs', page, search, entityFilter, actionFilter],
+    queryKey: ['audit-logs', page, entityFilter, actionFilter],
     queryFn: async () => {
       if (!USE_REAL_API) {
         return {
@@ -102,9 +102,14 @@ export default function AuditLogs() {
       }
 
       const params = buildPaginationParams({ page, limit: 20 });
+      // AuditQueryDto (backend) only declares entityType/entityId/userId/
+      // action/from/to - the global ValidationPipe's forbidNonWhitelisted
+      // rejects the WHOLE request if an unknown key like "entity" or "search"
+      // is present, not just that field. There's no free-text search field on
+      // the backend at all, so `search` is applied client-side below instead
+      // of sent over the wire.
       addFilterParams(params, {
-        search,
-        entity: entityFilter,
+        entityType: entityFilter,
         action: actionFilter,
       });
 
@@ -148,7 +153,17 @@ export default function AuditLogs() {
     return <ErrorState message="Failed to load audit logs." onRetry={refetch} />;
   }
 
-  const logs = data?.data || [];
+  // Client-side only, over this fetched page - the backend has no free-text
+  // search endpoint for audit logs at all.
+  const logs = (data?.data || []).filter((log) => {
+    if (!search.trim()) return true;
+    const q = search.trim().toLowerCase();
+    return (
+      log.userName?.toLowerCase().includes(q) ||
+      log.userEmail?.toLowerCase().includes(q) ||
+      log.entity?.toLowerCase().includes(q)
+    );
+  });
   const totalPages = Math.ceil((data?.total || 0) / (data?.pageSize || 20));
 
   return (

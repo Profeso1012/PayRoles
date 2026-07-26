@@ -106,4 +106,7 @@ export interface Payslip {
   createdAt?: string;
   generatedAt?: string;
   issuedAt?: string;
+  // The immutable PayrollWorker snapshot this payslip was generated from -
+  // needed to fetch the itemized calculation breakdown (PayrollItem rows).
+  payrollWorkerId?: string | null;
 }

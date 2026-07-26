@@ -31,30 +31,17 @@ function isExcelFile(file: File): boolean {
 }
 
 /**
- * The backend's batch CSV importer (/imports/workers/upload) has two bugs
- * that can't be worked around by "cleaning" the uploaded file, because both
- * live in backend code that runs after the file is already parsed:
- *
- * 1. Blank cells parse to '' (empty string), and the row-to-entity mapping
- *    uses `?? null` (only catches null/undefined, not ''), so blank optional
- *    fields get stored as '' rather than NULL. Worker.email has a partial
- *    unique index that exempts NULL but not '' - so the second blank-email
- *    row in any file collides with the first one on a duplicate-key error.
- * 2. The whole batch runs in one shared DB transaction with a per-row
- *    try/catch that just records errors and continues - but Postgres
- *    poisons the *entire* transaction on the first failure, so every later
- *    row fails too ("current transaction is aborted"), and the final
- *    COMMIT on a poisoned transaction silently rolls back everything,
- *    including rows that succeeded before the first failure.
- *
- * Both require a backend fix (SAVEPOINTs per row; `|| null` instead of
- * `?? null`). Neither is reachable from a differently-formatted upload, so
- * this bypasses that endpoint entirely: parse the file in the browser and
- * drive one independent POST/PATCH /workers request per row instead. Each
- * request is its own isolated transaction (immune to bug #2), and blank
- * optional fields are simply omitted from the JSON body rather than sent
- * as '' (immune to bug #1, since the single-worker create path spreads the
- * DTO directly with no `?? null` mapping at all).
+ * This bypasses the backend's batch CSV importer (/imports/workers/upload)
+ * and drives one independent POST/PATCH /workers request per row instead -
+ * originally because that endpoint had two bugs (blank cells stored as ''
+ * instead of NULL, colliding with Worker.email's partial unique index; and
+ * one row's DB error poisoning the whole batch transaction, silently
+ * rolling back rows that had already succeeded). Both are now fixed on the
+ * backend (per-row SAVEPOINTs; `|| null` instead of `?? null` for email) -
+ * this bypass is being kept anyway for now (simpler to reason about, no
+ * async job/polling to build), not because the real endpoint is broken.
+ * Revisit if the per-row-request approach becomes a real bottleneck for
+ * large files.
  */
 async function parseRows(file: File): Promise<Record<string, string>[]> {
   const workbook = isExcelFile(file)

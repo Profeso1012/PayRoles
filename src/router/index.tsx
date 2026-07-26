@@ -84,6 +84,8 @@ const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 
 // Finance
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
+const DisbursementSettings = lazy(() => import('@/pages/payments/DisbursementSettings'));
+const DisbursementDashboard = lazy(() => import('@/pages/payments/DisbursementDashboard'));
 const Exports = lazy(() => import('@/pages/exports/Exports'));
 // Deprecated: PayrollRegister, StatutoryReports, CostSummary (100% hardcoded
 // mock data - there is no backend /reports module of any kind to back these)
@@ -245,6 +247,8 @@ export const router = createBrowserRouter([
 
       // Finance
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(PaymentFiles)}</RoleGuard> },
+      { path: 'payments/settings', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(DisbursementSettings)}</RoleGuard> },
+      { path: 'payments/overview', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager', 'payroll_officer']}>{w(DisbursementDashboard)}</RoleGuard> },
       {
         path: 'exports',
         element: (
