@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Shield, Search, Calendar, User, FileText } from 'lucide-react';
-import { apiClientWithMeta } from '@/lib/api';
+import { apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -13,17 +13,21 @@ import Pagination from '@/components/ui/Pagination';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import type { BackendUser } from '@/lib/api/types';
 
+// Matches audit-log.entity.ts exactly - there is no userName/userEmail/changes
+// on the real backend at all (only userId, and separate before/after), which
+// this page previously assumed. entityType (not "entity") is the real field
+// name, and entityId/userId/ipAddress/before/after are all nullable.
 interface AuditLog {
   id: string;
   action: string;
-  entity: string;
-  entityId: string;
-  userId: string;
-  userName: string;
-  userEmail: string;
-  ipAddress: string;
-  changes: Record<string, any> | null;
+  entityType: string;
+  entityId: string | null;
+  userId: string | null;
+  ipAddress: string | null;
+  before: Record<string, any> | null;
+  after: Record<string, any> | null;
   metadata: Record<string, any> | null;
   createdAt: string;
 }
@@ -77,6 +81,10 @@ export default function AuditLogs() {
     role === 'super_admin' ||
     role === 'finance_manager' ||
     role === 'auditor';
+  // USER_READ (needed to resolve userId -> name/email) is only granted to
+  // tenant_admin/super_admin - finance_manager/auditor can view this page but
+  // would 403 fetching /users, so they fall back to a raw ID display instead.
+  const canResolveUsers = role === 'tenant_admin' || role === 'super_admin';
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -119,6 +127,29 @@ export default function AuditLogs() {
     enabled: canView,
   });
 
+  // The audit log only carries userId, no name/email - resolved separately
+  // here (once, whole tenant) rather than per-row, and only for roles that
+  // actually hold USER_READ.
+  const { data: userMap } = useQuery<Map<string, { name: string; email: string }>>({
+    queryKey: ['audit-users-lookup'],
+    queryFn: async () => {
+      // PaginationDto caps limit at 100 - page through the whole tenant
+      // roster rather than requesting an oversized single page.
+      const users = await fetchAllPages<BackendUser>(
+        (page) => `${ENDPOINTS.USERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+      );
+      return new Map(users.map((u) => [u.id, { name: `${u.firstName} ${u.lastName}`, email: u.email }]));
+    },
+    enabled: canView && canResolveUsers,
+  });
+
+  function describeUser(userId: string | null): { name: string; email: string } {
+    if (!userId) return { name: 'System', email: '' };
+    const resolved = userMap?.get(userId);
+    if (resolved) return resolved;
+    return { name: `User ${userId.slice(0, 8)}…`, email: '' };
+  }
+
   if (!canView) {
     return (
       <div style={{ maxWidth: 'clamp(600px, 90vw, 1200px)', margin: '0 auto', padding: 'clamp(1rem, 3vw, 2rem) clamp(1rem, 3vw, 1.5rem)' }}>
@@ -158,10 +189,11 @@ export default function AuditLogs() {
   const logs = (data?.data || []).filter((log) => {
     if (!search.trim()) return true;
     const q = search.trim().toLowerCase();
+    const user = describeUser(log.userId);
     return (
-      log.userName?.toLowerCase().includes(q) ||
-      log.userEmail?.toLowerCase().includes(q) ||
-      log.entity?.toLowerCase().includes(q)
+      user.name.toLowerCase().includes(q) ||
+      user.email.toLowerCase().includes(q) ||
+      log.entityType?.toLowerCase().includes(q)
     );
   });
   const totalPages = Math.ceil((data?.total || 0) / (data?.pageSize || 20));
@@ -267,16 +299,19 @@ export default function AuditLogs() {
                   </td>
                 </tr>
               ) : (
-                logs.map((log: AuditLog) => (
+                logs.map((log: AuditLog) => {
+                  const hasDetail = Boolean(log.before || log.after);
+                  const user = describeUser(log.userId);
+                  return (
                   <tr
                     key={log.id}
                     style={{
                       borderBottom: '1px solid rgba(205, 239, 215, 0.6)',
-                      cursor: log.changes ? 'pointer' : 'default',
+                      cursor: hasDetail ? 'pointer' : 'default',
                       transition: 'background-color 0.15s',
                     }}
-                    onClick={() => log.changes && setSelectedLog(log)}
-                    onMouseEnter={(e) => log.changes && (e.currentTarget.style.backgroundColor = '#F7FAF8')}
+                    onClick={() => hasDetail && setSelectedLog(log)}
+                    onMouseEnter={(e) => hasDetail && (e.currentTarget.style.backgroundColor = '#F7FAF8')}
                     onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
                   >
                     <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', color: '#1F6F4E', whiteSpace: 'nowrap' }}>
@@ -290,11 +325,13 @@ export default function AuditLogs() {
                         <User size={13} style={{ color: '#4FAD72', flexShrink: 0 }} />
                         <div style={{ minWidth: 0 }}>
                           <p style={{ fontWeight: 500, color: '#0F2E23', fontSize: 'clamp(0.8125rem, 2vw, 0.875rem)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {log.userName}
+                            {user.name}
                           </p>
-                          <p style={{ fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#1F6F4E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {log.userEmail}
-                          </p>
+                          {user.email && (
+                            <p style={{ fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#1F6F4E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {user.email}
+                            </p>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -305,21 +342,22 @@ export default function AuditLogs() {
                       />
                     </td>
                     <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', color: '#0F2E23', fontWeight: 500, textTransform: 'capitalize' }}>
-                      {log.entity.replace(/_/g, ' ')}
+                      {log.entityType?.replace(/_/g, ' ') ?? '—'}
                     </td>
                     <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', color: '#1F6F4E', fontFamily: 'monospace', fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)' }}>
-                      {log.entityId.substring(0, 8)}...
+                      {log.entityId ? `${log.entityId.substring(0, 8)}...` : '—'}
                     </td>
                     <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', color: '#1F6F4E', fontFamily: 'monospace', fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)' }}>
-                      {log.ipAddress}
+                      {log.ipAddress ?? '—'}
                     </td>
                     <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', textAlign: 'right' }}>
-                      {log.changes && (
+                      {hasDetail && (
                         <FileText size={16} style={{ color: '#4FAD72' }} />
                       )}
                     </td>
                   </tr>
-                ))
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -398,18 +436,40 @@ export default function AuditLogs() {
 
               <div style={{ marginBottom: 'clamp(1rem, 3vw, 1.5rem)' }}>
                 <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E', marginBottom: '0.5rem' }}>User</p>
-                <p style={{ fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', fontWeight: 500, color: '#0F2E23' }}>{selectedLog.userName}</p>
-                <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E' }}>{selectedLog.userEmail}</p>
+                {(() => {
+                  const user = describeUser(selectedLog.userId);
+                  return (
+                    <>
+                      <p style={{ fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', fontWeight: 500, color: '#0F2E23' }}>{user.name}</p>
+                      {user.email && (
+                        <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E' }}>{user.email}</p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
-              {selectedLog.changes && (
+              {selectedLog.before && (
                 <div style={{ marginBottom: 'clamp(1rem, 3vw, 1.5rem)' }}>
                   <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E', marginBottom: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    Changes
+                    Before
                   </p>
                   <div style={{ background: '#F7FAF8', border: '1px solid #CDEFD7', borderRadius: '0.5rem', padding: 'clamp(0.75rem, 2vw, 1rem)' }}>
                     <pre style={{ fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#0F2E23', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
-                      {JSON.stringify(selectedLog.changes, null, 2)}
+                      {JSON.stringify(selectedLog.before, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+              {selectedLog.after && (
+                <div style={{ marginBottom: 'clamp(1rem, 3vw, 1.5rem)' }}>
+                  <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E', marginBottom: '0.5rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    After
+                  </p>
+                  <div style={{ background: '#F7FAF8', border: '1px solid #CDEFD7', borderRadius: '0.5rem', padding: 'clamp(0.75rem, 2vw, 1rem)' }}>
+                    <pre style={{ fontSize: 'clamp(0.75rem, 1.5vw, 0.8125rem)', color: '#0F2E23', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: 0 }}>
+                      {JSON.stringify(selectedLog.after, null, 2)}
                     </pre>
                   </div>
                 </div>
@@ -419,7 +479,7 @@ export default function AuditLogs() {
                 <div>
                   <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E', marginBottom: '0.25rem' }}>Entity</p>
                   <p style={{ fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', color: '#0F2E23', textTransform: 'capitalize' }}>
-                    {selectedLog.entity.replace(/_/g, ' ')}
+                    {selectedLog.entityType?.replace(/_/g, ' ') ?? '—'}
                   </p>
                 </div>
                 <div>
@@ -428,7 +488,7 @@ export default function AuditLogs() {
                 </div>
                 <div>
                   <p style={{ fontSize: 'clamp(0.75rem, 2vw, 0.8125rem)', color: '#1F6F4E', marginBottom: '0.25rem' }}>IP Address</p>
-                  <p style={{ fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', color: '#0F2E23', fontFamily: 'monospace' }}>{selectedLog.ipAddress}</p>
+                  <p style={{ fontSize: 'clamp(0.875rem, 2vw, 0.9375rem)', color: '#0F2E23', fontFamily: 'monospace' }}>{selectedLog.ipAddress ?? '—'}</p>
                 </div>
               </div>
             </div>

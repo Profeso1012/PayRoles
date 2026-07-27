@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { read as readWorkbook, utils as xlsxUtils } from 'xlsx';
-import { UploadCloud, KeyRound, Check, AlertCircle, RefreshCw } from 'lucide-react';
-import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { UploadCloud, KeyRound, Check, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { apiClient, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -44,15 +44,111 @@ function isExcelFile(file: File): boolean {
  * large files.
  */
 async function parseRows(file: File): Promise<Record<string, string>[]> {
+  // For CSV, `raw: true` here is load-bearing: without it, SheetJS infers a
+  // cell type from the text (e.g. "2024-01-08" looks like a date) and
+  // reformats it to a locale default ("1/8/24") - which then fails the
+  // backend's @IsDateString() as a plain wrong-format string, not a real
+  // validation issue with the data. `raw: true` keeps CSV cells as the exact
+  // text in the file. Excel files carry real typed cells (dates are binary
+  // serial values, not text), so that inference is wanted there and this
+  // option is left off for the .xlsx/.xls branch.
   const workbook = isExcelFile(file)
     ? readWorkbook(await file.arrayBuffer(), { type: 'array' })
-    : readWorkbook(stripBom(await file.text()), { type: 'string' });
+    : readWorkbook(stripBom(await file.text()), { type: 'string', raw: true });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
   return xlsxUtils.sheet_to_json<Record<string, string>>(firstSheet, { raw: false, defval: '' });
 }
 
 function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+// Column order matches REQUIRED_FIELDS + employmentType + OPTIONAL_TEXT_FIELDS
+// exactly, so a template downloaded here uploads back through buildPayload()
+// without any column-name mismatch. Dates are YYYY-MM-DD - the exact format
+// hireDate/dateOfBirth are sent to the backend in (see buildPayload above).
+const SAMPLE_TEMPLATE_COLUMNS = [
+  'employeeNumber',
+  'firstName',
+  'lastName',
+  'middleName',
+  'hireDate',
+  'employmentType',
+  'email',
+  'phone',
+  'dateOfBirth',
+  'position',
+  'department',
+  'bankName',
+  'bankRoutingCode',
+] as const;
+
+const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], string>[] = [
+  {
+    employeeNumber: 'EMP-0001',
+    firstName: 'Employee',
+    lastName: 'One',
+    middleName: '',
+    hireDate: '2023-01-10',
+    employmentType: 'full_time',
+    email: 'employee.one@example.com',
+    phone: '+2348000000001',
+    dateOfBirth: '1990-01-15',
+    position: 'Software Engineer',
+    department: 'Engineering',
+    bankName: 'Sample Bank',
+    bankRoutingCode: '000000001',
+  },
+  {
+    employeeNumber: 'EMP-0002',
+    firstName: 'Employee',
+    lastName: 'Two',
+    middleName: 'A',
+    hireDate: '2022-03-01',
+    employmentType: 'part_time',
+    email: '',
+    phone: '',
+    dateOfBirth: '1988-06-22',
+    position: '',
+    department: 'Finance',
+    bankName: '',
+    bankRoutingCode: '',
+  },
+  {
+    employeeNumber: 'EMP-0003',
+    firstName: 'Employee',
+    lastName: 'Three',
+    middleName: '',
+    hireDate: '2024-07-01',
+    employmentType: 'contract',
+    email: 'employee.three@example.com',
+    phone: '',
+    dateOfBirth: '',
+    position: 'Sales Associate',
+    department: 'Sales',
+    bankName: 'Sample Bank',
+    bankRoutingCode: '000000003',
+  },
+];
+
+function csvEscape(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function downloadSampleTemplate() {
+  const lines = [
+    SAMPLE_TEMPLATE_COLUMNS.join(','),
+    ...SAMPLE_TEMPLATE_ROWS.map((row) => SAMPLE_TEMPLATE_COLUMNS.map((col) => csvEscape(row[col])).join(',')),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'employee-import-template.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 interface RowOutcome {
@@ -153,8 +249,10 @@ export default function ImportEmployees() {
       // Existing employee numbers resolve to an update (PATCH); everything
       // else is a create (POST) - matches the backend importer's upsert
       // semantics, just driven per-row instead of one shared DB transaction.
-      const { data: existingWorkers } = await apiClientWithMeta<BackendWorker[]>(
-        `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page: 1, limit: 1000 })}`,
+      // PaginationDto caps limit at 100, so the full tenant roster is paged
+      // through via fetchAllPages rather than requested in one oversized call.
+      const existingWorkers = await fetchAllPages<BackendWorker>(
+        (page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
       );
       const byEmployeeNumber = new Map(existingWorkers.map((w) => [w.employeeNumber, w.id]));
 
@@ -214,11 +312,9 @@ export default function ImportEmployees() {
     setSelectedIds(new Set());
     setLoadingUnprovisioned(true);
     try {
-      const workerParams = buildPaginationParams({ page: 1, limit: 500 });
-      const userParams = buildPaginationParams({ page: 1, limit: 500 });
-      const [{ data: workers }, { data: users }] = await Promise.all([
-        apiClientWithMeta<BackendWorker[]>(`${ENDPOINTS.WORKERS.LIST}?${workerParams}`),
-        apiClientWithMeta<BackendUser[]>(`${ENDPOINTS.USERS.LIST}?${userParams}`),
+      const [workers, users] = await Promise.all([
+        fetchAllPages<BackendWorker>((page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`),
+        fetchAllPages<BackendUser>((page) => `${ENDPOINTS.USERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`),
       ]);
       const linkedWorkerIds = new Set(users.filter((u) => u.workerId).map((u) => u.workerId));
       setUnprovisioned(workers.filter((w) => !linkedWorkerIds.has(w.id)));
@@ -283,9 +379,15 @@ export default function ImportEmployees() {
       />
 
       <div className="bg-white rounded-xl border border-mint-light p-6 mb-6">
-        <div className="flex items-center gap-2 mb-3">
-          <UploadCloud size={16} className="text-cash-green" />
-          <h3 className="text-sm font-semibold text-deep-cash">Upload a CSV or Excel file</h3>
+        <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <UploadCloud size={16} className="text-cash-green" />
+            <h3 className="text-sm font-semibold text-deep-cash">Upload a CSV or Excel file</h3>
+          </div>
+          <Button variant="ghost" size="sm" onClick={downloadSampleTemplate}>
+            <Download size={13} />
+            Download Sample CSV Template
+          </Button>
         </div>
         <p className="text-sm text-cash-green/70 mb-4">
           Columns required: <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">employeeNumber</code>,{' '}
@@ -295,7 +397,8 @@ export default function ImportEmployees() {
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">email</code> column too if you plan to set
           up portal login access for these employees afterwards. Rows matching an existing employee number update
           that employee; new employee numbers are created. Excel files use their first sheet. Each row is processed
-          independently, so one bad row never blocks the rest of the file.
+          independently, so one bad row never blocks the rest of the file. Not sure where to start? Download the
+          sample template above, edit it with your own data, then upload it below.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <input

@@ -18,6 +18,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Button from '@/components/ui/Button';
 import Modal from '@/components/ui/Modal';
+import ConfirmModal from '@/components/ui/ConfirmModal';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import type { Employee, EmployeeAssignment, Compensation } from '@contracts/types/employee';
@@ -123,6 +124,7 @@ export default function EmployeeDetail() {
   const [assignWpeOpen, setAssignWpeOpen] = useState(false);
   const [wpeForm, setWpeForm] = useState(blankWpeForm);
   const [editingWpeId, setEditingWpeId] = useState<string | null>(null);
+  const [unassignTarget, setUnassignTarget] = useState<BackendWorkerPayElement | null>(null);
 
   const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
     queryKey: ['worker', id],
@@ -283,12 +285,34 @@ export default function EmployeeDetail() {
     setAssignWpeOpen(true);
   }
 
+  // Unassigning only flips the old row to inactive (it's kept, not deleted) -
+  // the backend has no unique constraint blocking a fresh assign() for the
+  // same worker+pay element pair, so "reassign" is just opening the Assign
+  // modal pre-filled from the old row, minus its now-stale effective/end
+  // dates. editingWpeId stays null so submit POSTs a new assignment instead
+  // of PATCHing the old (inactive) one.
+  function openReassignWpe(wpe: BackendWorkerPayElement) {
+    setEditingWpeId(null);
+    setWpeForm({
+      payElementId: wpe.payElementId,
+      calculationMethod: wpe.calculationMethod,
+      amount: wpe.amountMinor != null ? String(parseInt(wpe.amountMinor, 10) / 100) : '',
+      percentage: wpe.percentage != null ? String(wpe.percentage) : '',
+      formulaOverride: wpe.formulaOverride ?? '',
+      effectiveDate: '',
+      endDate: '',
+      remarks: '',
+    });
+    setAssignWpeOpen(true);
+  }
+
   const unassignPayElementMutation = useMutation({
     mutationFn: (wpeId: string) =>
       apiClient(ENDPOINTS.WORKER_PAY_ELEMENTS.UNASSIGN(id!, wpeId), { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['worker-pay-elements', id] });
       toast.success('Pay element unassigned');
+      setUnassignTarget(null);
     },
     onError: (err) => toast.error('Failed to unassign pay element', err instanceof Error ? err.message : undefined),
   });
@@ -635,11 +659,18 @@ export default function EmployeeDetail() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        loading={unassignPayElementMutation.isPending}
-                        onClick={() => unassignPayElementMutation.mutate(wpe.id)}
+                        onClick={() => setUnassignTarget(wpe)}
                       >
                         <X size={13} className="text-red-400" />
                         Unassign
+                      </Button>
+                    </div>
+                  )}
+                  {canWritePayElements && wpe.status !== 'active' && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => openReassignWpe(wpe)}>
+                        <Layers size={13} />
+                        Reassign
                       </Button>
                     </div>
                   )}
@@ -951,6 +982,17 @@ export default function EmployeeDetail() {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        isOpen={!!unassignTarget}
+        onClose={() => setUnassignTarget(null)}
+        onConfirm={() => unassignTarget && unassignPayElementMutation.mutate(unassignTarget.id)}
+        title="Unassign Pay Element"
+        message={`Are you sure you want to unassign "${unassignTarget?.payElement?.name ?? 'this pay element'}" from ${employee?.firstName ?? 'this worker'}? This can be reassigned later if needed.`}
+        confirmLabel="Unassign"
+        variant="danger"
+        isLoading={unassignPayElementMutation.isPending}
+      />
     </div>
   );
 }

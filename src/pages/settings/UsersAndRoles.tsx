@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil } from 'lucide-react';
-import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -101,10 +101,11 @@ export default function UsersAndRoles() {
   const { data: workerCatalog } = useQuery<BackendWorker[]>({
     queryKey: ['workers-catalog'],
     queryFn: async () => {
-      const { data } = await apiClientWithMeta<BackendWorker[]>(
-        `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ limit: 200 })}`,
+      // PaginationDto caps limit at 100 - page through the whole tenant
+      // roster rather than requesting an oversized single page.
+      return fetchAllPages<BackendWorker>(
+        (page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
       );
-      return data;
     },
     enabled: addUserOpen && form.role === 'employee_self_service',
   });

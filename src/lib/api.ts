@@ -211,4 +211,23 @@ export async function apiClientWithMeta<T>(
   return request<T>(path, options);
 }
 
+/**
+ * Fetches every page of a paginated list endpoint and flattens it into one
+ * array. The backend's PaginationDto caps `limit` at 100 (`@Max(100)`) - any
+ * request for more than that 400s outright, so "just ask for limit=1000" is
+ * not an option for "give me the whole tenant's workers/users" lookups.
+ * `buildUrl` must include a `limit` of 100 or less itself.
+ */
+export async function fetchAllPages<T>(buildUrl: (page: number) => string): Promise<T[]> {
+  const all: T[] = [];
+  let page = 1;
+  for (;;) {
+    const { data, meta } = await apiClientWithMeta<T[]>(buildUrl(page));
+    all.push(...data);
+    if (data.length === 0 || !meta || all.length >= meta.total) break;
+    page += 1;
+  }
+  return all;
+}
+
 export { BASE_URL };

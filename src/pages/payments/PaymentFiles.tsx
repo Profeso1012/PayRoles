@@ -141,6 +141,8 @@ export default function PaymentFiles() {
   const [confirmTarget, setConfirmTarget] = useState<DisbursementRow | null>(null);
   const [confirmReference, setConfirmReference] = useState('');
   const [confirmRemarks, setConfirmRemarks] = useState('');
+  const [approveTarget, setApproveTarget] = useState<DisbursementRow | null>(null);
+  const [executeTarget, setExecuteTarget] = useState<DisbursementRow | null>(null);
 
   const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
@@ -246,6 +248,7 @@ export default function PaymentFiles() {
       }),
     onSuccess: () => {
       toast.success('Batch approved');
+      setApproveTarget(null);
       invalidate();
     },
     onError: (err) => toast.error('Failed to approve batch', err instanceof Error ? err.message : undefined),
@@ -271,6 +274,7 @@ export default function PaymentFiles() {
       apiClient(ENDPOINTS.DISBURSEMENT.EXECUTE(row.run.id, row.batch!.id), { method: 'POST' }),
     onSuccess: () => {
       toast.success('Execution started');
+      setExecuteTarget(null);
       invalidate();
     },
     onError: (err) => toast.error('Failed to execute batch', err instanceof Error ? err.message : undefined),
@@ -372,7 +376,7 @@ export default function PaymentFiles() {
           )}
           {row.batch?.status === 'pending_approval' && canApprove && (
             <>
-              <Button variant="secondary" size="sm" loading={approveMutation.isPending} onClick={() => approveMutation.mutate(row)}>
+              <Button variant="secondary" size="sm" onClick={() => setApproveTarget(row)}>
                 <ThumbsUp size={13} />
                 Approve
               </Button>
@@ -382,7 +386,7 @@ export default function PaymentFiles() {
             </>
           )}
           {(row.batch?.status === 'approved' || row.batch?.status === 'awaiting_schedule') && canManage && (
-            <Button variant="secondary" size="sm" loading={executeMutation.isPending} onClick={() => executeMutation.mutate(row)}>
+            <Button variant="secondary" size="sm" onClick={() => setExecuteTarget(row)}>
               <Play size={13} />
               Execute
             </Button>
@@ -499,6 +503,27 @@ export default function PaymentFiles() {
           emptyMessage="No approved pay runs found"
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!approveTarget}
+        onClose={() => setApproveTarget(null)}
+        onConfirm={() => approveTarget && approveMutation.mutate(approveTarget)}
+        title="Approve Disbursement Batch"
+        message={`Are you sure you want to approve this disbursement batch for pay run "${approveTarget ? approveTarget.run.period || formatPeriod(approveTarget.run.periodStart, approveTarget.run.periodEnd) : ''}"? Approved batches become eligible for execution.`}
+        confirmLabel="Approve"
+        isLoading={approveMutation.isPending}
+      />
+
+      <ConfirmModal
+        isOpen={!!executeTarget}
+        onClose={() => setExecuteTarget(null)}
+        onConfirm={() => executeTarget && executeMutation.mutate(executeTarget)}
+        title="Execute Disbursement Batch"
+        message={`Are you sure you want to execute this disbursement batch for pay run "${executeTarget ? executeTarget.run.period || formatPeriod(executeTarget.run.periodStart, executeTarget.run.periodEnd) : ''}"? This will start sending payments and cannot be undone.`}
+        confirmLabel="Execute"
+        variant="danger"
+        isLoading={executeMutation.isPending}
+      />
 
       <Modal isOpen={!!rejectTarget} onClose={() => setRejectTarget(null)} title="Reject Disbursement Batch" size="sm">
         <div className="flex flex-col gap-4">
