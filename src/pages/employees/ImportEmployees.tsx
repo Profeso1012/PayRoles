@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { read as readWorkbook, utils as xlsxUtils } from 'xlsx';
 import { UploadCloud, KeyRound, Check, AlertCircle, RefreshCw, Download } from 'lucide-react';
 import { apiClient, fetchAllPages } from '@/lib/api';
+import { NIGERIAN_BANKS } from '@/lib/data/nigerianBanks';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -97,9 +98,9 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     dateOfBirth: '1990-01-15',
     position: 'Software Engineer',
     department: 'Engineering',
-    bankName: 'Sample Bank',
+    bankName: 'GTBank',
     bankAccount: '0123456789',
-    bankRoutingCode: '000000001',
+    bankRoutingCode: '058',
   },
   {
     employeeNumber: 'EMP-0002',
@@ -129,9 +130,9 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     dateOfBirth: '',
     position: 'Sales Associate',
     department: 'Sales',
-    bankName: 'Sample Bank',
+    bankName: 'Zenith Bank',
     bankAccount: '0123456792',
-    bankRoutingCode: '000000003',
+    bankRoutingCode: '057',
   },
 ];
 
@@ -188,6 +189,15 @@ function buildPayload(row: Record<string, string>): { payload: CreateWorkerReque
   for (const field of OPTIONAL_TEXT_FIELDS) {
     const value = (row[field] ?? '').trim();
     if (value) (payload as unknown as Record<string, string>)[field] = value;
+  }
+
+  // Same "never type a code" rule as the Add/Edit Employee forms - if the
+  // sheet gives a bank name but no explicit code, resolve it from the same
+  // NIGERIAN_BANKS list rather than requiring the filler-out to know it.
+  // An explicit bankRoutingCode cell (e.g. for a bank not in the list) wins.
+  if (payload.bankName && !payload.bankRoutingCode) {
+    const match = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === payload.bankName!.trim().toLowerCase());
+    if (match) payload.bankRoutingCode = match.code;
   }
 
   return { payload };

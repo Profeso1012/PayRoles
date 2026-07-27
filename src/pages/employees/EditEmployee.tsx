@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
+import BankSelect from '@/components/ui/BankSelect';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { Employee } from '@contracts/types/employee';
@@ -179,18 +180,14 @@ export default function EditEmployee() {
           <h3 className="text-sm font-semibold text-deep-cash mb-1">Bank Details</h3>
           <p className="text-xs text-cash-green/60 mb-4">Required before salary can be disbursed to this employee.</p>
           <div className="grid grid-cols-2 gap-4">
-            <Input
-              label="Bank Name"
-              value={form.bankName}
-              onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
-              placeholder="e.g. GTBank"
-            />
-            <Input
-              label="Bank Routing / Sort Code"
-              value={form.bankRoutingCode}
-              onChange={(e) => setForm((f) => ({ ...f, bankRoutingCode: e.target.value }))}
-              placeholder="e.g. 058152036"
-            />
+            <div className="col-span-2">
+              <BankSelect
+                label="Bank"
+                bankName={form.bankName}
+                bankCode={form.bankRoutingCode}
+                onChange={(bankName, bankRoutingCode) => setForm((f) => ({ ...f, bankName, bankRoutingCode }))}
+              />
+            </div>
             <div className="col-span-2">
               <Input
                 label="Account Number"

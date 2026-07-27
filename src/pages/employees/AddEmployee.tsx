@@ -9,6 +9,7 @@ import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
+import BankSelect from '@/components/ui/BankSelect';
 import type { Employee } from '@contracts/types/employee';
 
 interface LegalEntity {
@@ -378,23 +379,17 @@ export default function AddEmployee() {
           <h2 className="text-base font-semibold text-deep-cash mb-1">Bank Details</h2>
           <p className="text-sm text-cash-green/70 mb-5">Optional — can be added later from the employee profile.</p>
           <div className="flex flex-col gap-4">
-            <Input
-              label="Bank Name"
-              value={bank.bankName}
-              onChange={(e) => setBank((f) => ({ ...f, bankName: e.target.value }))}
-              placeholder="e.g. GTBank"
+            <BankSelect
+              label="Bank"
+              bankName={bank.bankName}
+              bankCode={bank.routingCode}
+              onChange={(bankName, routingCode) => setBank((f) => ({ ...f, bankName, routingCode }))}
             />
             <Input
               label="Account Number"
               value={bank.accountNumber}
               onChange={(e) => setBank((f) => ({ ...f, accountNumber: e.target.value }))}
               placeholder="0123456789"
-            />
-            <Input
-              label="Bank Routing / Sort Code"
-              value={bank.routingCode}
-              onChange={(e) => setBank((f) => ({ ...f, routingCode: e.target.value }))}
-              placeholder="e.g. 058152036"
             />
           </div>
         </div>
