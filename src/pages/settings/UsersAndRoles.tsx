@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil } from 'lucide-react';
+import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil, Copy, Check, AlertTriangle } from 'lucide-react';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -73,6 +73,8 @@ export default function UsersAndRoles() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState<BackendUser | null>(null);
   const [editTarget, setEditTarget] = useState<BackendUser | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserRequest>({});
+  const [revealedPassword, setRevealedPassword] = useState<{ email: string; password: string } | null>(null);
+  const [passwordCopied, setPasswordCopied] = useState(false);
 
   const {
     data: users = [],
@@ -177,10 +179,11 @@ export default function UsersAndRoles() {
     mutationFn: (id: string) =>
       apiClient<{ temporaryPassword: string }>(ENDPOINTS.USERS.RESET_PASSWORD(id), { method: 'PATCH' }),
     onSuccess: (result) => {
-      toast.success(
-        `Password reset for ${resetPasswordTarget?.email}`,
-        `Share this with them directly: ${result.temporaryPassword}`,
-      );
+      // Shown once, in a modal that blocks dismissal until copied - a toast
+      // that auto-dismisses risks losing the only copy of this password,
+      // since it's never emailed/stored and can't be retrieved again.
+      setRevealedPassword({ email: resetPasswordTarget?.email ?? 'this user', password: result.temporaryPassword });
+      setPasswordCopied(false);
       setResetPasswordTarget(null);
     },
     onError: (err) => toast.error('Failed to reset password', err instanceof Error ? err.message : undefined),
@@ -243,15 +246,19 @@ export default function UsersAndRoles() {
           overflow: 'hidden',
         }}
       >
+        {/* min-width forces the table to keep every column at its natural,
+            one-line width - on a narrow viewport the container scrolls
+            horizontally instead of squeezing a column until its text (e.g.
+            "Reset Password", "Tenant Admin") wraps and inflates row height. */}
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', fontSize: '0.875rem', borderCollapse: 'collapse' }}>
+          <table style={{ width: '100%', minWidth: '760px', fontSize: 'clamp(0.8125rem, 1.5vw, 0.875rem)', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ background: '#F7FAF8', borderBottom: '1px solid #CDEFD7' }}>
                 {['Name', 'Email', 'Role', 'Status', 'Actions'].map((h) => (
                   <th
                     key={h}
                     style={{
-                      padding: '0.75rem 1rem',
+                      padding: 'clamp(0.625rem, 1.5vw, 0.75rem) clamp(0.75rem, 2vw, 1rem)',
                       textAlign: 'left',
                       fontWeight: 600,
                       color: '#0F2E23',
@@ -270,7 +277,7 @@ export default function UsersAndRoles() {
                 const isActive = u.status === 'active';
                 return (
                   <tr key={u.id} style={{ borderBottom: '1px solid #CDEFD7' }}>
-                    <td style={{ padding: '0.875rem 1rem' }}>
+                    <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
                         <Avatar name={fullName} size="sm" />
                         <span style={{ fontWeight: 500, color: '#0F2E23' }}>{fullName}</span>
@@ -283,6 +290,7 @@ export default function UsersAndRoles() {
                               background: '#CDEFD7',
                               padding: '0.125rem 0.4rem',
                               borderRadius: '0.25rem',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             You
@@ -290,24 +298,24 @@ export default function UsersAndRoles() {
                         )}
                       </div>
                     </td>
-                    <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E' }}>{u.email}</td>
-                    <td style={{ padding: '0.875rem 1rem' }}>
+                    <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', color: '#1F6F4E', whiteSpace: 'nowrap' }}>{u.email}</td>
+                    <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', whiteSpace: 'nowrap' }}>
                       <Badge
                         variant={ROLE_BADGE_VARIANT[u.role] ?? 'info'}
                         label={ROLE_LABELS[u.role] ?? u.role}
                       />
                     </td>
-                    <td style={{ padding: '0.875rem 1rem' }}>
+                    <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', whiteSpace: 'nowrap' }}>
                       <Badge variant={isActive ? 'success' : 'error'} label={isActive ? 'Active' : u.status} />
                     </td>
-                    <td style={{ padding: '0.875rem 1rem' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)}>
+                    <td style={{ padding: 'clamp(0.75rem, 2vw, 0.875rem) clamp(0.75rem, 2vw, 1rem)', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'nowrap' }}>
+                        <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => openEdit(u)}>
                           <Pencil size={13} />
                           Edit
                         </Button>
                         {isActive && (
-                          <Button variant="ghost" size="sm" onClick={() => setResetPasswordTarget(u)}>
+                          <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => setResetPasswordTarget(u)}>
                             <KeyRound size={13} />
                             Reset Password
                           </Button>
@@ -316,6 +324,7 @@ export default function UsersAndRoles() {
                           <Button
                             variant="danger"
                             size="sm"
+                            className="whitespace-nowrap"
                             disabled={isCurrentUser}
                             onClick={() => setDisableTarget(u)}
                           >
@@ -326,6 +335,7 @@ export default function UsersAndRoles() {
                           <Button
                             variant="secondary"
                             size="sm"
+                            className="whitespace-nowrap"
                             loading={enableMutation.isPending && enableMutation.variables === u.id}
                             onClick={() => enableMutation.mutate(u.id)}
                           >
@@ -519,6 +529,70 @@ export default function UsersAndRoles() {
         variant="danger"
         isLoading={resetPasswordMutation.isPending}
       />
+
+      {/* Deliberately not the shared Modal component - backdrop click, the X
+          button, and Escape all close it immediately, which risks losing the
+          only copy of a password that can never be shown again. This one
+          only closes once the user has actually copied it. */}
+      {revealedPassword && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 60,
+            background: 'rgba(15, 46, 35, 0.6)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'clamp(1rem, 3vw, 2rem)',
+          }}
+        >
+          <div
+            style={{
+              background: '#fff', borderRadius: '0.75rem',
+              maxWidth: 'min(420px, 92vw)', width: '100%',
+              padding: 'clamp(1.25rem, 3vw, 1.75rem)',
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <KeyRound size={18} className="text-cash-green" />
+              <h3 className="text-base font-semibold text-deep-cash">Temporary Password</h3>
+            </div>
+            <p className="text-sm text-cash-green/80 mb-4">
+              New temporary password for <span className="font-medium text-deep-cash">{revealedPassword.email}</span>.
+            </p>
+
+            <div className="flex items-center gap-2 p-3 rounded-lg border border-mint-light bg-soft-white mb-3">
+              <code className="flex-1 text-sm font-mono text-deep-cash break-all">{revealedPassword.password}</code>
+              <Button
+                variant={passwordCopied ? 'secondary' : 'primary'}
+                size="sm"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(revealedPassword.password);
+                  setPasswordCopied(true);
+                }}
+              >
+                {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
+                {passwordCopied ? 'Copied' : 'Copy'}
+              </Button>
+            </div>
+
+            <div className="flex items-start gap-2 p-3 rounded-lg bg-cash-gold/10 border border-cash-gold/30 mb-4">
+              <AlertTriangle size={15} className="text-cash-gold shrink-0 mt-0.5" />
+              <p className="text-xs text-deep-cash">
+                You can only see this password right now — it cannot be shown again. Copy and save it
+                somewhere safe, then share it with the user directly, before closing this dialog.
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <Button
+                variant="primary"
+                disabled={!passwordCopied}
+                onClick={() => setRevealedPassword(null)}
+              >
+                Done, I've saved it
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -21,7 +21,7 @@ import type {
 
 const EXCEL_EXTENSIONS = ['.xlsx', '.xls'];
 const REQUIRED_FIELDS = ['employeeNumber', 'firstName', 'lastName', 'hireDate'] as const;
-const OPTIONAL_TEXT_FIELDS = ['middleName', 'email', 'phone', 'dateOfBirth', 'position', 'department', 'bankName', 'bankRoutingCode'] as const;
+const OPTIONAL_TEXT_FIELDS = ['middleName', 'email', 'phone', 'dateOfBirth', 'position', 'department', 'bankName', 'bankAccount', 'bankRoutingCode'] as const;
 const VALID_EMPLOYMENT_TYPES: BackendEmploymentType[] = ['full_time', 'part_time', 'contract', 'temporary', 'intern'];
 const CONCURRENCY = 6;
 
@@ -80,6 +80,7 @@ const SAMPLE_TEMPLATE_COLUMNS = [
   'position',
   'department',
   'bankName',
+  'bankAccount',
   'bankRoutingCode',
 ] as const;
 
@@ -97,6 +98,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     position: 'Software Engineer',
     department: 'Engineering',
     bankName: 'Sample Bank',
+    bankAccount: '0123456789',
     bankRoutingCode: '000000001',
   },
   {
@@ -112,6 +114,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     position: '',
     department: 'Finance',
     bankName: '',
+    bankAccount: '',
     bankRoutingCode: '',
   },
   {
@@ -127,6 +130,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     position: 'Sales Associate',
     department: 'Sales',
     bankName: 'Sample Bank',
+    bankAccount: '0123456792',
     bankRoutingCode: '000000003',
   },
 ];

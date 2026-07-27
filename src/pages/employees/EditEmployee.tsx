@@ -39,6 +39,9 @@ export default function EditEmployee() {
     dateOfBirth: '',
     nationalId: '',
     annualRent: '',
+    bankName: '',
+    bankAccount: '',
+    bankRoutingCode: '',
   });
 
   useEffect(() => {
@@ -52,6 +55,9 @@ export default function EditEmployee() {
         dateOfBirth: employee.dateOfBirth,
         nationalId: employee.nationalId === '****' ? '' : employee.nationalId,
         annualRent: withRent.annualRentMinor ? String(parseInt(withRent.annualRentMinor, 10) / 100) : '',
+        bankName: employee.bankName ?? '',
+        bankAccount: employee.bankAccount === '****' ? '' : (employee.bankAccount ?? ''),
+        bankRoutingCode: employee.bankRoutingCode ?? '',
       });
     }
   }, [employee]);
@@ -65,10 +71,15 @@ export default function EditEmployee() {
         phone: form.phone || undefined,
         dateOfBirth: form.dateOfBirth || undefined,
         annualRentMinor: form.annualRent ? Math.round(parseFloat(form.annualRent) * 100) : undefined,
+        bankName: form.bankName || undefined,
+        bankRoutingCode: form.bankRoutingCode || undefined,
       };
-      // Only send nationalId if the user actually typed a new value (it
-      // displays masked as '****' for existing employees - see EmployeeDetail).
+      // Only send nationalId/bankAccount if the user actually typed a new
+      // value (they display masked as '****' for existing employees - see
+      // EmployeeDetail) - otherwise this would overwrite the real encrypted
+      // value with the literal string '****'.
       if (form.nationalId) payload.nationalId = form.nationalId;
+      if (form.bankAccount) payload.bankAccount = form.bankAccount;
       return apiClient<BackendWorker>(ENDPOINTS.WORKERS.UPDATE(id!), {
         method: 'PATCH',
         body: JSON.stringify(payload),
@@ -161,6 +172,33 @@ export default function EditEmployee() {
             <p className="text-xs text-cash-green/60 mt-1">
               Used only to calculate this employee's Nigerian PAYE rent relief — not a payroll deduction.
             </p>
+          </div>
+        </div>
+
+        <div className="mt-6 pt-5 border-t border-mint-light">
+          <h3 className="text-sm font-semibold text-deep-cash mb-1">Bank Details</h3>
+          <p className="text-xs text-cash-green/60 mb-4">Required before salary can be disbursed to this employee.</p>
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Bank Name"
+              value={form.bankName}
+              onChange={(e) => setForm((f) => ({ ...f, bankName: e.target.value }))}
+              placeholder="e.g. GTBank"
+            />
+            <Input
+              label="Bank Routing / Sort Code"
+              value={form.bankRoutingCode}
+              onChange={(e) => setForm((f) => ({ ...f, bankRoutingCode: e.target.value }))}
+              placeholder="e.g. 058152036"
+            />
+            <div className="col-span-2">
+              <Input
+                label="Account Number"
+                placeholder={employee.bankAccount === '****' ? 'Protected - enter to replace' : '0123456789'}
+                value={form.bankAccount}
+                onChange={(e) => setForm((f) => ({ ...f, bankAccount: e.target.value }))}
+              />
+            </div>
           </div>
         </div>
 

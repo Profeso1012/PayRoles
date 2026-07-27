@@ -46,7 +46,7 @@ type CompensationForm = {
 type BankForm = {
   bankName: string;
   accountNumber: string;
-  accountName: string;
+  routingCode: string;
 };
 
 const STEPS = [
@@ -98,7 +98,7 @@ export default function AddEmployee() {
   });
 
   const [bank, setBank] = useState<BankForm>({
-    bankName: '', accountNumber: '', accountName: '',
+    bankName: '', accountNumber: '', routingCode: '',
   });
 
   const { data: legalEntities } = useQuery<LegalEntity[]>({
@@ -140,6 +140,7 @@ export default function AddEmployee() {
         hireDate: employment.hireDate,
         bankName: bank.bankName || undefined,
         bankAccount: bank.accountNumber || undefined,
+        bankRoutingCode: bank.routingCode || undefined,
       };
 
       const employee = await apiClient<Employee>(ENDPOINTS.WORKERS.CREATE, {
@@ -390,10 +391,10 @@ export default function AddEmployee() {
               placeholder="0123456789"
             />
             <Input
-              label="Account Name"
-              value={bank.accountName}
-              onChange={(e) => setBank((f) => ({ ...f, accountName: e.target.value }))}
-              placeholder="Full name as on account"
+              label="Bank Routing / Sort Code"
+              value={bank.routingCode}
+              onChange={(e) => setBank((f) => ({ ...f, routingCode: e.target.value }))}
+              placeholder="e.g. 058152036"
             />
           </div>
         </div>
