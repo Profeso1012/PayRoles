@@ -55,10 +55,14 @@ export default function PayRunCreate() {
         payDate,
       };
       
+      console.log('Creating pay run with payload:', payload);
+      
       const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.CREATE, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      
+      console.log('Pay run created successfully:', response);
       
       // Transform response
       const transformed = mapPayrollRunFields(response, 'toFrontend');
@@ -68,7 +72,21 @@ export default function PayRunCreate() {
       toast.success('Pay run created');
       navigate(`/payroll/runs/${run.id}`);
     },
-    onError: (err) => toast.error('Failed to create pay run', err instanceof Error ? err.message : undefined),
+    onError: (err) => {
+      console.error('Pay run creation failed:', err);
+      
+      // Extract the actual error message from the backend
+      let errorMessage = 'Failed to create pay run';
+      
+      if (err instanceof Error) {
+        // The error message from apiClient contains the backend error
+        errorMessage = err.message;
+        console.error('Error message:', err.message);
+        console.error('Full error object:', err);
+      }
+      
+      toast.error(errorMessage);
+    },
   });
 
   const selectedEntity = (legalEntities ?? []).find((e) => e.id === legalEntityId);

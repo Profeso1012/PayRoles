@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Send, ThumbsUp, ThumbsDown, CheckCircle2,
-  Clock, BarChart3, Users, XCircle, RotateCcw,
+  Clock, BarChart3, Users, XCircle, RotateCcw, RefreshCw,
 } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
@@ -101,7 +101,15 @@ export default function PayRunDetail() {
     queryKey: ['pay-run', id],
     queryFn: async () => {
       const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(id!));
+      console.log('Pay run detail response from backend:', response);
+      console.log('Pay run status:', response.status);
+      console.log('Pay run notes:', response.notes);
+      console.log('Pay run metadata:', response.metadata);
+      console.log('Pay run workflowId:', response.workflowId);
+      
       const transformed = mapPayrollRunFields(response, 'toFrontend');
+      console.log('Pay run after transformation:', transformed);
+      console.log('Transformed status:', transformed.status);
       
       // Build period string from dates if not present
       if (!transformed.period && transformed.periodStart) {
@@ -161,12 +169,20 @@ export default function PayRunDetail() {
   });
 
   const calculateMutation = useMutation({
-    mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.CALCULATE(id!), { method: 'PATCH' }),
+    mutationFn: () => {
+      console.log('Starting calculation for pay run:', id);
+      return apiClient(ENDPOINTS.PAYROLL.RUNS.CALCULATE(id!), { method: 'PATCH' });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       toast.success('Calculation started');
+      console.log('Calculation started successfully');
     },
-    onError: (err) => toast.error('Failed to start calculation', err instanceof Error ? err.message : undefined),
+    onError: (err) => {
+      console.error('Calculation failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start calculation';
+      toast.error(errorMessage);
+    },
   });
 
   const submitMutation = useMutation({
@@ -262,6 +278,8 @@ export default function PayRunDetail() {
   // (roles.enum.ts ROLE_PERMISSIONS) - finance_manager does NOT hold these
   // permissions there, payroll_manager does.
   const canApprove = role === 'payroll_manager' || role === 'tenant_admin' || role === 'super_admin';
+  // Same roles that can manage payroll can retry failed calculations
+  const canCalculate = canManage;
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -501,11 +519,62 @@ export default function PayRunDetail() {
       )}
 
       {(run.status === 'rejected' || run.status === 'cancelled' || run.status === 'reversed' || run.status === 'failed') && (
-        <div className="bg-white rounded-xl border border-red-200 p-4 mb-5 flex items-center gap-3">
-          <XCircle size={18} className="text-red-500 shrink-0" />
-          <p className="text-sm text-deep-cash">
-            This pay run is {statusLabel[run.status].toLowerCase()} and is read-only.
-          </p>
+        <div className="bg-white rounded-xl border border-red-200 p-4 mb-5">
+          <div className="flex items-center gap-3 mb-2">
+            <XCircle size={18} className="text-red-500 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-deep-cash">
+                This pay run is {statusLabel[run.status].toLowerCase()}.
+              </p>
+            </div>
+            
+            {/* Add retry button for failed pay runs */}
+            {run.status === 'failed' && canCalculate && (
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                onClick={() => calculateMutation.mutate()}
+                loading={calculateMutation.isPending}
+              >
+                <RefreshCw size={14} />
+                Retry Calculation
+              </Button>
+            )}
+          </div>
+          
+          {/* Display notes if available (may contain error details) */}
+          {run.notes && (
+            <div className="mt-3 pl-7">
+              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Details:</p>
+              <p className="text-sm text-deep-cash whitespace-pre-wrap">{run.notes}</p>
+            </div>
+          )}
+          
+          {/* Display metadata if available (may contain error details) */}
+          {run.metadata && Object.keys(run.metadata).length > 0 && (
+            <div className="mt-3 pl-7">
+              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Additional Information:</p>
+              <pre className="text-xs text-deep-cash bg-soft-white p-3 rounded-lg overflow-x-auto">
+                {JSON.stringify(run.metadata, null, 2)}
+              </pre>
+            </div>
+          )}
+          
+          {/* Show common failure reasons for failed status */}
+          {run.status === 'failed' && !run.notes && (
+            <div className="mt-3 pl-7">
+              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Common Reasons:</p>
+              <ul className="text-xs text-cash-green/80 space-y-1 list-disc list-inside">
+                <li>No active employees assigned to this legal entity for the pay period</li>
+                <li>Employees missing active compensation records during this period</li>
+                <li>Missing or invalid pay elements configuration</li>
+                <li>Tax calculation engine error</li>
+              </ul>
+              <p className="text-xs text-cash-green/60 mt-2">
+                Click "Retry Calculation" above after fixing the issue.
+              </p>
+            </div>
+          )}
         </div>
       )}
 

@@ -41,6 +41,8 @@ export interface PayRun {
   approvedById: string | null;
   createdAt: string;
   approvedAt: string | null;
+  notes?: string | null;
+  metadata?: Record<string, any> | null;
 }
 
 export interface PayRunEmployee {
