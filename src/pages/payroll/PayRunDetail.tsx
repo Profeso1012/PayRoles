@@ -356,7 +356,7 @@ export default function PayRunDetail() {
       {/* Status-specific action panels */}
       {run.status === 'draft' && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
-          <div className="flex items-start gap-4">
+          <div className="flex items-center gap-4 mb-4">
             <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
               <Play size={18} className="text-cash-green" />
             </div>
@@ -366,23 +366,23 @@ export default function PayRunDetail() {
                 This pay run is in draft. Click below to trigger payroll calculation for all
                 employees in <strong>{run.payGroupName}</strong>.
               </p>
-              <div className="mt-4 flex gap-3">
-                <Button
-                  variant="primary"
-                  loading={calculateMutation.isPending}
-                  onClick={() => calculateMutation.mutate()}
-                >
-                  <Play size={15} />
-                  Calculate Payroll
-                </Button>
-                {canManage && (
-                  <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
-                    <XCircle size={15} />
-                    Cancel Run
-                  </Button>
-                )}
-              </div>
             </div>
+          </div>
+          <div className="flex gap-3 flex-wrap">
+            <Button
+              variant="primary"
+              loading={calculateMutation.isPending}
+              onClick={() => calculateMutation.mutate()}
+            >
+              <Play size={15} />
+              Calculate Payroll
+            </Button>
+            {canManage && (
+              <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
+                <XCircle size={15} />
+                Cancel Run
+              </Button>
+            )}
           </div>
         </div>
       )}
