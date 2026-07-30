@@ -22,7 +22,7 @@ import type {
 
 const EXCEL_EXTENSIONS = ['.xlsx', '.xls'];
 const REQUIRED_FIELDS = ['employeeNumber', 'firstName', 'lastName', 'hireDate'] as const;
-const OPTIONAL_TEXT_FIELDS = ['middleName', 'email', 'phone', 'dateOfBirth', 'position', 'department', 'bankName', 'bankAccount', 'bankRoutingCode'] as const;
+const OPTIONAL_TEXT_FIELDS = ['middleName', 'email', 'phone', 'dateOfBirth', 'position', 'department', 'nationalId', 'bankName', 'bankAccount', 'bankRoutingCode'] as const;
 const VALID_EMPLOYMENT_TYPES: BackendEmploymentType[] = ['full_time', 'part_time', 'contract', 'temporary', 'intern'];
 const CONCURRENCY = 6;
 
@@ -80,9 +80,11 @@ const SAMPLE_TEMPLATE_COLUMNS = [
   'dateOfBirth',
   'position',
   'department',
+  'nationalId',
   'bankName',
   'bankAccount',
   'bankRoutingCode',
+  'annualRentMinor',
 ] as const;
 
 const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], string>[] = [
@@ -98,9 +100,11 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     dateOfBirth: '1990-01-15',
     position: 'Software Engineer',
     department: 'Engineering',
+    nationalId: '12345678901',
     bankName: 'GTBank',
     bankAccount: '0123456789',
     bankRoutingCode: '058',
+    annualRentMinor: '120000000',
   },
   {
     employeeNumber: 'EMP-0002',
@@ -114,9 +118,11 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     dateOfBirth: '1988-06-22',
     position: '',
     department: 'Finance',
+    nationalId: '',
     bankName: '',
     bankAccount: '',
     bankRoutingCode: '',
+    annualRentMinor: '',
   },
   {
     employeeNumber: 'EMP-0003',
@@ -130,9 +136,11 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     dateOfBirth: '',
     position: 'Sales Associate',
     department: 'Sales',
+    nationalId: '98765432109',
     bankName: 'Zenith Bank',
     bankAccount: '0123456792',
     bankRoutingCode: '057',
+    annualRentMinor: '60000000',
   },
 ];
 
@@ -189,6 +197,15 @@ function buildPayload(row: Record<string, string>): { payload: CreateWorkerReque
   for (const field of OPTIONAL_TEXT_FIELDS) {
     const value = (row[field] ?? '').trim();
     if (value) (payload as unknown as Record<string, string>)[field] = value;
+  }
+
+  // annualRentMinor is a number field - parse it separately. Empty = NULL.
+  const rawAnnualRent = (row.annualRentMinor ?? '').trim();
+  if (rawAnnualRent) {
+    const parsed = Number(rawAnnualRent);
+    if (!isNaN(parsed) && parsed >= 0) {
+      payload.annualRentMinor = parsed;
+    }
   }
 
   // Same "never type a code" rule as the Add/Edit Employee forms - if the
@@ -407,12 +424,13 @@ export default function ImportEmployees() {
           Columns required: <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">employeeNumber</code>,{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">firstName</code>,{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">lastName</code>,{' '}
-          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">hireDate</code>. Add an{' '}
-          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">email</code> column too if you plan to set
-          up portal login access for these employees afterwards. Rows matching an existing employee number update
-          that employee; new employee numbers are created. Excel files use their first sheet. Each row is processed
-          independently, so one bad row never blocks the rest of the file. Not sure where to start? Download the
-          sample template above, edit it with your own data, then upload it below.
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">hireDate</code>. Optional columns include{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">email</code> (needed for portal login),{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">nationalId</code> (NIN),{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">annualRentMinor</code> (annual rent in kobo for PAYE tax relief),
+          and bank details. Rows matching an existing employee number update that employee; new employee numbers are created. 
+          Excel files use their first sheet. Each row is processed independently, so one bad row never blocks the rest of the file. 
+          Not sure where to start? Download the sample template above, edit it with your own data, then upload it below.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
           <input

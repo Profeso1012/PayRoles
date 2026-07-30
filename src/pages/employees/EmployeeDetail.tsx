@@ -21,7 +21,7 @@ import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
-import type { Employee, EmployeeAssignment, Compensation } from '@contracts/types/employee';
+import type { Employee, Compensation } from '@contracts/types/employee';
 import type { Payslip } from '@contracts/types/payroll';
 import type {
   BackendWorker,
@@ -75,11 +75,10 @@ const blankWpeForm = {
   remarks: '',
 };
 
-const TAB_IDS = ['profile', 'assignments', 'compensation', 'payElements', 'payslips'];
+const TAB_IDS = ['profile', 'compensation', 'payElements', 'payslips'];
 
 const TABS = [
   { id: 'profile', label: 'Profile' },
-  { id: 'assignments', label: 'Assignments' },
   { id: 'compensation', label: 'Compensation' },
   { id: 'payElements', label: 'Pay Elements' },
   { id: 'payslips', label: 'Payslips' },
@@ -157,21 +156,6 @@ export default function EmployeeDetail() {
       setTerminationReason('');
     },
     onError: (err) => toast.error('Failed to terminate employee', err instanceof Error ? err.message : undefined),
-  });
-
-  // Note: Backend doesn't have assignments endpoint yet
-  // Using mock endpoint for now, will fallback gracefully
-  const { data: assignments } = useQuery<EmployeeAssignment[]>({
-    queryKey: ['worker-assignments', id],
-    queryFn: async () => {
-      try {
-        return await apiClient<EmployeeAssignment[]>(`/employees/${id}/assignments`);
-      } catch {
-        // Backend doesn't have this endpoint yet
-        return [];
-      }
-    },
-    enabled: !!id && tab === 'assignments',
   });
 
   const { data: compensations } = useQuery<Compensation[]>({
@@ -496,49 +480,6 @@ export default function EmployeeDetail() {
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Assignments tab */}
-      {tab === 'assignments' && (
-        <div className="bg-white rounded-xl border border-mint-light p-6">
-          <div className="flex items-center gap-2 mb-5">
-            <Briefcase size={16} className="text-cash-green" />
-            <h3 className="text-sm font-semibold text-deep-cash">Assignment History</h3>
-          </div>
-          {!assignments ? (
-            <div className="flex justify-center py-8"><Spinner /></div>
-          ) : assignments.length === 0 ? (
-            <p className="text-sm text-cash-green/60">No assignments found.</p>
-          ) : (
-            <div className="relative">
-              <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-mint-light" />
-              <div className="flex flex-col gap-4">
-                {[...assignments].reverse().map((asn) => (
-                  <div key={asn.id} className="relative pl-10">
-                    <div className={`absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 ${
-                      !asn.effectiveTo ? 'border-fresh-cash bg-fresh-cash' : 'border-mint-light bg-white'
-                    }`} />
-                    <div className="bg-soft-white rounded-lg p-4 border border-mint-light">
-                      <div className="flex items-start justify-between gap-2 flex-wrap">
-                        <div>
-                          <p className="font-semibold text-deep-cash text-sm">{asn.jobTitle}</p>
-                          <p className="text-xs text-cash-green/70 mt-0.5 capitalize">
-                            {asn.employmentType.replace(/_/g, ' ')}
-                          </p>
-                        </div>
-                        {!asn.effectiveTo && <Badge variant="success" label="Current" />}
-                      </div>
-                      <p className="text-xs text-cash-green/60 mt-2">
-                        {formatDate(asn.effectiveFrom)}
-                        {asn.effectiveTo ? ` — ${formatDate(asn.effectiveTo)}` : ' — present'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
