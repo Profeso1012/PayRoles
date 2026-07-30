@@ -510,60 +510,74 @@ export default function PayRunDetail() {
       )}
 
       {/* Employee register */}
-      {register && register.length > 0 && (
-        <div className="bg-white rounded-xl border border-mint-light overflow-hidden">
-          <div className="px-5 py-3 border-b border-mint-light flex items-center justify-between">
-            <p className="text-sm font-semibold text-deep-cash">Employee Register</p>
-            <span className="text-xs text-cash-green/60">{register.length} employees</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-mint-light bg-soft-white">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Employee</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Gross</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Deductions</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Net Pay</th>
-                  <th className="px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {register.map((emp, idx) => (
-                  <tr
-                    key={emp.employeeId}
-                    onClick={() => navigate(PATHS.PAYSLIP_VIEWER(id!, emp.payslipId))}
-                    className={`cursor-pointer hover:bg-soft-white transition-colors ${idx < register.length - 1 ? 'border-b border-mint-light/50' : ''}`}
-                  >
-                    <td className="px-5 py-3">
-                      <p className="font-medium text-deep-cash">{emp.employeeName}</p>
-                      <p className="text-xs text-cash-green/60 font-mono">{emp.employeeNumber}</p>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <MoneyDisplay amount={emp.grossPay} currency={run.currency} size="sm" />
-                    </td>
-                    <td className="px-5 py-3 text-right text-sm text-red-500">
-                      {formatMoney(emp.totalDeductions, run.currency)}
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <MoneyDisplay amount={emp.netPay} currency={run.currency} size="sm" className="text-fresh-cash" />
-                    </td>
-                    <td className="px-5 py-3">
-                      {emp.disbursementStatus === 'paid' ? (
-                        <Badge variant="success" label="Paid" />
-                      ) : emp.disbursementStatus === 'failed' ? (
-                        <Badge variant="error" label="Failed" />
-                      ) : emp.disbursementStatus === 'in_progress' ? (
-                        <Badge variant="warning" label="Processing" />
-                      ) : (
-                        <Badge variant="info" label="Pending" />
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {(['calculated', 'in_review', 'approved', 'processing', 'paid'].includes(run.status)) && (
+        <>
+          {!register ? (
+            <div className="bg-white rounded-xl border border-mint-light p-8 flex justify-center">
+              <Spinner />
+            </div>
+          ) : register.length === 0 ? (
+            <div className="bg-white rounded-xl border border-mint-light p-8">
+              <p className="text-sm text-cash-green/60 text-center">
+                No employees found in this pay run. Check that employees are assigned to the selected pay group and legal entity.
+              </p>
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-mint-light overflow-hidden">
+              <div className="px-5 py-3 border-b border-mint-light flex items-center justify-between">
+                <p className="text-sm font-semibold text-deep-cash">Employee Register</p>
+                <span className="text-xs text-cash-green/60">{register.length} employees</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-mint-light bg-soft-white">
+                      <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Employee</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Gross</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Deductions</th>
+                      <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Net Pay</th>
+                      <th className="px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {register.map((emp, idx) => (
+                      <tr
+                        key={emp.employeeId}
+                        onClick={() => navigate(PATHS.PAYSLIP_VIEWER(id!, emp.payslipId))}
+                        className={`cursor-pointer hover:bg-soft-white transition-colors ${idx < register.length - 1 ? 'border-b border-mint-light/50' : ''}`}
+                      >
+                        <td className="px-5 py-3">
+                          <p className="font-medium text-deep-cash">{emp.employeeName}</p>
+                          <p className="text-xs text-cash-green/60 font-mono">{emp.employeeNumber}</p>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <MoneyDisplay amount={emp.grossPay} currency={run.currency} size="sm" />
+                        </td>
+                        <td className="px-5 py-3 text-right text-sm text-red-500">
+                          {formatMoney(emp.totalDeductions, run.currency)}
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <MoneyDisplay amount={emp.netPay} currency={run.currency} size="sm" className="text-fresh-cash" />
+                        </td>
+                        <td className="px-5 py-3">
+                          {emp.disbursementStatus === 'paid' ? (
+                            <Badge variant="success" label="Paid" />
+                          ) : emp.disbursementStatus === 'failed' ? (
+                            <Badge variant="error" label="Failed" />
+                          ) : emp.disbursementStatus === 'in_progress' ? (
+                            <Badge variant="warning" label="Processing" />
+                          ) : (
+                            <Badge variant="info" label="Pending" />
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <Modal isOpen={rejectModalOpen} onClose={() => setRejectModalOpen(false)} title="Reject Pay Run" size="sm">

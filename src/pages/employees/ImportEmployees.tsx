@@ -12,6 +12,8 @@ import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import Modal from '@/components/ui/Modal';
+import Select from '@/components/ui/Select';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type {
   BackendWorker,
   BackendUser,
@@ -172,7 +174,7 @@ interface RowOutcome {
   error?: string;
 }
 
-function buildPayload(row: Record<string, string>): { payload: CreateWorkerRequest | null; error?: string } {
+function buildPayload(row: Record<string, string>, legalEntityId: string): { payload: CreateWorkerRequest | null; error?: string } {
   const missing = REQUIRED_FIELDS.filter((f) => !(row[f] ?? '').trim());
   if (missing.length > 0) {
     return { payload: null, error: `Missing ${missing.join(', ')}` };
@@ -184,6 +186,7 @@ function buildPayload(row: Record<string, string>): { payload: CreateWorkerReque
     lastName: row.lastName.trim(),
     hireDate: row.hireDate.trim(),
     employmentType: 'full_time',
+    legalEntityId, // Set the selected legal entity
   };
 
   const rawEmploymentType = (row.employmentType ?? '').trim().toLowerCase();
@@ -250,6 +253,7 @@ export default function ImportEmployees() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedLegalEntityId, setSelectedLegalEntityId] = useState<string>('');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<RowOutcome[] | null>(null);
@@ -261,11 +265,23 @@ export default function ImportEmployees() {
   const [creatingLogins, setCreatingLogins] = useState(false);
   const [loginResults, setLoginResults] = useState<LoginResult[] | null>(null);
 
+  // Fetch legal entities for selection
+  const { data: legalEntities, isLoading: loadingEntities } = useQuery({
+    queryKey: ['legal-entities'],
+    queryFn: async () => {
+      const response = await apiClient<any>(`${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ limit: 100 })}`);
+      return Array.isArray(response) ? response : (response.data || []);
+    },
+  });
+
   const successCount = results?.filter((r) => r.status !== 'error').length ?? 0;
   const showLoginFollowUp = canManageLogins && results !== null && successCount > 0;
 
   const handleUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile || !selectedLegalEntityId) {
+      toast.error('Please select both a file and a legal entity');
+      return;
+    }
     setProcessing(true);
     setResults(null);
     try {
@@ -292,7 +308,7 @@ export default function ImportEmployees() {
         const rowNumber = index + 2; // header is row 1
         const name = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim() || '—';
         const employeeNumber = (row.employeeNumber ?? '').trim();
-        const { payload, error } = buildPayload(row);
+        const { payload, error } = buildPayload(row, selectedLegalEntityId);
 
         let outcome: RowOutcome;
         if (!payload) {
@@ -406,8 +422,56 @@ export default function ImportEmployees() {
     <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title="Import Employees"
-        breadcrumbs={[{ label: 'Employees', path: '/employees' }, { label: 'Import' }]}
+        breadcrumbs={[
+          { label: 'Legal Entities', path: '/organisation/legal-entities' },
+          { label: 'Employees', path: '/employees' },
+          { label: 'Import' },
+        ]}
       />
+
+      {/* Legal Entity Selection - Required */}
+      <div className="bg-mint-light/30 border border-fresh-cash/40 rounded-xl p-5 mb-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-fresh-cash/20 flex items-center justify-center shrink-0">
+            <AlertCircle size={18} className="text-fresh-cash" />
+          </div>
+          <div className="flex-1">
+            <p className="font-semibold text-deep-cash mb-1">Legal Entity Required</p>
+            <p className="text-sm text-cash-green/80">
+              All imported employees must be assigned to a legal entity. Select which legal entity these employees belong to before uploading.
+            </p>
+          </div>
+        </div>
+        {loadingEntities ? (
+          <div className="flex items-center gap-2 text-sm text-cash-green/70">
+            <Spinner size="sm" />
+            Loading legal entities...
+          </div>
+        ) : !legalEntities || legalEntities.length === 0 ? (
+          <div className="bg-white border border-mint-light rounded-lg p-4">
+            <p className="text-sm text-red-500 mb-2">No legal entities found</p>
+            <p className="text-xs text-cash-green/70">
+              You must create at least one legal entity before importing employees. Go to{' '}
+              <a href="/organisation/legal-entities" className="text-fresh-cash underline">
+                Organisation → Legal Entities
+              </a>{' '}
+              to create one.
+            </p>
+          </div>
+        ) : (
+          <Select
+            label="Select Legal Entity"
+            value={selectedLegalEntityId}
+            options={legalEntities.map((entity: any) => ({
+              value: entity.id,
+              label: `${entity.name}${entity.taxIdNumber ? ` (${entity.taxIdNumber})` : ''}`,
+            }))}
+            onChange={setSelectedLegalEntityId}
+            placeholder="Choose a legal entity..."
+            required
+          />
+        )}
+      </div>
 
       <div className="bg-white rounded-xl border border-mint-light p-6 mb-6">
         <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
@@ -440,7 +504,7 @@ export default function ImportEmployees() {
             onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setResults(null); }}
             className="text-sm text-deep-cash file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-mint-light file:text-cash-green file:text-sm file:font-medium file:cursor-pointer cursor-pointer"
           />
-          <Button variant="primary" size="sm" disabled={!selectedFile} loading={processing} onClick={handleUpload}>
+          <Button variant="primary" size="sm" disabled={!selectedFile || !selectedLegalEntityId || !legalEntities || legalEntities.length === 0} loading={processing} onClick={handleUpload}>
             Upload &amp; Process
           </Button>
         </div>

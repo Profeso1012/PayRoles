@@ -165,7 +165,7 @@ export default function DisbursementDashboard() {
         <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
           <StatCard icon={Clock} label="Awaiting Approval" value={pendingApproval?.length ?? summary.totalBatches - summary.completedBatches - summary.failedBatches} />
           <StatCard icon={CalendarClock} label="Scheduled" value={summary.scheduled} />
-          <StatCard icon={ShieldAlert} label="Awaiting Confirmation" value={summary.awaitingConfirmation} tone="bg-amber-100" />
+          <StatCard icon={ShieldAlert} label="Awaiting Confirmation" value={summary.awaitingConfirmation} tone="bg-mint-light" />
           <StatCard icon={Layers} label="Total Batches" value={summary.totalBatches} />
           <StatCard icon={CheckCircle2} label="Completed" value={summary.completedBatches} tone="bg-mint-light" />
           <StatCard icon={XCircle} label="Failed" value={summary.failedBatches} tone="bg-red-100" />

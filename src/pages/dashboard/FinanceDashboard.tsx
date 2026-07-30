@@ -143,7 +143,7 @@ export default function FinanceDashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Awaiting Approval */}
-        <div className="rounded-xl px-5 py-5 bg-cash-gold/15 border border-cash-gold/30 flex flex-col gap-2">
+        <div className="rounded-xl px-5 py-5 bg-gradient-to-br from-mint-light/40 to-fresh-cash/10 border border-fresh-cash/30 flex flex-col gap-2">
           <div className="flex items-center justify-between">
             <span className="text-xs font-medium uppercase tracking-wide text-deep-cash opacity-70">
               Awaiting Approval
@@ -189,7 +189,7 @@ export default function FinanceDashboard() {
         <div className="px-5 py-4 border-b border-mint-light bg-white flex items-center justify-between">
           <h2 className="text-sm font-semibold text-deep-cash">Approval Queue</h2>
           {data.awaitingApproval > 0 && (
-            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-cash-gold text-white text-xs font-bold">
+            <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-fresh-cash text-white text-xs font-bold">
               {data.awaitingApproval}
             </span>
           )}

@@ -47,8 +47,8 @@ export default function SADashboard() {
   const stats = [
     { label: 'Total Companies', value: tenants.length, icon: Building2, color: 'text-fresh-cash', bg: 'bg-mint-light/40' },
     { label: 'Active', value: active, icon: CheckCircle, color: 'text-fresh-cash', bg: 'bg-mint-light/40' },
-    { label: 'Inactive', value: inactive, icon: Archive, color: 'text-cash-gold', bg: 'bg-cash-gold/10' },
-    { label: 'Suspended', value: suspended, icon: PauseCircle, color: 'text-red-400', bg: 'bg-red-50' },
+    { label: 'Inactive', value: inactive, icon: Archive, color: 'text-cash-green', bg: 'bg-mint-light/30' },
+    { label: 'Suspended', value: suspended, icon: PauseCircle, color: 'text-cash-green/70', bg: 'bg-mint-light/20' },
   ];
 
   return (

@@ -142,6 +142,20 @@ export default function EmployeeDetail() {
     enabled: !!id,
   });
 
+  // Fetch legal entity name for breadcrumb
+  const { data: legalEntity } = useQuery({
+    queryKey: ['legal-entity', employee?.legalEntityId],
+    queryFn: async () => {
+      if (!employee?.legalEntityId) return null;
+      try {
+        return await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.DETAIL(employee.legalEntityId));
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!employee?.legalEntityId,
+  });
+
   const terminateMutation = useMutation({
     mutationFn: () =>
       apiClient(ENDPOINTS.WORKERS.TERMINATE(id!), {
@@ -372,15 +386,24 @@ export default function EmployeeDetail() {
   }
 
   const fullName = `${employee.firstName} ${employee.lastName}`;
+  
+  // Build breadcrumb with legal entity if available
+  const breadcrumbs = legalEntity
+    ? [
+        { label: legalEntity.name, path: '/organisation/legal-entities' },
+        { label: 'Employees', path: '/employees' },
+        { label: fullName },
+      ]
+    : [
+        { label: 'Employees', path: '/employees' },
+        { label: fullName },
+      ];
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
         title={fullName}
-        breadcrumbs={[
-          { label: 'Employees', path: '/employees' },
-          { label: fullName },
-        ]}
+        breadcrumbs={breadcrumbs}
         action={
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => navigate(`/employees/${id}/edit`)}>

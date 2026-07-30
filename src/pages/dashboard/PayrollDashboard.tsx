@@ -167,9 +167,9 @@ export default function PayrollDashboard() {
       label: 'Pending Approval',
       value: data.pendingApproval,
       icon: Clock,
-      bg: 'bg-cash-gold/15',
+      bg: 'bg-gradient-to-br from-mint-light/40 to-fresh-cash/10',
       text: 'text-deep-cash',
-      iconColor: 'text-cash-gold',
+      iconColor: 'text-fresh-cash',
     },
     {
       label: 'Drafts',

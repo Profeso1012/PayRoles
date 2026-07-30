@@ -151,17 +151,17 @@ export default function HRDashboard() {
       label: 'Suspended',
       value: data.suspended,
       icon: Clock,
-      bg: 'bg-amber-50',
-      text: 'text-amber-800',
-      iconColor: 'text-amber-500',
+      bg: 'bg-gradient-to-br from-mint-light/30 to-fresh-cash/5',
+      text: 'text-deep-cash',
+      iconColor: 'text-cash-green',
     },
     {
       label: 'Inactive',
       value: data.exited,
       icon: UserX,
-      bg: 'bg-red-50',
-      text: 'text-red-700',
-      iconColor: 'text-red-400',
+      bg: 'bg-gradient-to-br from-mint-light/20 to-cash-green/5',
+      text: 'text-deep-cash',
+      iconColor: 'text-cash-green/70',
     },
   ];
 
@@ -192,9 +192,9 @@ export default function HRDashboard() {
         <button
           type="button"
           onClick={() => navigate(PATHS.EMPLOYEES)}
-          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-cash-gold/15 border border-cash-gold/40 text-left hover:bg-cash-gold/20 transition-colors"
+          className="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-gradient-to-br from-mint-light/40 to-fresh-cash/10 border border-fresh-cash/40 text-left hover:bg-gradient-to-br hover:from-mint-light/50 hover:to-fresh-cash/15 transition-colors"
         >
-          <AlertTriangle size={20} className="text-cash-gold shrink-0" />
+          <AlertTriangle size={20} className="text-fresh-cash shrink-0" />
           <span className="text-sm font-medium text-deep-cash flex-1">
             {data.missingBankDetails} employee{data.missingBankDetails !== 1 ? 's' : ''} missing
             bank details — click to review
