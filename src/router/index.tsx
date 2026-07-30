@@ -77,6 +77,7 @@ const EditEmployee = lazy(() => import('@/pages/employees/EditEmployee'));
 
 // Payroll
 const PayElements = lazy(() => import('@/pages/payroll/PayElements'));
+const FormulaGuide = lazy(() => import('@/pages/payroll/FormulaGuide'));
 const PayRunList = lazy(() => import('@/pages/payroll/PayRunList'));
 const PayRunCreate = lazy(() => import('@/pages/payroll/PayRunCreate'));
 const PayRunDetail = lazy(() => import('@/pages/payroll/PayRunDetail'));
@@ -244,6 +245,8 @@ export const router = createBrowserRouter([
           { path: 'runs/:runId/payslips/:payslipId', element: w(PayslipViewer) },
         ],
       },
+      // Formula guide - public to all authenticated users (no role guard)
+      { path: 'formula-guide', element: w(FormulaGuide) },
 
       // Finance
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(PaymentFiles)}</RoleGuard> },

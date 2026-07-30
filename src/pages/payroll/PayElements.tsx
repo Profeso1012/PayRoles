@@ -327,7 +327,20 @@ export default function PayElements() {
               label="Formula (optional)"
               value={form.formula}
               onChange={(e) => setForm((f) => ({ ...f, formula: e.target.value }))}
-              placeholder="e.g. GROSS * 0.15"
+              placeholder="e.g. gross * 0.15"
+              hint={
+                <span>
+                  Leave empty for fixed amounts. Need help with formula rules?{' '}
+                  <a
+                    href="/formula-guide"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cash-green hover:text-deep-cash underline font-medium"
+                  >
+                    View Formula Guide
+                  </a>
+                </span>
+              }
             />
           )}
           <div className="flex justify-end gap-2 pt-2">
