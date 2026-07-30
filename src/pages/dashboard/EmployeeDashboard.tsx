@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { FileText, User, ChevronRight } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
@@ -35,10 +35,6 @@ interface EmployeeDashboardData {
 // GET /users/me works for anyone regardless of role/permissions (only @Auth(),
 // no specific permission required) and is the only source for a display name.
 async function buildEmployeeDashboard(): Promise<EmployeeDashboardData> {
-  if (!USE_REAL_API) {
-    return apiClient<EmployeeDashboardData>('/dashboard/employee');
-  }
-
   const [me, workerId] = await Promise.all([
     apiClient<BackendUser>(ENDPOINTS.USERS.ME),
     Promise.resolve(useAuthStore.getState().user?.workerId),

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil, Copy, Check, AlertTriangle } from 'lucide-react';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import { generateTempPassword } from '@/lib/utils';
@@ -84,10 +84,6 @@ export default function UsersAndRoles() {
   } = useQuery<BackendUser[]>({
     queryKey: ['settings-users'],
     queryFn: async () => {
-      if (!USE_REAL_API) {
-        const response = await apiClient<any>('/settings/users');
-        return Array.isArray(response) ? response : response.data || [];
-      }
       const params = buildPaginationParams({ page: 1, limit: 100 });
       const { data } = await apiClientWithMeta<BackendUser[]>(`${ENDPOINTS.USERS.LIST}?${params}`);
       return data;
@@ -113,12 +109,8 @@ export default function UsersAndRoles() {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: (body: CreateUserRequest) => {
-      if (!USE_REAL_API) {
-        return apiClient('/settings/users', { method: 'POST', body: JSON.stringify(body) });
-      }
-      return apiClient(ENDPOINTS.USERS.CREATE, { method: 'POST', body: JSON.stringify(body) });
-    },
+    mutationFn: (body: CreateUserRequest) =>
+      apiClient(ENDPOINTS.USERS.CREATE, { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success(`User created for ${vars.email}`, `Share the temporary password with them directly: ${vars.password}`);
@@ -149,12 +141,8 @@ export default function UsersAndRoles() {
   }
 
   const disableMutation = useMutation({
-    mutationFn: (id: string) => {
-      if (!USE_REAL_API) {
-        return apiClient(`/settings/users/${id}/disable`, { method: 'PATCH' });
-      }
-      return apiClient(ENDPOINTS.USERS.DISABLE(id), { method: 'PATCH' });
-    },
+    mutationFn: (id: string) =>
+      apiClient(ENDPOINTS.USERS.DISABLE(id), { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success('User disabled');

@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Calendar, FileText, Clock, CheckCircle, Plus, ArrowRight } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapPayrollStatus, minorToMajor } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
@@ -33,10 +33,6 @@ interface PayrollDashboardData {
 
 // Build payroll dashboard data from payroll runs API
 async function buildPayrollDashboard(): Promise<PayrollDashboardData> {
-  if (!USE_REAL_API) {
-    return apiClient<PayrollDashboardData>('/dashboard/payroll');
-  }
-
   // Fetch payroll runs
   const params = buildPaginationParams({ page: 1, limit: 50 });
   params.set('sortBy', 'createdAt');

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Users, UserCheck, Clock, UserX, UserPlus, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapWorkerStatus } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
@@ -36,10 +36,6 @@ interface HRDashboardData {
 
 // Build HR dashboard data from workers API
 async function buildHRDashboard(): Promise<HRDashboardData> {
-  if (!USE_REAL_API) {
-    return apiClient<HRDashboardData>('/dashboard/hr');
-  }
-
   // Fetch all workers (or at least first 100 for stats)
   const params = buildPaginationParams({ page: 1, limit: 100 });
   params.set('sortBy', 'createdAt');

@@ -1,13 +1,13 @@
 # API Integration Layer
 
-This directory contains the API client infrastructure that enables seamless switching between mock (MSW) and real backend APIs.
+This directory contains the API client infrastructure for connecting to the e_payroll NestJS backend.
 
 ## Overview
 
-The PayRoles frontend was initially built with Mock Service Worker (MSW) handlers that simulate backend responses. As we integrate with the real e_payroll NestJS backend, this layer provides:
+The PayRoles frontend connects exclusively to the real e_payroll NestJS backend API. This layer provides:
 
 1. **Endpoint Management**: Centralized API endpoint definitions
-2. **Data Transformation**: Convert between mock and backend data formats
+2. **Data Transformation**: Convert between backend and frontend data formats
 3. **Token Management**: Handle JWT access/refresh token flow
 4. **Type Safety**: TypeScript types for all API contracts
 
@@ -17,16 +17,15 @@ The PayRoles frontend was initially built with Mock Service Worker (MSW) handler
 Central configuration and endpoint definitions.
 
 **Key Exports**:
-- `USE_REAL_API`: Boolean flag (from env var)
-- `API_BASE`: Base API URL
-- `API_VERSION`: Version prefix (`/v1` for backend, empty for mock)
+- `API_BASE`: Base API URL (from `VITE_API_URL` env var)
+- `API_VERSION`: Version prefix (`/v1` for tenant endpoints)
+- `PLATFORM_PREFIX`: Platform admin prefix (`/platform`)
 - `ENDPOINTS`: Object with all API endpoints
 
 **Usage**:
 ```typescript
 import { ENDPOINTS } from '@/lib/api/adapter';
 
-// Automatically uses correct endpoint based on USE_REAL_API
 const workers = await apiClient(ENDPOINTS.WORKERS.LIST);
 ```
 
@@ -39,7 +38,7 @@ Data transformation utilities for request/response mapping.
 ```typescript
 transformPaginatedResponse<T>(data, meta): MockPaginationResponse<T>
 ```
-Converts backend pagination (array + meta) to mock format (nested object).
+Converts backend pagination (array + meta) to frontend format.
 
 #### Monetary Amounts
 ```typescript
@@ -58,9 +57,9 @@ mapPayrollStatus(status: string, direction: 'toBackend' | 'toFrontend'): string
 mapWorkerStatus(status: string, direction: 'toBackend' | 'toFrontend'): string
 ```
 
-Maps between mock and backend status values:
-- Mock: `'in_review'` ↔ Backend: `'PENDING_APPROVAL'`
-- Mock: `'paid'` ↔ Backend: `'COMPLETED'`
+Maps between frontend and backend status values:
+- Frontend: `'in_review'` ↔ Backend: `'pending_approval'`
+- Frontend: `'paid'` ↔ Backend: `'completed'`
 
 #### Field Mapping
 ```typescript
@@ -69,8 +68,8 @@ mapPayrollRunFields<T>(data: T, direction: 'toBackend' | 'toFrontend'): any
 ```
 
 Handles field name differences:
-- `nationalId` ↔ `nationalIdEncrypted`
 - `totalGross` ↔ `totalGrossMinor`
+- Encrypted fields handling
 
 ### `../api.ts`
 Core API client with authentication and error handling.
@@ -107,79 +106,22 @@ const worker = await apiClient<Worker>('/workers', {
 
 ## Environment Variables
 
-### Development (`.env.development`)
+### Development (`.env` or `.env.development`)
 ```env
-# Use mock API (MSW)
-VITE_USE_REAL_API=false
-VITE_API_URL=/api
-
-# OR use real backend
-VITE_USE_REAL_API=true
+# Backend API URL
 VITE_API_URL=http://localhost:3000/api
 ```
 
 ### Production (`.env.production`)
 ```env
-VITE_USE_REAL_API=true
 VITE_API_URL=https://api.payrole.com/api
 ```
 
-## Migration Guide
-
-### Phase 1: Enable Real API (Current)
-```env
-VITE_USE_REAL_API=true
-VITE_API_URL=http://localhost:3000/api
-```
-
-MSW will be disabled, all requests go to real backend.
-
-### Phase 2: Update Components
-As you update each page/component:
-
-1. **Import from adapter**:
-   ```typescript
-   import { ENDPOINTS } from '@/lib/api/adapter';
-   ```
-
-2. **Use typed endpoints**:
-   ```typescript
-   // OLD
-   const url = '/employees';
-   
-   // NEW
-   const url = ENDPOINTS.WORKERS.LIST;
-   ```
-
-3. **Handle response transformations**:
-   ```typescript
-   import { transformPaginatedResponse, mapPayrollRunFields } from '@/lib/api/transforms';
-   
-   const response = await apiClient(ENDPOINTS.PAYROLL.RUNS.LIST);
-   const transformed = transformPaginatedResponse(response.data, response.meta);
-   ```
-
-### Phase 3: Update Auth Flow
-See Phase 2 implementation docs for detailed auth updates.
-
-## API Differences
+## Backend API Structure
 
 ### Pagination
 
-**Mock**:
-```json
-{
-  "success": true,
-  "data": {
-    "employees": [...],
-    "total": 100,
-    "page": 1,
-    "pageSize": 20
-  }
-}
-```
-
-**Backend**:
+**Backend Response**:
 ```json
 {
   "success": true,
@@ -197,17 +139,10 @@ See Phase 2 implementation docs for detailed auth updates.
 
 ### Authentication
 
-**Mock Login**:
-```typescript
-POST /api/auth/login
-{ email, password }
-→ { token, user }
-```
-
 **Backend Login**:
 ```typescript
 POST /api/v1/auth/login
-{ email, password, tenantSlug }  // ← NEW required field
+{ email, password, tenantSlug }
 → { accessToken, refreshToken, expiresIn, tokenType }
 
 // User profile requires separate call
@@ -217,27 +152,26 @@ GET /api/v1/auth/me
 
 ### Workers/Employees
 
-**Resource Name Change**:
-- Mock: `/api/employees`
-- Backend: `/api/v1/workers`
+**Endpoint**: `/api/v1/workers`
 
 **Query Params**:
-- Mock: `?page=1&pageSize=20&departmentId=uuid`
-- Backend: `?page=1&limit=20&legalEntityId=uuid&sortBy=createdAt&sortDir=DESC`
+```
+?page=1&limit=20&legalEntityId=uuid&sortBy=createdAt&sortDir=desc
+```
 
 ### Payroll Runs
 
-**Path Change**:
-- Mock: `/api/pay-runs`
-- Backend: `/api/v1/payroll/runs`
+**Endpoint**: `/api/v1/payroll/runs`
 
-**Status Values**:
-- Mock: `'draft'`, `'in_review'`, `'paid'`
-- Backend: `'DRAFT'`, `'PENDING_APPROVAL'`, `'COMPLETED'`
+**Status Values** (lowercase snake_case):
+- `'draft'`, `'calculating'`, `'calculated'`
+- `'pending_approval'`, `'approved'`
+- `'processing'`, `'completed'`
+- `'rejected'`, `'cancelled'`, `'reversed'`, `'failed'`
 
 **Amount Format**:
-- Mock: `totalGross: 500000` (number)
-- Backend: `totalGrossMinor: "50000000"` (string, minor units)
+- Backend: `totalGrossMinor: "50000000"` (string, minor units - kobo)
+- Frontend: `totalGross: 500000` (number - naira)
 
 ## Token Refresh Flow
 
@@ -320,16 +254,17 @@ describe('API Client', () => {
 - Ensure backend is returning proper token format
 
 ### Amounts showing incorrect values
-- Backend uses minor units (kobo): multiply by 100 to get naira
+- Backend uses minor units (kobo): divide by 100 to get naira
 - Use `minorToMajor()` when displaying
 - Use `majorToMinor()` when sending to backend
 
-### 404 errors after enabling real API
+### 404 errors
 - Check endpoint paths in `adapter.ts`
-- Verify API_VERSION is correct (`/v1`)
+- Verify API_VERSION is correct (`/v1` for tenant endpoints, `/platform` for platform admin)
 - Ensure backend is running on correct port
+- Check `VITE_API_URL` in your `.env` file
 
-### Type errors after migration
+### Type errors
 - Update imports to use adapter types
 - Check that response structure matches expectations
 - Use `extractResponseData()` for proper envelope handling
@@ -337,6 +272,6 @@ describe('API Client', () => {
 ## Support
 
 For questions or issues:
-1. Check `FRONTEND_BACKEND_INTEGRATION_AUDIT.md`
-2. Review `INTEGRATION_IMPLEMENTATION_PLAN.md`
-3. Backend API docs: `http://localhost:3000/api/docs` (Swagger)
+1. Backend API docs: `http://localhost:3000/api/docs` (Swagger)
+2. Check backend logs for detailed error messages
+3. Verify environment variables are set correctly

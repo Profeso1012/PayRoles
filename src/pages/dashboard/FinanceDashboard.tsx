@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, ArrowRight, ExternalLink } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapPayrollStatus, minorToMajor } from '@/lib/api/transforms';
 import { formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
@@ -32,11 +32,6 @@ interface FinanceDashboardData {
 
 // Helper function to build dashboard data from payroll runs API
 async function buildFinanceDashboard(): Promise<FinanceDashboardData> {
-  if (!USE_REAL_API) {
-    // Use mock endpoint
-    return apiClient<FinanceDashboardData>('/dashboard/finance');
-  }
-
   // Build from payroll runs API
   const params = buildPaginationParams({ page: 1, limit: 50 });
   params.set('sortBy', 'createdAt');

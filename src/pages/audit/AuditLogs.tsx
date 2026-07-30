@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Shield, Search, Calendar, User, FileText } from 'lucide-react';
 import { apiClientWithMeta, fetchAllPages } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
+import { ENDPOINTS, buildPaginationParams, addFilterParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -100,15 +100,6 @@ export default function AuditLogs() {
   }>({
     queryKey: ['audit-logs', page, entityFilter, actionFilter],
     queryFn: async () => {
-      if (!USE_REAL_API) {
-        return {
-          data: [],
-          total: 0,
-          page: 1,
-          pageSize: 20,
-        };
-      }
-
       const params = buildPaginationParams({ page, limit: 20 });
       // AuditQueryDto (backend) only declares entityType/entityId/userId/
       // action/from/to - the global ValidationPipe's forbidNonWhitelisted

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, BellOff, Calendar, Mail, MessageSquare, CheckCheck } from 'lucide-react';
 import { apiClient } from '@/lib/api';
-import { ENDPOINTS, USE_REAL_API } from '@/lib/api/adapter';
+import { ENDPOINTS } from '@/lib/api/adapter';
 import { formatDate } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Tabs from '@/components/ui/Tabs';
@@ -39,9 +39,6 @@ export default function Notifications() {
   const { data: notifications, isLoading, isError, refetch } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
-      if (!USE_REAL_API) {
-        return [];
-      }
       const response = await apiClient<any>(ENDPOINTS.NOTIFICATIONS.LIST);
       return Array.isArray(response) ? response : (response.data || []);
     },

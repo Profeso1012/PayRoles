@@ -9,7 +9,6 @@
 // Configuration
 // ============================================================================
 
-export const USE_REAL_API = import.meta.env.VITE_USE_REAL_API === 'true';
 const configuredApiBase = import.meta.env.VITE_API_URL;
 
 if (import.meta.env.PROD && !configuredApiBase) {
@@ -18,11 +17,11 @@ if (import.meta.env.PROD && !configuredApiBase) {
 
 export const API_BASE = configuredApiBase || 'http://localhost:3000/api';
 
-// Version prefix for tenant APIs (real backend uses /v1, mock uses none)
-export const API_VERSION = USE_REAL_API ? '/v1' : '';
+// Version prefix for tenant APIs
+export const API_VERSION = '/v1';
 
-// Platform admin prefix (real: /platform, mock: /admin)
-export const PLATFORM_PREFIX = USE_REAL_API ? '/platform' : '/admin';
+// Platform admin prefix
+export const PLATFORM_PREFIX = '/platform';
 
 // ============================================================================
 // Endpoint Definitions
@@ -356,7 +355,6 @@ export const ENDPOINTS = {
 
 /**
  * Build query string from pagination params
- * Mock uses: page, pageSize
  * Backend uses: page, limit, sortBy, sortDir
  */
 export function buildPaginationParams(params: {
@@ -369,13 +367,13 @@ export function buildPaginationParams(params: {
   const searchParams = new URLSearchParams();
 
   const page = params.page || 1;
-  const limit = USE_REAL_API ? (params.limit || params.pageSize || 20) : (params.pageSize || 20);
+  const limit = params.limit || params.pageSize || 20;
 
   searchParams.set('page', page.toString());
-  searchParams.set(USE_REAL_API ? 'limit' : 'pageSize', limit.toString());
+  searchParams.set('limit', limit.toString());
 
   // Backend's SortDir enum is lowercase ('asc'|'desc') and rejects any other casing.
-  if (USE_REAL_API && params.sortBy) {
+  if (params.sortBy) {
     searchParams.set('sortBy', params.sortBy);
     searchParams.set('sortDir', (params.sortDir || 'desc').toLowerCase());
   }

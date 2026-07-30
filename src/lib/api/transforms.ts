@@ -5,7 +5,7 @@
  * including pagination, monetary amounts, and field mappings.
  */
 
-import { USE_REAL_API } from './adapter';
+// Removed USE_REAL_API import - no longer using mock API
 
 // ============================================================================
 // Pagination Transformations
@@ -34,7 +34,7 @@ export function transformPaginatedResponse<T>(
   data: T[] | { items?: T[]; data?: T[] },
   meta?: BackendPaginationMeta
 ): MockPaginationResponse<T> {
-  if (USE_REAL_API && meta) {
+  if (meta) {
     // Backend response
     const items = Array.isArray(data) ? data : (data.items || data.data || []);
     return {
@@ -147,7 +147,6 @@ export const PAYROLL_STATUS_MAP = {
 };
 
 export function mapPayrollStatus(status: string, direction: 'toBackend' | 'toFrontend'): string {
-  if (!USE_REAL_API) return status;
   return PAYROLL_STATUS_MAP[direction][status] || status;
 }
 
@@ -178,7 +177,6 @@ export const WORKER_STATUS_MAP = {
 };
 
 export function mapWorkerStatus(status: string, direction: 'toBackend' | 'toFrontend'): string {
-  if (!USE_REAL_API) return status;
   return WORKER_STATUS_MAP[direction][status] || status;
 }
 
@@ -213,8 +211,6 @@ export function mapWorkerFields<T extends Record<string, any>>(
   data: T,
   direction: 'toBackend' | 'toFrontend'
 ): any {
-  if (!USE_REAL_API) return data;
-
   if (direction === 'toBackend') {
     // Frontend → Backend: CreateWorkerDto/UpdateWorkerDto declare plain
     // `nationalId`/`bankAccount` fields (the backend encrypts them at rest
@@ -250,8 +246,6 @@ export function mapPayrollRunFields<T extends Record<string, any>>(
   data: T,
   direction: 'toBackend' | 'toFrontend'
 ): any {
-  if (!USE_REAL_API) return data;
-  
   if (direction === 'toBackend') {
     // Frontend → Backend
     const mapped: any = { ...data };
@@ -346,16 +340,10 @@ export function extractResponseData<T>(response: any): {
   traceId?: string;
   correlationId?: string;
 } {
-  if (USE_REAL_API) {
-    return {
-      data: response.data || response,
-      meta: response.meta,
-      traceId: response.traceId,
-      correlationId: response.correlationId,
-    };
-  }
-  
   return {
     data: response.data || response,
+    meta: response.meta,
+    traceId: response.traceId,
+    correlationId: response.correlationId,
   };
 }
