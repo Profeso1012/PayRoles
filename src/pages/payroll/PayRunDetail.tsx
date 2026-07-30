@@ -175,6 +175,7 @@ export default function PayRunDetail() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Calculation started');
       console.log('Calculation started successfully');
     },
@@ -189,6 +190,7 @@ export default function PayRunDetail() {
     mutationFn: () => apiClient(ENDPOINTS.PAYROLL.RUNS.SUBMIT(id!), { method: 'PATCH' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Submitted for review');
     },
     onError: (err) => toast.error('Failed to submit', err instanceof Error ? err.message : undefined),
@@ -199,6 +201,7 @@ export default function PayRunDetail() {
       apiClient(ENDPOINTS.PAYROLL.RUNS.APPROVE(id!), { method: 'PATCH', body: JSON.stringify({}) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run approved');
       setApproveModalOpen(false);
     },
@@ -215,6 +218,7 @@ export default function PayRunDetail() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run rejected');
       setRejectModalOpen(false);
       setRejectReason('');
@@ -230,6 +234,7 @@ export default function PayRunDetail() {
       apiClient(ENDPOINTS.PAYROLL.RUNS.CANCEL(id!), { method: 'PATCH', body: JSON.stringify({}) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run cancelled');
       setCancelModalOpen(false);
     },
@@ -246,6 +251,7 @@ export default function PayRunDetail() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run reversed');
       setReverseModalOpen(false);
       setReverseReason('');

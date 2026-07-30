@@ -23,10 +23,15 @@ interface PaginatedResult<T> {
 const statusOptions = [
   { value: '', label: 'All statuses' },
   { value: 'draft', label: 'Draft' },
+  { value: 'calculating', label: 'Processing' },
+  { value: 'calculated', label: 'Calculated' },
   { value: 'in_review', label: 'In Review' },
   { value: 'approved', label: 'Approved' },
-  { value: 'calculating', label: 'Processing' },
   { value: 'paid', label: 'Completed' },
+  { value: 'failed', label: 'Failed' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'cancelled', label: 'Cancelled' },
+  { value: 'reversed', label: 'Reversed' },
 ];
 
 const statusVariantMap: Record<PayRunStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
