@@ -55,6 +55,9 @@ const blankCompForm = {
   salaryType: 'fixed',
   payFrequency: 'monthly',
   effectiveDate: '',
+  expiryDate: '',
+  notes: '',
+  breakdownComponents: [] as Array<{ label: string; amount: string }>,
 };
 
 const CALCULATION_METHOD_OPTIONS = [
@@ -190,6 +193,8 @@ export default function EmployeeDetail() {
           currency: comp.currency,
           salaryType: comp.salaryType,
           payFrequency: comp.payFrequency,
+          breakdown: comp.breakdown ?? undefined,
+          notes: comp.notes ?? undefined,
         })) satisfies Compensation[];
       } catch (error) {
         console.error('Failed to fetch compensations:', error);
@@ -316,8 +321,18 @@ export default function EmployeeDetail() {
   });
 
   const addCompensationMutation = useMutation({
-    mutationFn: () =>
-      apiClient(ENDPOINTS.COMPENSATION.CREATE, {
+    mutationFn: () => {
+      // Build breakdown object from components
+      const breakdown = compForm.breakdownComponents.length > 0
+        ? compForm.breakdownComponents.reduce((acc, comp) => {
+            if (comp.label && comp.amount) {
+              acc[comp.label] = parseFloat(comp.amount);
+            }
+            return acc;
+          }, {} as Record<string, number>)
+        : undefined;
+
+      return apiClient(ENDPOINTS.COMPENSATION.CREATE, {
         method: 'POST',
         body: JSON.stringify({
           workerId: id!,
@@ -326,8 +341,12 @@ export default function EmployeeDetail() {
           salaryType: compForm.salaryType as CreateCompensationRequest['salaryType'],
           payFrequency: compForm.payFrequency as CreateCompensationRequest['payFrequency'],
           effectiveDate: compForm.effectiveDate,
+          expiryDate: compForm.expiryDate || undefined,
+          notes: compForm.notes || undefined,
+          breakdown,
         } satisfies CreateCompensationRequest),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['worker-compensations', id] });
       toast.success('Compensation added');
@@ -343,8 +362,18 @@ export default function EmployeeDetail() {
   const [editCompTarget, setEditCompTarget] = useState<Compensation | null>(null);
   const [editCompForm, setEditCompForm] = useState(blankCompForm);
   const editCompensationMutation = useMutation({
-    mutationFn: () =>
-      apiClient(ENDPOINTS.COMPENSATION.UPDATE(editCompTarget!.id), {
+    mutationFn: () => {
+      // Build breakdown object from components
+      const breakdown = editCompForm.breakdownComponents.length > 0
+        ? editCompForm.breakdownComponents.reduce((acc, comp) => {
+            if (comp.label && comp.amount) {
+              acc[comp.label] = parseFloat(comp.amount);
+            }
+            return acc;
+          }, {} as Record<string, number>)
+        : undefined;
+
+      return apiClient(ENDPOINTS.COMPENSATION.UPDATE(editCompTarget!.id), {
         method: 'PATCH',
         body: JSON.stringify({
           amountMinor: Math.round(parseFloat(editCompForm.amount) * 100),
@@ -352,8 +381,12 @@ export default function EmployeeDetail() {
           salaryType: editCompForm.salaryType as CreateCompensationRequest['salaryType'],
           payFrequency: editCompForm.payFrequency as CreateCompensationRequest['payFrequency'],
           effectiveDate: editCompForm.effectiveDate,
+          expiryDate: editCompForm.expiryDate || undefined,
+          notes: editCompForm.notes || undefined,
+          breakdown,
         } satisfies Partial<CreateCompensationRequest>),
-      }),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['worker-compensations', id] });
       toast.success('Compensation updated');
@@ -363,6 +396,16 @@ export default function EmployeeDetail() {
   });
 
   function openEditCompensation(comp: Compensation) {
+    // Parse breakdown back into components array
+    const breakdownComponents: Array<{ label: string; amount: string }> = [];
+    if (comp.breakdown && typeof comp.breakdown === 'object') {
+      Object.entries(comp.breakdown).forEach(([label, amount]) => {
+        if (typeof amount === 'number') {
+          breakdownComponents.push({ label, amount: String(amount) });
+        }
+      });
+    }
+
     setEditCompTarget(comp);
     setEditCompForm({
       amount: String(comp.grossSalary),
@@ -370,6 +413,9 @@ export default function EmployeeDetail() {
       salaryType: comp.salaryType ?? 'fixed',
       payFrequency: comp.payFrequency ?? 'monthly',
       effectiveDate: comp.effectiveFrom.slice(0, 10),
+      expiryDate: comp.effectiveTo ? comp.effectiveTo.slice(0, 10) : '',
+      notes: comp.notes ?? '',
+      breakdownComponents,
     });
   }
 
@@ -696,7 +742,7 @@ export default function EmployeeDetail() {
         isOpen={addCompOpen}
         onClose={() => { setAddCompOpen(false); setCompForm(blankCompForm); }}
         title="Add Compensation"
-        size="sm"
+        size="md"
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-cash-green/70">
@@ -704,39 +750,132 @@ export default function EmployeeDetail() {
             one stays in history with an end date, nothing is overwritten.
           </p>
           <Input
-            label="Amount"
+            label="Total Amount"
             type="number"
             value={compForm.amount}
             onChange={(e) => setCompForm((f) => ({ ...f, amount: e.target.value }))}
             placeholder="e.g. 500000"
+            hint="Total gross salary amount"
           />
-          <Input
-            label="Currency"
-            value={compForm.currency}
-            onChange={(e) => setCompForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
-            placeholder="NGN"
-          />
-          <Select
-            label="Salary Type"
-            value={compForm.salaryType}
-            options={SALARY_TYPE_OPTIONS}
-            onChange={(v) => setCompForm((f) => ({ ...f, salaryType: v }))}
-          />
+          
+          {/* Salary Breakdown Builder */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm text-cash-green font-medium">
+                Salary Breakdown (Optional)
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setCompForm((f) => ({
+                  ...f,
+                  breakdownComponents: [...f.breakdownComponents, { label: '', amount: '' }],
+                }))}
+              >
+                <Plus size={14} />
+                Add Component
+              </Button>
+            </div>
+            {compForm.breakdownComponents.length > 0 && (
+              <div className="flex flex-col gap-2 p-3 bg-soft-white rounded-lg border border-mint-light">
+                {compForm.breakdownComponents.map((comp, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Basic Salary"
+                      className="flex-1 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                      value={comp.label}
+                      onChange={(e) => {
+                        const updated = [...compForm.breakdownComponents];
+                        updated[idx].label = e.target.value;
+                        setCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      className="w-32 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                      value={comp.amount}
+                      onChange={(e) => {
+                        const updated = [...compForm.breakdownComponents];
+                        updated[idx].amount = e.target.value;
+                        setCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const updated = compForm.breakdownComponents.filter((_, i) => i !== idx);
+                        setCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                      className="p-2 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {compForm.breakdownComponents.length === 0 && (
+              <p className="text-xs text-cash-green/60 mt-1">
+                Break down the salary into components like Basic, Housing, Transport, etc.
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Currency"
+              value={compForm.currency}
+              onChange={(e) => setCompForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
+              placeholder="NGN"
+            />
+            <Select
+              label="Salary Type"
+              value={compForm.salaryType}
+              options={SALARY_TYPE_OPTIONS}
+              onChange={(v) => setCompForm((f) => ({ ...f, salaryType: v }))}
+            />
+          </div>
+          
           <Select
             label="Pay Frequency"
             value={compForm.payFrequency}
             options={PAY_FREQUENCY_OPTIONS}
             onChange={(v) => setCompForm((f) => ({ ...f, payFrequency: v }))}
           />
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
+              <input
+                type="date"
+                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                value={compForm.effectiveDate}
+                onChange={(e) => setCompForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Expiry Date (Optional)</p>
+              <input
+                type="date"
+                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                value={compForm.expiryDate}
+                onChange={(e) => setCompForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              />
+            </div>
+          </div>
+          
           <div>
-            <p className="text-sm text-cash-green font-medium mb-1">Effective from</p>
-            <input
-              type="date"
+            <p className="text-sm text-cash-green font-medium mb-1">Notes (Optional)</p>
+            <textarea
               className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
-              value={compForm.effectiveDate}
-              onChange={(e) => setCompForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              rows={2}
+              value={compForm.notes}
+              onChange={(e) => setCompForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="e.g. Annual salary review increase"
             />
           </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => { setAddCompOpen(false); setCompForm(blankCompForm); }}>
               Cancel
@@ -757,7 +896,7 @@ export default function EmployeeDetail() {
         isOpen={!!editCompTarget}
         onClose={() => setEditCompTarget(null)}
         title="Edit Compensation"
-        size="sm"
+        size="md"
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-cash-green/70">
@@ -765,39 +904,132 @@ export default function EmployeeDetail() {
             new Compensation record for that instead, so history stays accurate).
           </p>
           <Input
-            label="Amount"
+            label="Total Amount"
             type="number"
             value={editCompForm.amount}
             onChange={(e) => setEditCompForm((f) => ({ ...f, amount: e.target.value }))}
             placeholder="e.g. 500000"
+            hint="Total gross salary amount"
           />
-          <Input
-            label="Currency"
-            value={editCompForm.currency}
-            onChange={(e) => setEditCompForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
-            placeholder="NGN"
-          />
-          <Select
-            label="Salary Type"
-            value={editCompForm.salaryType}
-            options={SALARY_TYPE_OPTIONS}
-            onChange={(v) => setEditCompForm((f) => ({ ...f, salaryType: v }))}
-          />
+          
+          {/* Salary Breakdown Builder */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-sm text-cash-green font-medium">
+                Salary Breakdown (Optional)
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setEditCompForm((f) => ({
+                  ...f,
+                  breakdownComponents: [...f.breakdownComponents, { label: '', amount: '' }],
+                }))}
+              >
+                <Plus size={14} />
+                Add Component
+              </Button>
+            </div>
+            {editCompForm.breakdownComponents.length > 0 && (
+              <div className="flex flex-col gap-2 p-3 bg-soft-white rounded-lg border border-mint-light">
+                {editCompForm.breakdownComponents.map((comp, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Basic Salary"
+                      className="flex-1 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                      value={comp.label}
+                      onChange={(e) => {
+                        const updated = [...editCompForm.breakdownComponents];
+                        updated[idx].label = e.target.value;
+                        setEditCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      className="w-32 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                      value={comp.amount}
+                      onChange={(e) => {
+                        const updated = [...editCompForm.breakdownComponents];
+                        updated[idx].amount = e.target.value;
+                        setEditCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const updated = editCompForm.breakdownComponents.filter((_, i) => i !== idx);
+                        setEditCompForm((f) => ({ ...f, breakdownComponents: updated }));
+                      }}
+                      className="p-2 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {editCompForm.breakdownComponents.length === 0 && (
+              <p className="text-xs text-cash-green/60 mt-1">
+                Break down the salary into components like Basic, Housing, Transport, etc.
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              label="Currency"
+              value={editCompForm.currency}
+              onChange={(e) => setEditCompForm((f) => ({ ...f, currency: e.target.value.toUpperCase() }))}
+              placeholder="NGN"
+            />
+            <Select
+              label="Salary Type"
+              value={editCompForm.salaryType}
+              options={SALARY_TYPE_OPTIONS}
+              onChange={(v) => setEditCompForm((f) => ({ ...f, salaryType: v }))}
+            />
+          </div>
+          
           <Select
             label="Pay Frequency"
             value={editCompForm.payFrequency}
             options={PAY_FREQUENCY_OPTIONS}
             onChange={(v) => setEditCompForm((f) => ({ ...f, payFrequency: v }))}
           />
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
+              <input
+                type="date"
+                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                value={editCompForm.effectiveDate}
+                onChange={(e) => setEditCompForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              />
+            </div>
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Expiry Date (Optional)</p>
+              <input
+                type="date"
+                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                value={editCompForm.expiryDate}
+                onChange={(e) => setEditCompForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              />
+            </div>
+          </div>
+          
           <div>
-            <p className="text-sm text-cash-green font-medium mb-1">Effective from</p>
-            <input
-              type="date"
+            <p className="text-sm text-cash-green font-medium mb-1">Notes (Optional)</p>
+            <textarea
               className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
-              value={editCompForm.effectiveDate}
-              onChange={(e) => setEditCompForm((f) => ({ ...f, effectiveDate: e.target.value }))}
+              rows={2}
+              value={editCompForm.notes}
+              onChange={(e) => setEditCompForm((f) => ({ ...f, notes: e.target.value }))}
+              placeholder="e.g. Correcting data entry error"
             />
           </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => setEditCompTarget(null)}>
               Cancel

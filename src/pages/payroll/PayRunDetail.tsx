@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Send, ThumbsUp, ThumbsDown, CheckCircle2,
-  Clock, BarChart3, Users, XCircle, RotateCcw, RefreshCw,
+  Clock, BarChart3, Users, XCircle, RotateCcw, RefreshCw, Pencil,
 } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
@@ -20,6 +20,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import Input from '@/components/ui/Input';
 import type { PayRun, PayRunStatus } from '@contracts/types/payroll';
 import type { BackendPayslip, BackendWorker } from '@/lib/api/types';
 
@@ -287,6 +288,57 @@ export default function PayRunDetail() {
   const canApprove = role === 'payroll_manager' || role === 'tenant_admin' || role === 'super_admin';
   // Same roles that can manage payroll can retry failed calculations
   const canCalculate = canManage;
+  
+  // Edit modal state
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name: '',
+    periodStart: '',
+    periodEnd: '',
+    payDate: '',
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: { name: string; periodStart: string; periodEnd: string; payDate: string }) => {
+      console.log('Updating pay run:', id, data);
+      return apiClient(ENDPOINTS.PAYROLL.RUNS.UPDATE(id!), {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pay-run', id] });
+      toast.success('Pay run updated');
+      setEditModalOpen(false);
+      console.log('Pay run updated successfully');
+    },
+    onError: (err) => {
+      console.error('Pay run update failed:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to update pay run';
+      toast.error(errorMessage);
+    },
+  });
+  
+  const openEditModal = () => {
+    setEditForm({
+      name: run.name || '',
+      periodStart: run.periodStart || '',
+      periodEnd: run.periodEnd || '',
+      payDate: run.payDate || '',
+    });
+    setEditModalOpen(true);
+  };
+  
+  const handleUpdate = () => {
+    if (!editForm.name || !editForm.periodStart || !editForm.periodEnd || !editForm.payDate) {
+      toast.error('All fields are required');
+      return;
+    }
+    updateMutation.mutate(editForm);
+  };
+  
+  // Can only edit in draft, calculated, failed, or rejected status
+  const canEdit = canManage && ['draft', 'calculated', 'failed', 'rejected'].includes(run.status);
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -296,7 +348,17 @@ export default function PayRunDetail() {
           { label: 'Pay Runs', path: '/payroll/runs' },
           { label: period },
         ]}
-        action={<Badge variant={statusVariant[run.status]} label={statusLabel[run.status]} />}
+        action={
+          <div className="flex items-center gap-3">
+            {canEdit && (
+              <Button variant="ghost" size="sm" onClick={openEditModal}>
+                <Pencil size={14} />
+                Edit
+              </Button>
+            )}
+            <Badge variant={statusVariant[run.status]} label={statusLabel[run.status]} />
+          </div>
+        }
       />
 
       {/* State machine progress bar */}
@@ -733,6 +795,52 @@ export default function PayRunDetail() {
               onClick={() => reverseMutation.mutate()}
             >
               Reverse Pay Run
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Edit Pay Run Modal */}
+      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="Edit Pay Run" size="md">
+        <div className="flex flex-col gap-4">
+          <Input
+            label="Pay Run Name"
+            value={editForm.name}
+            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+            placeholder="e.g. July 2026 Payroll"
+            required
+          />
+          <Input
+            label="Period Start Date"
+            type="date"
+            value={editForm.periodStart}
+            onChange={(e) => setEditForm({ ...editForm, periodStart: e.target.value })}
+            required
+          />
+          <Input
+            label="Period End Date"
+            type="date"
+            value={editForm.periodEnd}
+            onChange={(e) => setEditForm({ ...editForm, periodEnd: e.target.value })}
+            required
+          />
+          <Input
+            label="Pay Date"
+            type="date"
+            value={editForm.payDate}
+            onChange={(e) => setEditForm({ ...editForm, payDate: e.target.value })}
+            required
+          />
+          <div className="flex justify-end gap-2 mt-2">
+            <Button variant="ghost" onClick={() => setEditModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              loading={updateMutation.isPending}
+              onClick={handleUpdate}
+            >
+              Save Changes
             </Button>
           </div>
         </div>

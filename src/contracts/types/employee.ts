@@ -51,6 +51,8 @@ export interface Compensation {
   payFrequency?: string;
   effectiveFrom: string; // Mapped from backend's effectiveDate
   effectiveTo: string | null; // Mapped from backend's expiryDate
+  breakdown?: Record<string, number>; // Optional salary component breakdown
+  notes?: string; // Optional notes about the compensation
 }
 
 export interface BankDetail {

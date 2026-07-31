@@ -41,7 +41,17 @@ const typeLabel: Record<string, string> = {
   benefit: 'Benefit',
 };
 
-const blank = { code: '', name: '', type: 'earning', formula: '', taxRuleCode: '', autoApply: true };
+const blank = { 
+  code: '', 
+  name: '', 
+  type: 'earning', 
+  formula: '', 
+  taxRuleCode: '', 
+  autoApply: true,
+  isTaxable: true,
+  sortOrder: 100,
+  description: '',
+};
 
 export default function PayElements() {
   const qc = useQueryClient();
@@ -71,6 +81,9 @@ export default function PayElements() {
         name: form.name,
         type: form.type,
         formula: form.formula || undefined,
+        isTaxable: form.isTaxable,
+        sortOrder: parseInt(String(form.sortOrder), 10) || 100,
+        description: form.description || undefined,
       };
       // autoApply has no safe default for type=tax - the backend 400s
       // (PayElementAutoApplyRequiredException) if it's omitted here.
@@ -137,6 +150,9 @@ export default function PayElements() {
       formula: el.formula ?? '',
       taxRuleCode: el.taxRuleCode ?? '',
       autoApply: el.autoApply,
+      isTaxable: el.isTaxable ?? true,
+      sortOrder: el.sortOrder ?? 100,
+      description: el.description ?? '',
     });
     setModalOpen(true);
   }
@@ -343,6 +359,45 @@ export default function PayElements() {
               }
             />
           )}
+          
+          {/* Additional fields */}
+          {form.type !== 'tax' && (
+            <div>
+              <label className="flex items-center gap-2 text-sm text-cash-green font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isTaxable}
+                  onChange={(e) => setForm((f) => ({ ...f, isTaxable: e.target.checked }))}
+                  className="w-4 h-4 text-fresh-cash border-mint-light rounded focus:ring-fresh-cash"
+                />
+                <span>Taxable</span>
+              </label>
+              <p className="text-xs text-cash-green/60 mt-1 ml-6">
+                Check if this element should be included in taxable income calculations
+              </p>
+            </div>
+          )}
+          
+          <Input
+            label="Sort Order"
+            type="number"
+            value={form.sortOrder}
+            onChange={(e) => setForm((f) => ({ ...f, sortOrder: parseInt(e.target.value, 10) || 100 }))}
+            placeholder="100"
+            hint="Display order on payslips (lower numbers appear first)"
+          />
+          
+          <div>
+            <p className="text-sm text-cash-green font-medium mb-1">Description (Optional)</p>
+            <textarea
+              className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+              rows={2}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              placeholder="e.g. Monthly transportation stipend for employees"
+            />
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={closeModal}>Cancel</Button>
             <Button
