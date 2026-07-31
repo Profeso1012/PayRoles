@@ -42,6 +42,7 @@ export interface PayRun {
   createdAt: string;
   approvedAt: string | null;
   notes?: string | null;
+  failureReason?: string | null;
   metadata?: Record<string, any> | null;
 }
 

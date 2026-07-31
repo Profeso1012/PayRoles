@@ -103,6 +103,7 @@ export default function PayRunDetail() {
       const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(id!));
       console.log('Pay run detail response from backend:', response);
       console.log('Pay run status:', response.status);
+      console.log('Pay run failureReason:', response.failureReason);
       console.log('Pay run notes:', response.notes);
       console.log('Pay run metadata:', response.metadata);
       console.log('Pay run workflowId:', response.workflowId);
@@ -548,10 +549,18 @@ export default function PayRunDetail() {
             )}
           </div>
           
-          {/* Display notes if available (may contain error details) */}
+          {/* Display failure reason if available (primary error field) */}
+          {run.failureReason && (
+            <div className="mt-3 pl-7">
+              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Error:</p>
+              <p className="text-sm text-deep-cash whitespace-pre-wrap">{run.failureReason}</p>
+            </div>
+          )}
+          
+          {/* Display notes if available (may contain additional details) */}
           {run.notes && (
             <div className="mt-3 pl-7">
-              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Details:</p>
+              <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Notes:</p>
               <p className="text-sm text-deep-cash whitespace-pre-wrap">{run.notes}</p>
             </div>
           )}
@@ -567,7 +576,7 @@ export default function PayRunDetail() {
           )}
           
           {/* Show common failure reasons for failed status */}
-          {run.status === 'failed' && !run.notes && (
+          {run.status === 'failed' && !run.failureReason && !run.notes && (
             <div className="mt-3 pl-7">
               <p className="text-xs font-medium text-cash-green/70 uppercase tracking-wide mb-1">Common Reasons:</p>
               <ul className="text-xs text-cash-green/80 space-y-1 list-disc list-inside">
