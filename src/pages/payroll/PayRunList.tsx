@@ -86,21 +86,45 @@ export default function PayRunList() {
 
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState('');
+  const [legalEntityId, setLegalEntityId] = useState('');
+
+  // Fetch legal entities for filter dropdown
+  const { data: legalEntities } = useQuery({
+    queryKey: ['legal-entities-list'],
+    queryFn: async () => {
+      try {
+        const response = await apiClientWithMeta<any>(`${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ limit: 100 })}`);
+        const entities = Array.isArray(response.data) ? response.data : (response.data?.data || []);
+        return entities;
+      } catch (error) {
+        console.error('Failed to fetch legal entities:', error);
+        return [];
+      }
+    },
+  });
+
+  const legalEntityOptions = [
+    { value: '', label: 'All legal entities' },
+    ...(legalEntities || []).map((entity: any) => ({
+      value: entity.id,
+      label: entity.name,
+    })),
+  ];
 
   const { data, isLoading, isError } = useQuery<PaginatedResult<PayRun>>({
-    queryKey: ['pay-runs-list', page, status],
+    queryKey: ['pay-runs-list', page, status, legalEntityId],
     queryFn: async () => {
       // GET /payroll/runs binds @Query() to plain PaginationDto (page/limit/
       // sortBy/sortDir only) - there is no status field on it, and the global
       // ValidationPipe's forbidNonWhitelisted rejects the WHOLE request if an
-      // unknown query key like "status" is present. So status can't be sent
-      // to the server at all - filtered client-side below instead. Fetch the
-      // max page size (100) when a status filter is active to make that
+      // unknown query key like "status" or "legalEntityId" is present. So they
+      // can't be sent to the server at all - filtered client-side below instead.
+      // Fetch the max page size (100) when a filter is active to make that
       // client-side filter useful, since without it we'd only ever be
       // filtering within one 20-row page.
       const params = buildPaginationParams({
-        page: status ? 1 : page,
-        limit: status ? 100 : 20,
+        page: (status || legalEntityId) ? 1 : page,
+        limit: (status || legalEntityId) ? 100 : 20,
         sortBy: 'createdAt',
         sortDir: 'desc',
       });
@@ -117,11 +141,6 @@ export default function PayRunList() {
         // Build period string from dates if not present
         if (!transformed.period && transformed.periodStart) {
           transformed.period = formatPeriod(transformed.periodStart, transformed.periodEnd);
-        }
-
-        // Handle missing employeeCount (not in backend response)
-        if (!transformed.employeeCount) {
-          transformed.employeeCount = 0;
         }
 
         // Map payGroupName to name if present
@@ -141,9 +160,13 @@ export default function PayRunList() {
         transformedRuns = transformedRuns.filter((run) => run.status === status);
       }
 
+      if (legalEntityId) {
+        transformedRuns = transformedRuns.filter((run) => run.legalEntityId === legalEntityId);
+      }
+
       return {
         data: transformedRuns,
-        meta: status
+        meta: (status || legalEntityId)
           ? { page: 1, pageSize: transformedRuns.length, total: transformedRuns.length }
           : paginatedData,
       };
@@ -178,9 +201,11 @@ export default function PayRunList() {
       ),
     },
     {
-      key: 'employeeCount',
-      header: 'Employees',
-      render: (row: PayRun) => <span className="text-sm tabular-nums">{row.employeeCount}</span>,
+      key: 'payDate',
+      header: 'Pay Date',
+      render: (row: PayRun) => (
+        <span className="text-sm text-cash-green">{row.payDate ? formatDate(row.payDate) : '—'}</span>
+      ),
     },
     {
       key: 'totalGross',
@@ -225,16 +250,29 @@ export default function PayRunList() {
         }
       />
 
-      <div className="mb-5 w-48">
-        <Select
-          value={status}
-          options={statusOptions}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-          placeholder="All statuses"
-        />
+      <div className="flex gap-3 mb-5 flex-wrap">
+        <div className="w-48">
+          <Select
+            value={status}
+            options={statusOptions}
+            onChange={(v) => {
+              setStatus(v);
+              setPage(1);
+            }}
+            placeholder="All statuses"
+          />
+        </div>
+        <div className="w-60">
+          <Select
+            value={legalEntityId}
+            options={legalEntityOptions}
+            onChange={(v) => {
+              setLegalEntityId(v);
+              setPage(1);
+            }}
+            placeholder="All legal entities"
+          />
+        </div>
       </div>
 
       <DataTable

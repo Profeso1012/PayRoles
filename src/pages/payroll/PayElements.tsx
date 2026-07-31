@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Lock } from 'lucide-react';
+import { Plus, Pencil, Trash2, Lock, AlertCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
@@ -71,6 +71,25 @@ export default function PayElements() {
       const items = Array.isArray(response) ? response : (response.data || []);
       return items;
     },
+  });
+
+  // Fetch tax rules for dropdown
+  const { data: taxRules } = useQuery<Array<{ code: string; name: string }>>({
+    queryKey: ['tax-rules'],
+    queryFn: async () => {
+      try {
+        const response = await apiClient<any>(ENDPOINTS.TAX.RULES);
+        const rules = Array.isArray(response) ? response : (response.data || []);
+        return rules.map((rule: any) => ({
+          code: rule.code,
+          name: rule.name || rule.code,
+        }));
+      } catch (error) {
+        console.error('Failed to fetch tax rules:', error);
+        return [];
+      }
+    },
+    enabled: modalOpen, // Only fetch when modal is open
   });
 
   const saveMutation = useMutation({
@@ -181,6 +200,10 @@ export default function PayElements() {
   const taxes = (elements ?? []).filter((e) => e.type === 'tax');
   const benefits = (elements ?? []).filter((e) => e.type === 'benefit');
 
+  // Check if BASIC_SALARY pay element exists (required for payroll)
+  const hasBasicSalary = elements?.some((e) => e.code === 'BASIC_SALARY' && e.isActive);
+  const basicSalaryCount = elements?.filter((e) => e.code === 'BASIC_SALARY').length || 0;
+
   function ElementGroup({ title, items }: { title: string; items: PayElementDefinition[] }) {
     if (items.length === 0) return null;
     return (
@@ -270,6 +293,33 @@ export default function PayElements() {
         Define earnings, deductions and employer contributions used in payroll calculations.
       </p>
 
+      {/* BASIC_SALARY Warning */}
+      {!hasBasicSalary && elements && elements.length > 0 && (
+        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-6">
+          <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY pay element missing</p>
+            <p className="text-sm text-deep-cash">
+              The <strong>BASIC_SALARY</strong> pay element is required for payroll calculations. Create one with code "BASIC_SALARY" 
+              and type "Earning" to enable payroll processing. This element pulls the salary amount from employee compensation records.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {basicSalaryCount > 1 && (
+        <div className="flex items-start gap-3 p-4 bg-cash-gold/10 border border-cash-gold/30 rounded-lg mb-6">
+          <AlertCircle size={18} className="text-cash-gold shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-semibold text-deep-cash mb-1">Multiple BASIC_SALARY elements found</p>
+            <p className="text-sm text-deep-cash">
+              Found {basicSalaryCount} pay elements with code "BASIC_SALARY". Only one should exist. 
+              Deactivate duplicate entries to avoid payroll calculation errors.
+            </p>
+          </div>
+        </div>
+      )}
+
       {(!elements || elements.length === 0) ? (
         <EmptyState
           title="No pay elements defined"
@@ -317,16 +367,30 @@ export default function PayElements() {
             label="Type"
             value={form.type}
             options={typeOptions}
-            onChange={(v) => setForm((f) => ({ ...f, type: v }))}
+            onChange={(v) => setForm((f) => ({ 
+              ...f, 
+              type: v,
+              // Reset tax-specific fields when changing away from tax
+              taxRuleCode: v === 'tax' ? f.taxRuleCode : '',
+              autoApply: v === 'tax' ? f.autoApply : true,
+              // Reset isTaxable when changing to tax
+              isTaxable: v === 'tax' ? false : f.isTaxable,
+            }))}
           />
           {form.type === 'tax' ? (
             <>
-              <Input
-                label="Tax Rule Code"
+              <Select
+                label="Tax Rule"
                 value={form.taxRuleCode}
-                onChange={(e) => setForm((f) => ({ ...f, taxRuleCode: e.target.value.toUpperCase() }))}
-                placeholder="e.g. NIGERIA_PIT"
-                hint="References a tax rule's code instead of evaluating a formula."
+                options={[
+                  { value: '', label: '-- Select Tax Rule --' },
+                  ...(taxRules || []).map((rule) => ({
+                    value: rule.code,
+                    label: `${rule.name} (${rule.code})`,
+                  })),
+                ]}
+                onChange={(v) => setForm((f) => ({ ...f, taxRuleCode: v }))}
+                hint="Select the tax calculation rule this element applies"
               />
               <Select
                 label="Applies to"

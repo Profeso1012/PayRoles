@@ -625,6 +625,21 @@ export default function EmployeeDetail() {
               </Button>
             )}
           </div>
+
+          {/* BASIC_SALARY Warning */}
+          {workerPayElements && !workerPayElements.some((wpe) => wpe.payElement?.code === 'BASIC_SALARY' && wpe.status === 'active') && (
+            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
+              <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY not assigned</p>
+                <p className="text-sm text-deep-cash">
+                  This employee doesn't have <strong>BASIC_SALARY</strong> assigned. Payroll calculations will fail without it. 
+                  Assign the BASIC_SALARY pay element to enable payroll processing.
+                </p>
+              </div>
+            </div>
+          )}
+
           {!workerPayElements ? (
             <div className="flex justify-center py-8"><Spinner /></div>
           ) : workerPayElements.length === 0 ? (

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle, ChevronRight } from 'lucide-react';
+import { CheckCircle, ChevronRight, Plus, X } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
@@ -41,7 +41,12 @@ type EmploymentForm = {
 
 type CompensationForm = {
   basicSalary: string;
+  salaryType: string;
+  payFrequency: string;
   effectiveDate: string;
+  expiryDate: string;
+  notes: string;
+  breakdownComponents: Array<{ label: string; amount: string }>;
 };
 
 type BankForm = {
@@ -74,6 +79,21 @@ const employmentTypeOptions = [
   { value: 'intern', label: 'Intern' },
 ];
 
+const SALARY_TYPE_OPTIONS = [
+  { value: 'fixed', label: 'Fixed' },
+  { value: 'hourly', label: 'Hourly' },
+  { value: 'commission', label: 'Commission' },
+];
+
+const PAY_FREQUENCY_OPTIONS = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Bi-weekly' },
+  { value: 'semimonthly', label: 'Semi-monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+  { value: 'annual', label: 'Annual' },
+];
+
 export default function AddEmployee() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -95,7 +115,12 @@ export default function AddEmployee() {
 
   const [compensation, setCompensation] = useState<CompensationForm>({
     basicSalary: '',
+    salaryType: 'fixed',
+    payFrequency: 'monthly',
     effectiveDate: '',
+    expiryDate: '',
+    notes: '',
+    breakdownComponents: [],
   });
 
   const [bank, setBank] = useState<BankForm>({
@@ -152,13 +177,28 @@ export default function AddEmployee() {
       // Create compensation if provided. CreateCompensationDto's amount field
       // is `amountMinor`, not `basicSalaryMinor`.
       if (compensation.basicSalary && compensation.effectiveDate) {
+        // Build breakdown object from components
+        const breakdown = compensation.breakdownComponents.length > 0
+          ? compensation.breakdownComponents.reduce((acc, comp) => {
+              if (comp.label && comp.amount) {
+                acc[comp.label] = parseFloat(comp.amount);
+              }
+              return acc;
+            }, {} as Record<string, number>)
+          : undefined;
+
         await apiClient(ENDPOINTS.COMPENSATION.CREATE, {
           method: 'POST',
           body: JSON.stringify({
             workerId: employee.id,
             amountMinor: Math.round(parseFloat(compensation.basicSalary) * 100),
             currency: 'NGN',
+            salaryType: compensation.salaryType,
+            payFrequency: compensation.payFrequency,
             effectiveDate: compensation.effectiveDate,
+            expiryDate: compensation.expiryDate || undefined,
+            notes: compensation.notes || undefined,
+            breakdown,
           }),
         });
       }
@@ -349,24 +389,122 @@ export default function AddEmployee() {
           <p className="text-sm text-cash-green/70 mb-5">Optional — can be added later from the employee profile.</p>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Basic Salary (₦)</p>
+              <p className="text-sm text-cash-green font-medium mb-1">Total Amount (₦)</p>
               <input
                 type="number"
                 className={fieldClass}
                 value={compensation.basicSalary}
                 onChange={(e) => setCompensation((f) => ({ ...f, basicSalary: e.target.value }))}
-                placeholder="e.g. 100000"
+                placeholder="e.g. 500000"
                 min={0}
               />
-              <p className="text-xs text-cash-green/60 mt-1">Enter monthly basic salary (e.g. 100000 for ₦100,000)</p>
+              <p className="text-xs text-cash-green/60 mt-1">Total gross salary amount</p>
             </div>
+
+            {/* Salary Breakdown Builder */}
             <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
-              <input
-                type="date"
-                className={fieldClass}
-                value={compensation.effectiveDate}
-                onChange={(e) => setCompensation((f) => ({ ...f, effectiveDate: e.target.value }))}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-cash-green font-medium">
+                  Salary Breakdown (Optional)
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setCompensation((f) => ({
+                    ...f,
+                    breakdownComponents: [...f.breakdownComponents, { label: '', amount: '' }],
+                  }))}
+                  className="text-xs text-fresh-cash hover:text-deep-cash font-medium flex items-center gap-1"
+                >
+                  <Plus size={12} />
+                  Add Component
+                </button>
+              </div>
+              {compensation.breakdownComponents.length > 0 && (
+                <div className="flex flex-col gap-2 p-3 bg-soft-white rounded-lg border border-mint-light">
+                  {compensation.breakdownComponents.map((comp, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        placeholder="e.g. Basic Salary"
+                        className="flex-1 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                        value={comp.label}
+                        onChange={(e) => {
+                          const updated = [...compensation.breakdownComponents];
+                          updated[idx].label = e.target.value;
+                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
+                        }}
+                      />
+                      <input
+                        type="number"
+                        placeholder="Amount"
+                        className="w-32 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                        value={comp.amount}
+                        onChange={(e) => {
+                          const updated = [...compensation.breakdownComponents];
+                          updated[idx].amount = e.target.value;
+                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updated = compensation.breakdownComponents.filter((_, i) => i !== idx);
+                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
+                        }}
+                        className="p-2 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Salary Type"
+                value={compensation.salaryType}
+                options={SALARY_TYPE_OPTIONS}
+                onChange={(v) => setCompensation((f) => ({ ...f, salaryType: v }))}
+              />
+              <Select
+                label="Pay Frequency"
+                value={compensation.payFrequency}
+                options={PAY_FREQUENCY_OPTIONS}
+                onChange={(v) => setCompensation((f) => ({ ...f, payFrequency: v }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
+                <input
+                  type="date"
+                  className={fieldClass}
+                  value={compensation.effectiveDate}
+                  onChange={(e) => setCompensation((f) => ({ ...f, effectiveDate: e.target.value }))}
+                />
+              </div>
+              <div>
+                <p className="text-sm text-cash-green font-medium mb-1">Expiry Date (Optional)</p>
+                <input
+                  type="date"
+                  className={fieldClass}
+                  value={compensation.expiryDate}
+                  onChange={(e) => setCompensation((f) => ({ ...f, expiryDate: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div>
+              <p className="text-sm text-cash-green font-medium mb-1">Notes (Optional)</p>
+              <textarea
+                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+                rows={2}
+                value={compensation.notes}
+                onChange={(e) => setCompensation((f) => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. Initial salary offer"
               />
             </div>
           </div>
@@ -404,43 +542,118 @@ export default function AddEmployee() {
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <dt className="text-cash-green/60">Name</dt>
               <dd className="text-deep-cash font-medium">{personal.firstName} {personal.lastName}</dd>
-              <dt className="text-cash-green/60">Email</dt>
-              <dd className="text-deep-cash">{personal.email}</dd>
-              <dt className="text-cash-green/60">Phone</dt>
-              <dd className="text-deep-cash">{personal.phone}</dd>
-              <dt className="text-cash-green/60">Gender</dt>
-              <dd className="text-deep-cash capitalize">{personal.gender.replace(/_/g, ' ')}</dd>
+              {personal.email && (
+                <>
+                  <dt className="text-cash-green/60">Email</dt>
+                  <dd className="text-deep-cash">{personal.email}</dd>
+                </>
+              )}
+              {personal.phone && (
+                <>
+                  <dt className="text-cash-green/60">Phone</dt>
+                  <dd className="text-deep-cash">{personal.phone}</dd>
+                </>
+              )}
+              {personal.dateOfBirth && (
+                <>
+                  <dt className="text-cash-green/60">Date of Birth</dt>
+                  <dd className="text-deep-cash">{new Date(personal.dateOfBirth).toLocaleDateString()}</dd>
+                </>
+              )}
+              {personal.gender && (
+                <>
+                  <dt className="text-cash-green/60">Gender</dt>
+                  <dd className="text-deep-cash capitalize">{personal.gender.replace(/_/g, ' ')}</dd>
+                </>
+              )}
+              {personal.nationalId && (
+                <>
+                  <dt className="text-cash-green/60">National ID</dt>
+                  <dd className="text-deep-cash font-mono">{personal.nationalId}</dd>
+                </>
+              )}
+              {personal.annualRent && (
+                <>
+                  <dt className="text-cash-green/60">Annual Rent</dt>
+                  <dd className="text-deep-cash">₦{Number(personal.annualRent).toLocaleString()}</dd>
+                </>
+              )}
             </dl>
           </div>
-          {employment.position && (
-            <div>
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Employment</p>
-              <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <dt className="text-cash-green/60">Employee Number</dt>
-                <dd className="text-deep-cash font-medium">{employment.employeeNumber}</dd>
-                <dt className="text-cash-green/60">Position</dt>
-                <dd className="text-deep-cash font-medium">{employment.position}</dd>
-                {employment.department && (
-                  <>
-                    <dt className="text-cash-green/60">Department</dt>
-                    <dd className="text-deep-cash">{employment.department}</dd>
-                  </>
-                )}
-                <dt className="text-cash-green/60">Type</dt>
-                <dd className="text-deep-cash capitalize">{employment.employmentType.replace(/_/g, ' ')}</dd>
-                <dt className="text-cash-green/60">Hire Date</dt>
-                <dd className="text-deep-cash">{employment.hireDate}</dd>
-              </dl>
-            </div>
-          )}
+          <div>
+            <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Employment</p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <dt className="text-cash-green/60">Employee Number</dt>
+              <dd className="text-deep-cash font-medium">{employment.employeeNumber}</dd>
+              {employment.position && (
+                <>
+                  <dt className="text-cash-green/60">Position</dt>
+                  <dd className="text-deep-cash font-medium">{employment.position}</dd>
+                </>
+              )}
+              {employment.department && (
+                <>
+                  <dt className="text-cash-green/60">Department</dt>
+                  <dd className="text-deep-cash">{employment.department}</dd>
+                </>
+              )}
+              {employment.legalEntityId && (
+                <>
+                  <dt className="text-cash-green/60">Legal Entity</dt>
+                  <dd className="text-deep-cash">
+                    {legalEntities?.find((le) => le.id === employment.legalEntityId)?.name || employment.legalEntityId}
+                  </dd>
+                </>
+              )}
+              <dt className="text-cash-green/60">Employment Type</dt>
+              <dd className="text-deep-cash capitalize">{employment.employmentType.replace(/_/g, ' ')}</dd>
+              <dt className="text-cash-green/60">Hire Date</dt>
+              <dd className="text-deep-cash">{new Date(employment.hireDate).toLocaleDateString()}</dd>
+            </dl>
+          </div>
           {compensation.basicSalary && (
             <div>
               <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Compensation</p>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <dt className="text-cash-green/60">Basic Salary</dt>
+                <dt className="text-cash-green/60">Total Amount</dt>
                 <dd className="text-deep-cash font-semibold">
                   ₦{Number(compensation.basicSalary).toLocaleString()}
                 </dd>
+                <dt className="text-cash-green/60">Salary Type</dt>
+                <dd className="text-deep-cash capitalize">{compensation.salaryType}</dd>
+                <dt className="text-cash-green/60">Pay Frequency</dt>
+                <dd className="text-deep-cash capitalize">{compensation.payFrequency}</dd>
+                <dt className="text-cash-green/60">Effective From</dt>
+                <dd className="text-deep-cash">{new Date(compensation.effectiveDate).toLocaleDateString()}</dd>
+                {compensation.expiryDate && (
+                  <>
+                    <dt className="text-cash-green/60">Expiry Date</dt>
+                    <dd className="text-deep-cash">{new Date(compensation.expiryDate).toLocaleDateString()}</dd>
+                  </>
+                )}
+                {compensation.notes && (
+                  <>
+                    <dt className="text-cash-green/60">Notes</dt>
+                    <dd className="text-deep-cash col-span-2">{compensation.notes}</dd>
+                  </>
+                )}
+                {compensation.breakdownComponents.length > 0 && (
+                  <>
+                    <dt className="text-cash-green/60">Breakdown</dt>
+                    <dd className="text-deep-cash col-span-2">
+                      <div className="flex flex-col gap-1 text-xs">
+                        {compensation.breakdownComponents.map((comp, idx) => (
+                          comp.label && comp.amount ? (
+                            <div key={idx} className="flex justify-between">
+                              <span>{comp.label}:</span>
+                              <span className="font-mono">₦{Number(comp.amount).toLocaleString()}</span>
+                            </div>
+                          ) : null
+                        ))}
+                      </div>
+                    </dd>
+                  </>
+                )}
               </dl>
             </div>
           )}
@@ -450,8 +663,18 @@ export default function AddEmployee() {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <dt className="text-cash-green/60">Bank</dt>
                 <dd className="text-deep-cash">{bank.bankName}</dd>
-                <dt className="text-cash-green/60">Account</dt>
-                <dd className="text-deep-cash font-mono">{bank.accountNumber}</dd>
+                {bank.accountNumber && (
+                  <>
+                    <dt className="text-cash-green/60">Account Number</dt>
+                    <dd className="text-deep-cash font-mono">{bank.accountNumber}</dd>
+                  </>
+                )}
+                {bank.routingCode && (
+                  <>
+                    <dt className="text-cash-green/60">Routing Code</dt>
+                    <dd className="text-deep-cash font-mono">{bank.routingCode}</dd>
+                  </>
+                )}
               </dl>
             </div>
           )}

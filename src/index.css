@@ -56,4 +56,30 @@
     margin-inline: auto;
     padding-inline: clamp(1rem, 4vw, 3.5rem);
   }
+
+  /* Custom thin scrollbar for modals */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: #E8F5ED;
+    border-radius: 2px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #4FAD72;
+    border-radius: 2px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #1F6F4E;
+  }
+
+  /* Firefox scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #4FAD72 #E8F5ED;
+  }
 }

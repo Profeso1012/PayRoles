@@ -49,13 +49,14 @@ export default function Modal({
     >
       <div
         className={cn(
-          'bg-white rounded-xl shadow-2xl w-full scale-100 transition-transform',
+          'bg-white rounded-xl shadow-2xl w-full scale-100 transition-transform flex flex-col',
+          'max-h-[90vh]', // Cap height at 90% of viewport
           sizeMap[size],
           className,
         )}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-mint-light">
+        <div className="px-6 pt-6 pb-4 flex items-center justify-between border-b border-mint-light shrink-0">
           <h2 className="text-base font-semibold text-deep-cash">{title}</h2>
           <button
             onClick={onClose}
@@ -64,7 +65,10 @@ export default function Modal({
             <X size={18} />
           </button>
         </div>
-        <div className="px-6 py-4">{children}</div>
+        {/* Scrollable content area with custom scrollbar */}
+        <div className="px-6 py-4 overflow-y-auto custom-scrollbar flex-1">
+          {children}
+        </div>
       </div>
     </div>,
     document.body,
