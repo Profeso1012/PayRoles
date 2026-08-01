@@ -58,7 +58,7 @@ export default function DataTable<T>({
 
   return (
     <div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto custom-scrollbar">
         <table className="w-full rounded-lg overflow-hidden border border-mint-light">
           <thead>
             <tr className="bg-deep-cash/5">

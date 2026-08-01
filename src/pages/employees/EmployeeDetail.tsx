@@ -814,39 +814,41 @@ export default function EmployeeDetail() {
               <p className="text-sm text-cash-green/60">No payslips found.</p>
             </div>
           ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-mint-light bg-soft-white">
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase">Period</th>
-                  <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase">Pay Group</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase">Gross</th>
-                  <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase">Net</th>
-                  <th className="px-5 py-3" />
-                </tr>
-              </thead>
-              <tbody>
-                {payslips.map((slip) => (
-                  <tr key={slip.id} className="border-b border-mint-light/50 hover:bg-soft-white transition-colors">
-                    <td className="px-5 py-3 font-medium text-deep-cash">{formatPeriod(slip.period)}</td>
-                    <td className="px-5 py-3 text-cash-green">{slip.payGroupName}</td>
-                    <td className="px-5 py-3 text-right">
-                      <MoneyDisplay amount={slip.grossPay} currency={slip.currency} size="sm" />
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <MoneyDisplay amount={slip.netPay} currency={slip.currency} size="sm" />
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <button
-                        onClick={() => navigate(PATHS.PAYSLIP_VIEWER(slip.payRunId, slip.id))}
-                        className="text-xs text-fresh-cash hover:text-cash-green underline"
-                      >
-                        View
-                      </button>
-                    </td>
+            <div className="overflow-x-auto custom-scrollbar">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-mint-light bg-soft-white">
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Period</th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Pay Group</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Gross</th>
+                    <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase whitespace-nowrap">Net</th>
+                    <th className="px-5 py-3" />
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {payslips.map((slip) => (
+                    <tr key={slip.id} className="border-b border-mint-light/50 hover:bg-soft-white transition-colors">
+                      <td className="px-5 py-3 font-medium text-deep-cash whitespace-nowrap">{formatPeriod(slip.period)}</td>
+                      <td className="px-5 py-3 text-cash-green whitespace-nowrap">{slip.payGroupName}</td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <MoneyDisplay amount={slip.grossPay} currency={slip.currency} size="sm" />
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <MoneyDisplay amount={slip.netPay} currency={slip.currency} size="sm" />
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => navigate(PATHS.PAYSLIP_VIEWER(slip.payRunId, slip.id))}
+                          className="text-xs text-fresh-cash hover:text-cash-green underline"
+                        >
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

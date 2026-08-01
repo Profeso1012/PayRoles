@@ -207,8 +207,9 @@ export default function PayElements() {
         <div className="px-5 py-3 bg-soft-white border-b border-mint-light">
           <p className="text-xs font-semibold text-cash-green uppercase tracking-wide">{title}</p>
         </div>
-        <table className="w-full text-sm">
-          <tbody>
+        <div className="overflow-x-auto custom-scrollbar">
+          <table className="w-full text-sm">
+            <tbody>
             {items.map((el, idx) => (
               <tr
                 key={el.id}
@@ -270,12 +271,13 @@ export default function PayElements() {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: 'clamp(1rem, 3vw, 2rem) clamp(0.5rem, 2vw, 1.5rem)' }}>
       <PageHeader
         title="Pay Elements"
         action={
