@@ -347,6 +347,8 @@ export interface BackendCompensation {
   isActive: boolean;
   breakdown: Record<string, any> | null;
   notes: string | null;
+  voidedAt: string | null; // When this record was voided (entered in error)
+  voidReason: string | null; // Why this record was voided
   createdAt: string;
   updatedAt: string;
 }

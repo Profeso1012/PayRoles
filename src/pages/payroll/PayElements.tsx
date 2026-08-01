@@ -200,10 +200,6 @@ export default function PayElements() {
   const taxes = (elements ?? []).filter((e) => e.type === 'tax');
   const benefits = (elements ?? []).filter((e) => e.type === 'benefit');
 
-  // Check if BASIC_SALARY pay element exists (required for payroll)
-  const hasBasicSalary = elements?.some((e) => e.code === 'BASIC_SALARY' && e.isActive);
-  const basicSalaryCount = elements?.filter((e) => e.code === 'BASIC_SALARY').length || 0;
-
   function ElementGroup({ title, items }: { title: string; items: PayElementDefinition[] }) {
     if (items.length === 0) return null;
     return (
@@ -293,32 +289,16 @@ export default function PayElements() {
         Define earnings, deductions and employer contributions used in payroll calculations.
       </p>
 
-      {/* BASIC_SALARY Warning */}
-      {!hasBasicSalary && elements && elements.length > 0 && (
-        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-6">
-          <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY pay element missing</p>
-            <p className="text-sm text-deep-cash">
-              The <strong>BASIC_SALARY</strong> pay element is required for payroll calculations. Create one with code "BASIC_SALARY" 
-              and type "Earning" to enable payroll processing. This element pulls the salary amount from employee compensation records.
-            </p>
-          </div>
+      {/* BASIC_SALARY Info Note */}
+      <div className="flex items-start gap-3 p-4 bg-mint-light/30 border border-mint-light rounded-lg mb-6">
+        <div>
+          <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY is auto-managed</p>
+          <p className="text-sm text-cash-green">
+            The BASIC_SALARY pay element is automatically created by the system during payroll calculations and pulls amounts directly from employee compensation records. 
+            You don't need to manually create or assign it.
+          </p>
         </div>
-      )}
-
-      {basicSalaryCount > 1 && (
-        <div className="flex items-start gap-3 p-4 bg-cash-gold/10 border border-cash-gold/30 rounded-lg mb-6">
-          <AlertCircle size={18} className="text-cash-gold shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-deep-cash mb-1">Multiple BASIC_SALARY elements found</p>
-            <p className="text-sm text-deep-cash">
-              Found {basicSalaryCount} pay elements with code "BASIC_SALARY". Only one should exist. 
-              Deactivate duplicate entries to avoid payroll calculation errors.
-            </p>
-          </div>
-        </div>
-      )}
+      </div>
 
       {(!elements || elements.length === 0) ? (
         <EmptyState

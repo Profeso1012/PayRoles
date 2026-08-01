@@ -132,6 +132,7 @@ export const ENDPOINTS = {
     DETAIL: (id: string) => `${API_VERSION}/compensation/${id}`,
     CREATE: `${API_VERSION}/compensation`,
     UPDATE: (id: string) => `${API_VERSION}/compensation/${id}`,
+    VOID: (id: string) => `${API_VERSION}/compensation/${id}/void`,
   },
 
   // ---------------------------------------------------------------------------

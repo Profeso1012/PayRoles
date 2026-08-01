@@ -145,10 +145,10 @@ export default function AddEmployee() {
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      // CreateWorkerDto (worker.dto.ts) has no `gender` field at all - the
-      // real backend does not whitelist it, so it must not be sent.
-      // nationalId/bankAccount are sent plain (backend encrypts at rest);
-      // there is no `*Encrypted` request field.
+      // CreateWorkerDto now requires basicSalaryMinor/currency/payFrequency
+      // and automatically creates the first Compensation record atomically.
+      // No separate POST /compensation call needed - the backend creates it
+      // in the same transaction as the worker (new system as of Jan 2025).
       const payload = {
         employeeNumber: employment.employeeNumber,
         firstName: personal.firstName,
@@ -167,41 +167,18 @@ export default function AddEmployee() {
         bankName: bank.bankName || undefined,
         bankAccount: bank.accountNumber || undefined,
         bankRoutingCode: bank.routingCode || undefined,
+        
+        // NEW: Basic salary fields now required in worker creation
+        // Backend automatically creates first compensation record
+        basicSalaryMinor: compensation.basicSalary ? Math.round(parseFloat(compensation.basicSalary) * 100) : 0,
+        currency: 'NGN',
+        payFrequency: compensation.payFrequency || 'monthly',
       };
 
       const employee = await apiClient<Employee>(ENDPOINTS.WORKERS.CREATE, {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-
-      // Create compensation if provided. CreateCompensationDto's amount field
-      // is `amountMinor`, not `basicSalaryMinor`.
-      if (compensation.basicSalary && compensation.effectiveDate) {
-        // Build breakdown object from components
-        const breakdown = compensation.breakdownComponents.length > 0
-          ? compensation.breakdownComponents.reduce((acc, comp) => {
-              if (comp.label && comp.amount) {
-                acc[comp.label] = parseFloat(comp.amount);
-              }
-              return acc;
-            }, {} as Record<string, number>)
-          : undefined;
-
-        await apiClient(ENDPOINTS.COMPENSATION.CREATE, {
-          method: 'POST',
-          body: JSON.stringify({
-            workerId: employee.id,
-            amountMinor: Math.round(parseFloat(compensation.basicSalary) * 100),
-            currency: 'NGN',
-            salaryType: compensation.salaryType,
-            payFrequency: compensation.payFrequency,
-            effectiveDate: compensation.effectiveDate,
-            expiryDate: compensation.expiryDate || undefined,
-            notes: compensation.notes || undefined,
-            breakdown,
-          }),
-        });
-      }
       
       return employee;
     },
@@ -386,10 +363,12 @@ export default function AddEmployee() {
       {step === 2 && (
         <div className="bg-white rounded-xl border border-mint-light p-6">
           <h2 className="text-base font-semibold text-deep-cash mb-1">Compensation</h2>
-          <p className="text-sm text-cash-green/70 mb-5">Optional — can be added later from the employee profile.</p>
+          <p className="text-sm text-cash-green/70 mb-5">
+            Basic salary is required. This will automatically create the employee's first compensation record effective from their hire date.
+          </p>
           <div className="flex flex-col gap-4">
             <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Total Amount (₦)</p>
+              <p className="text-sm text-cash-green font-medium mb-1">Total Amount (₦) *</p>
               <input
                 type="number"
                 className={fieldClass}
@@ -398,114 +377,21 @@ export default function AddEmployee() {
                 placeholder="e.g. 500000"
                 min={0}
               />
-              <p className="text-xs text-cash-green/60 mt-1">Total gross salary amount</p>
+              <p className="text-xs text-cash-green/60 mt-1">Required - Employee's basic salary amount</p>
             </div>
 
-            {/* Salary Breakdown Builder */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-sm text-cash-green font-medium">
-                  Salary Breakdown (Optional)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setCompensation((f) => ({
-                    ...f,
-                    breakdownComponents: [...f.breakdownComponents, { label: '', amount: '' }],
-                  }))}
-                  className="text-xs text-fresh-cash hover:text-deep-cash font-medium flex items-center gap-1"
-                >
-                  <Plus size={12} />
-                  Add Component
-                </button>
-              </div>
-              {compensation.breakdownComponents.length > 0 && (
-                <div className="flex flex-col gap-2 p-3 bg-soft-white rounded-lg border border-mint-light">
-                  {compensation.breakdownComponents.map((comp, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        placeholder="e.g. Basic Salary"
-                        className="flex-1 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
-                        value={comp.label}
-                        onChange={(e) => {
-                          const updated = [...compensation.breakdownComponents];
-                          updated[idx].label = e.target.value;
-                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
-                        }}
-                      />
-                      <input
-                        type="number"
-                        placeholder="Amount"
-                        className="w-32 bg-white border border-mint-light rounded-md px-3 py-2 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
-                        value={comp.amount}
-                        onChange={(e) => {
-                          const updated = [...compensation.breakdownComponents];
-                          updated[idx].amount = e.target.value;
-                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const updated = compensation.breakdownComponents.filter((_, i) => i !== idx);
-                          setCompensation((f) => ({ ...f, breakdownComponents: updated }));
-                        }}
-                        className="p-2 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
-                      >
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Select
-                label="Salary Type"
-                value={compensation.salaryType}
-                options={SALARY_TYPE_OPTIONS}
-                onChange={(v) => setCompensation((f) => ({ ...f, salaryType: v }))}
-              />
-              <Select
-                label="Pay Frequency"
-                value={compensation.payFrequency}
-                options={PAY_FREQUENCY_OPTIONS}
-                onChange={(v) => setCompensation((f) => ({ ...f, payFrequency: v }))}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <p className="text-sm text-cash-green font-medium mb-1">Effective From</p>
-                <input
-                  type="date"
-                  className={fieldClass}
-                  value={compensation.effectiveDate}
-                  onChange={(e) => setCompensation((f) => ({ ...f, effectiveDate: e.target.value }))}
-                />
-              </div>
-              <div>
-                <p className="text-sm text-cash-green font-medium mb-1">Expiry Date (Optional)</p>
-                <input
-                  type="date"
-                  className={fieldClass}
-                  value={compensation.expiryDate}
-                  onChange={(e) => setCompensation((f) => ({ ...f, expiryDate: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Notes (Optional)</p>
-              <textarea
-                className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
-                rows={2}
-                value={compensation.notes}
-                onChange={(e) => setCompensation((f) => ({ ...f, notes: e.target.value }))}
-                placeholder="e.g. Initial salary offer"
-              />
+            <Select
+              label="Pay Frequency"
+              value={compensation.payFrequency}
+              options={PAY_FREQUENCY_OPTIONS}
+              onChange={(v) => setCompensation((f) => ({ ...f, payFrequency: v }))}
+            />
+            
+            <div className="p-3 bg-mint-light/30 rounded-lg border border-mint-light">
+              <p className="text-xs text-cash-green/80">
+                ℹ️ <strong>Note:</strong> The compensation record will use the hire date as the effective date. 
+                Additional fields like salary breakdown, notes, and salary type can be added later by creating a new compensation record if needed.
+              </p>
             </div>
           </div>
         </div>
@@ -615,46 +501,18 @@ export default function AddEmployee() {
             <div>
               <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Compensation</p>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <dt className="text-cash-green/60">Total Amount</dt>
+                <dt className="text-cash-green/60">Basic Salary</dt>
                 <dd className="text-deep-cash font-semibold">
                   ₦{Number(compensation.basicSalary).toLocaleString()}
                 </dd>
-                <dt className="text-cash-green/60">Salary Type</dt>
-                <dd className="text-deep-cash capitalize">{compensation.salaryType}</dd>
                 <dt className="text-cash-green/60">Pay Frequency</dt>
                 <dd className="text-deep-cash capitalize">{compensation.payFrequency}</dd>
                 <dt className="text-cash-green/60">Effective From</dt>
-                <dd className="text-deep-cash">{new Date(compensation.effectiveDate).toLocaleDateString()}</dd>
-                {compensation.expiryDate && (
-                  <>
-                    <dt className="text-cash-green/60">Expiry Date</dt>
-                    <dd className="text-deep-cash">{new Date(compensation.expiryDate).toLocaleDateString()}</dd>
-                  </>
-                )}
-                {compensation.notes && (
-                  <>
-                    <dt className="text-cash-green/60">Notes</dt>
-                    <dd className="text-deep-cash col-span-2">{compensation.notes}</dd>
-                  </>
-                )}
-                {compensation.breakdownComponents.length > 0 && (
-                  <>
-                    <dt className="text-cash-green/60">Breakdown</dt>
-                    <dd className="text-deep-cash col-span-2">
-                      <div className="flex flex-col gap-1 text-xs">
-                        {compensation.breakdownComponents.map((comp, idx) => (
-                          comp.label && comp.amount ? (
-                            <div key={idx} className="flex justify-between">
-                              <span>{comp.label}:</span>
-                              <span className="font-mono">₦{Number(comp.amount).toLocaleString()}</span>
-                            </div>
-                          ) : null
-                        ))}
-                      </div>
-                    </dd>
-                  </>
-                )}
+                <dd className="text-deep-cash">{new Date(employment.hireDate).toLocaleDateString()}</dd>
               </dl>
+              <p className="text-xs text-cash-green/60 mt-2">
+                First compensation record will be automatically created using the hire date as effective date.
+              </p>
             </div>
           )}
           {bank.bankName && (
@@ -694,7 +552,8 @@ export default function AddEmployee() {
             variant="primary"
             disabled={
               (step === 0 && (!personal.firstName || !personal.lastName || !personal.email)) ||
-              (step === 1 && (!employment.employeeNumber || !employment.hireDate || !employment.legalEntityId))
+              (step === 1 && (!employment.employeeNumber || !employment.hireDate || !employment.legalEntityId)) ||
+              (step === 2 && !compensation.basicSalary)
             }
             onClick={() => setStep((s) => s + 1)}
           >
@@ -704,7 +563,7 @@ export default function AddEmployee() {
           <Button
             variant="primary"
             loading={createMutation.isPending}
-            disabled={!personal.firstName || !personal.lastName || !personal.email || !employment.employeeNumber || !employment.hireDate}
+            disabled={!personal.firstName || !personal.lastName || !personal.email || !employment.employeeNumber || !employment.hireDate || !compensation.basicSalary}
             onClick={() => createMutation.mutate()}
           >
             Add Employee

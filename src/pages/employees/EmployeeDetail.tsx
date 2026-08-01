@@ -195,6 +195,8 @@ export default function EmployeeDetail() {
           payFrequency: comp.payFrequency,
           breakdown: comp.breakdown ?? undefined,
           notes: comp.notes ?? undefined,
+          voidedAt: comp.voidedAt ?? undefined,
+          voidReason: comp.voidReason ?? undefined,
         })) satisfies Compensation[];
       } catch (error) {
         console.error('Failed to fetch compensations:', error);
@@ -361,6 +363,9 @@ export default function EmployeeDetail() {
   // confusing extra supersession record in the history.
   const [editCompTarget, setEditCompTarget] = useState<Compensation | null>(null);
   const [editCompForm, setEditCompForm] = useState(blankCompForm);
+  const [voidCompTarget, setVoidCompTarget] = useState<Compensation | null>(null);
+  const [voidReason, setVoidReason] = useState('');
+  
   const editCompensationMutation = useMutation({
     mutationFn: () => {
       // Build breakdown object from components
@@ -393,6 +398,22 @@ export default function EmployeeDetail() {
       setEditCompTarget(null);
     },
     onError: (err) => toast.error('Failed to update compensation', err instanceof Error ? err.message : undefined),
+  });
+
+  const voidCompensationMutation = useMutation({
+    mutationFn: () => {
+      return apiClient(ENDPOINTS.COMPENSATION.VOID(voidCompTarget!.id), {
+        method: 'POST',
+        body: JSON.stringify({ reason: voidReason || undefined }),
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['worker-compensations', id] });
+      toast.success('Compensation voided');
+      setVoidCompTarget(null);
+      setVoidReason('');
+    },
+    onError: (err) => toast.error('Failed to void compensation', err instanceof Error ? err.message : undefined),
   });
 
   function openEditCompensation(comp: Compensation) {
@@ -573,27 +594,63 @@ export default function EmployeeDetail() {
             <div className="relative">
               <div className="absolute left-4 top-2 bottom-2 w-0.5 bg-mint-light" />
               <div className="flex flex-col gap-4">
-                {[...compensations].reverse().map((comp) => (
+                {[...compensations]
+                  .sort((a, b) => {
+                    // Sort: voided last, then by effectiveFrom descending
+                    if (a.voidedAt && !b.voidedAt) return 1;
+                    if (!a.voidedAt && b.voidedAt) return -1;
+                    return new Date(b.effectiveFrom).getTime() - new Date(a.effectiveFrom).getTime();
+                  })
+                  .map((comp) => (
                   <div key={comp.id} className="relative pl-10">
                     <div className={`absolute left-2.5 top-1.5 w-3 h-3 rounded-full border-2 ${
-                      !comp.effectiveTo ? 'border-fresh-cash bg-fresh-cash' : 'border-mint-light bg-white'
+                      comp.voidedAt 
+                        ? 'border-red-400 bg-red-100'
+                        : !comp.effectiveTo 
+                        ? 'border-fresh-cash bg-fresh-cash' 
+                        : 'border-mint-light bg-white'
                     }`} />
-                    <div className="bg-soft-white rounded-lg p-4 border border-mint-light">
+                    <div className={`bg-soft-white rounded-lg p-4 border ${
+                      comp.voidedAt ? 'border-red-200 bg-red-50/30' : 'border-mint-light'
+                    }`}>
                       <div className="flex items-start justify-between gap-2 flex-wrap">
                         <MoneyDisplay amount={comp.grossSalary} currency={comp.currency} size="md" />
                         <div className="flex items-center gap-2">
-                          {!comp.effectiveTo && <Badge variant="success" label="Current" />}
-                          {canWritePayElements && (
-                            <button
-                              onClick={() => openEditCompensation(comp)}
-                              className="p-1 rounded hover:bg-mint-light text-cash-green transition-colors"
-                              title="Edit"
-                            >
-                              <Pencil size={13} />
-                            </button>
+                          {comp.voidedAt ? (
+                            <Badge variant="error" label="VOIDED" />
+                          ) : !comp.effectiveTo ? (
+                            <Badge variant="success" label="Current" />
+                          ) : null}
+                          {canWritePayElements && !comp.voidedAt && (
+                            <>
+                              <button
+                                onClick={() => openEditCompensation(comp)}
+                                className="p-1 rounded hover:bg-mint-light text-cash-green transition-colors"
+                                title="Edit"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                onClick={() => setVoidCompTarget(comp)}
+                                className="p-1 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
+                                title="Void (entered in error)"
+                              >
+                                <X size={13} />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
+                      {comp.voidedAt && (
+                        <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded text-xs">
+                          <p className="text-red-700 font-medium">
+                            Voided on {formatDate(comp.voidedAt)}
+                          </p>
+                          {comp.voidReason && (
+                            <p className="text-red-600 mt-0.5">Reason: {comp.voidReason}</p>
+                          )}
+                        </div>
+                      )}
                       <p className="text-xs text-cash-green/60 mt-1">
                         {formatDate(comp.effectiveFrom)}
                         {comp.effectiveTo ? ` — ${formatDate(comp.effectiveTo)}` : ' — present'}
@@ -626,19 +683,16 @@ export default function EmployeeDetail() {
             )}
           </div>
 
-          {/* BASIC_SALARY Warning */}
-          {workerPayElements && !workerPayElements.some((wpe) => wpe.payElement?.code === 'BASIC_SALARY' && wpe.status === 'active') && (
-            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
-              <AlertCircle size={18} className="text-red-500 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY not assigned</p>
-                <p className="text-sm text-deep-cash">
-                  This employee doesn't have <strong>BASIC_SALARY</strong> assigned. Payroll calculations will fail without it. 
-                  Assign the BASIC_SALARY pay element to enable payroll processing.
-                </p>
-              </div>
+          {/* BASIC_SALARY Info Note */}
+          <div className="flex items-start gap-3 p-4 bg-mint-light/30 border border-mint-light rounded-lg mb-4">
+            <div>
+              <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY is auto-managed</p>
+              <p className="text-sm text-cash-green">
+                Basic salary is automatically pulled from the employee's compensation record during payroll calculations. 
+                You don't need to manually assign it here. Use this tab to assign additional allowances, deductions, or benefits.
+              </p>
             </div>
-          )}
+          </div>
 
           {!workerPayElements ? (
             <div className="flex justify-center py-8"><Spinner /></div>
@@ -1071,7 +1125,9 @@ export default function EmployeeDetail() {
           <Select
             label="Pay Element"
             value={wpeForm.payElementId}
-            options={(payElementCatalog ?? []).filter((pe) => pe.isActive).map((pe) => ({ value: pe.id, label: `${pe.code} — ${pe.name}` }))}
+            options={(payElementCatalog ?? [])
+              .filter((pe) => pe.isActive && pe.code !== 'BASIC_SALARY')  // Filter out BASIC_SALARY
+              .map((pe) => ({ value: pe.id, label: `${pe.code} — ${pe.name}` }))}
             onChange={(v) => setWpeForm((f) => ({ ...f, payElementId: v }))}
             placeholder={payElementCatalog ? 'Select a pay element' : 'Loading...'}
           />
@@ -1204,6 +1260,52 @@ export default function EmployeeDetail() {
         variant="danger"
         isLoading={unassignPayElementMutation.isPending}
       />
+
+      <Modal
+        isOpen={!!voidCompTarget}
+        onClose={() => { setVoidCompTarget(null); setVoidReason(''); }}
+        title="Void Compensation Record"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-sm text-red-700">
+              <strong>Warning:</strong> This marks the record as entered in error and removes it from salary history. 
+              Use this only for data entry mistakes, not for salary changes.
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-cash-green/70 mb-2">
+              Voiding compensation: <strong>₦{voidCompTarget?.grossSalary.toLocaleString()}</strong>
+            </p>
+            <p className="text-xs text-cash-green/60">
+              Effective: {voidCompTarget && formatDate(voidCompTarget.effectiveFrom)}
+              {voidCompTarget?.effectiveTo && ` — ${formatDate(voidCompTarget.effectiveTo)}`}
+            </p>
+          </div>
+          <Input
+            label="Reason (optional)"
+            value={voidReason}
+            onChange={(e) => setVoidReason(e.target.value)}
+            placeholder="e.g. Wrong amount entered, duplicate entry"
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="ghost"
+              onClick={() => { setVoidCompTarget(null); setVoidReason(''); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              loading={voidCompensationMutation.isPending}
+              onClick={() => voidCompensationMutation.mutate()}
+            >
+              Void Record
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

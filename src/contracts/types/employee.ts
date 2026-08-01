@@ -53,6 +53,8 @@ export interface Compensation {
   effectiveTo: string | null; // Mapped from backend's expiryDate
   breakdown?: Record<string, number>; // Optional salary component breakdown
   notes?: string; // Optional notes about the compensation
+  voidedAt?: string | null; // When this record was voided (entered in error)
+  voidReason?: string | null; // Why this record was voided
 }
 
 export interface BankDetail {
