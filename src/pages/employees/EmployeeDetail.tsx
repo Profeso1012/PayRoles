@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers, X } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
-import { mapWorkerFields } from '@/lib/api/transforms';
+import { mapWorkerFields, minorToMajor } from '@/lib/api/transforms';
 import { formatDate, formatPeriod } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import { useToast } from '@/hooks/useToast';
@@ -208,8 +208,52 @@ export default function EmployeeDetail() {
 
   const { data: payslips } = useQuery<Payslip[]>({
     queryKey: ['worker-payslips', id],
-    queryFn: () => apiClient<Payslip[]>(ENDPOINTS.WORKERS.PAYSLIPS(id!)),
-    enabled: !!id && tab === 'payslips',
+    queryFn: async () => {
+      const backendPayslips = await apiClient<any[]>(ENDPOINTS.WORKERS.PAYSLIPS(id!));
+      
+      // Fetch pay run data for each payslip to get period and pay group name
+      const payslipsWithRunData = await Promise.all(
+        backendPayslips.map(async (slip): Promise<Payslip> => {
+          let period: string | undefined = undefined;
+          let payGroupName = '—';
+          
+          // Fetch the payroll run to get period and name
+          try {
+            const run = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(slip.payrollRunId));
+            period = formatPeriod(run.periodStart, run.periodEnd);
+            payGroupName = run.name || '—';
+          } catch {
+            // If run fetch fails, continue with defaults
+          }
+          
+          return {
+            id: slip.id,
+            payRunId: slip.payrollRunId, // Backend uses payrollRunId
+            employeeId: slip.workerId,
+            employeeName: employee ? `${employee.firstName} ${employee.lastName}` : '',
+            employeeNumber: employee?.employeeNumber || '',
+            period,
+            name: slip.name || undefined,
+            payGroupName,
+            elements: slip.payElements?.map((el: any) => ({
+              ...el,
+              amount: minorToMajor(el.amountMinor),
+            })) || [],
+            grossPay: minorToMajor(slip.grossPayMinor),
+            totalDeductions: minorToMajor(slip.deductionsMinor),
+            netPay: minorToMajor(slip.netPayMinor),
+            currency: slip.currency,
+            createdAt: slip.createdAt,
+            generatedAt: slip.generatedAt,
+            issuedAt: slip.issuedAt,
+            payrollWorkerId: slip.payrollWorkerId,
+          };
+        }),
+      );
+      
+      return payslipsWithRunData;
+    },
+    enabled: !!id && tab === 'payslips' && !!employee,
   });
 
   const { data: workerPayElements } = useQuery<BackendWorkerPayElement[]>({

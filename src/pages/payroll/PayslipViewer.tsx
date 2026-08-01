@@ -115,10 +115,12 @@ export default function PayslipViewer() {
 
   const earnings = payslip.elements.filter((e: PayElement) => e.type === 'earning');
   const deductions = payslip.elements.filter((e: PayElement) => e.type === 'deduction');
-  const contributions = payslip.elements.filter((e: PayElement) => e.type === 'employer_contribution');
+  const taxes = payslip.elements.filter((e: PayElement) => e.type === 'tax');
+  const employeeContributions = payslip.elements.filter((e: PayElement) => e.type === 'employee_contribution');
+  const employerContributions = payslip.elements.filter((e: PayElement) => e.type === 'employer_contribution');
 
   return (
-    <div style={{ width: '100%', maxWidth: '800px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+    <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       {/* Toolbar (hidden when printing) */}
       <div className="flex items-center justify-between mb-6 print:hidden">
         <button
@@ -147,58 +149,100 @@ export default function PayslipViewer() {
       {/* Payslip document */}
       <div
         id="payslip-doc"
-        className="bg-white rounded-xl border border-mint-light overflow-hidden"
+        className="bg-gradient-to-br from-white via-mint-light/5 to-white rounded-lg border border-mint-light/40 shadow-lg overflow-hidden"
         style={{ fontFamily: 'system-ui, sans-serif' }}
       >
-        {/* Header */}
-        <div className="bg-deep-cash px-8 py-6">
+        {/* Header with company branding */}
+        <div className="bg-white px-8 py-6 border-b-4 border-fresh-cash">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div>
-              <img src="/assets/payrole-logo.png" alt="PayRole" className="h-7 brightness-0 invert mb-3" />
-              <p className="text-mint-light/70 text-xs">{payslip.payGroupName || payslip.name || '—'}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-white font-bold text-lg">{formatPeriod(payslip.period)}</p>
-              <p className="text-mint-light/70 text-xs mt-0.5">Pay Slip</p>
+              <img src="/assets/payrole-logo.png" alt="PayRole" className="h-7 mb-1" />
+              <p className="text-cash-green/60 text-xs italic">Empowering your workforce</p>
             </div>
           </div>
         </div>
 
-        <div className="px-8 py-6 border-b border-mint-light">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-2">Employee</p>
-              <p className="text-lg font-bold text-deep-cash">{payslip.employeeName}</p>
-              <p className="text-sm text-cash-green font-mono mt-0.5">{payslip.employeeNumber}</p>
-            </div>
-            <div className="text-right">
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-2">Issued</p>
-              <p className="text-sm font-medium text-deep-cash">{formatDate(payslip.issuedAt || payslip.createdAt || '')}</p>
-              <p className="text-xs text-cash-green/60 mt-0.5">ID: {payslip.id}</p>
-            </div>
-          </div>
-        </div>
-
+        {/* Company & Employee Info Table */}
         <div className="px-8 py-6">
-          <div className="grid grid-cols-2 gap-8">
-            {/* Earnings */}
-            <div>
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Earnings</p>
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
               <table className="w-full text-sm">
                 <tbody>
-                  {earnings.map((el) => (
-                    <tr key={el.id}>
-                      <td className="py-1.5 text-deep-cash">{el.name}</td>
-                      <td className="py-1.5 text-right font-medium text-deep-cash tabular-nums">
+                  <tr className="border-b border-mint-light/50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Company Name:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium">{payslip.payGroupName || payslip.name || 'PayRole'}</td>
+                  </tr>
+                  <tr className="border-b border-mint-light/50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Pay Period:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium">{payslip.period || formatPeriod(payslip.period)}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Employee Name:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium">{payslip.employeeName}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <table className="w-full text-sm">
+                <tbody>
+                  <tr className="border-b border-mint-light/50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Employee ID:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium font-mono">{payslip.employeeNumber}</td>
+                  </tr>
+                  <tr className="border-b border-mint-light/50">
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Issue Date:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium">{formatDate(payslip.issuedAt || payslip.createdAt || '')}</td>
+                  </tr>
+                  <tr>
+                    <td className="px-4 py-2.5 text-xs font-semibold text-deep-cash bg-fresh-cash/10">Currency:</td>
+                    <td className="px-4 py-2.5 text-deep-cash font-medium">{payslip.currency}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Payslip Title */}
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold text-deep-cash tracking-wide">Employee</h1>
+            <h2 className="text-3xl font-bold text-fresh-cash tracking-wider">PAYSLIP</h2>
+          </div>
+
+          {/* Earnings and Deductions Tables */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            {/* Earnings Table */}
+            <div className="bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <div className="bg-deep-cash text-white px-4 py-2 text-center font-semibold text-sm uppercase tracking-wide">
+                Earnings
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-fresh-cash/10 border-b border-fresh-cash/30">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-deep-cash">Description</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-deep-cash">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {earnings.map((el, idx) => (
+                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                      <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
                         {formatMoney(el.amount, el.currency)}
                       </td>
                     </tr>
                   ))}
+                  {earnings.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 text-center text-cash-green/50 text-xs">No earnings</td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-mint-light">
-                    <td className="pt-2 text-sm font-semibold text-deep-cash">Total Earnings</td>
-                    <td className="pt-2 text-right font-bold text-deep-cash tabular-nums">
+                  <tr className="bg-fresh-cash/20 border-t-2 border-deep-cash/20">
+                    <td className="px-4 py-3 font-bold text-deep-cash">Total Earning</td>
+                    <td className="px-4 py-3 text-right font-bold text-deep-cash tabular-nums">
                       {formatMoney(payslip.grossPay, payslip.currency)}
                     </td>
                   </tr>
@@ -206,25 +250,38 @@ export default function PayslipViewer() {
               </table>
             </div>
 
-            {/* Deductions */}
-            <div>
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Deductions</p>
+            {/* Deductions Table */}
+            <div className="bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <div className="bg-deep-cash text-white px-4 py-2 text-center font-semibold text-sm uppercase tracking-wide">
+                Deductions
+              </div>
               <table className="w-full text-sm">
-                <tbody>
-                  {deductions.map((el) => (
-                    <tr key={el.id}>
-                      <td className="py-1.5 text-deep-cash">{el.name}</td>
-                      <td className="py-1.5 text-right font-medium text-red-500 tabular-nums">
-                        ({formatMoney(el.amount, el.currency)})
+                <thead>
+                  <tr className="bg-fresh-cash/10 border-b border-fresh-cash/30">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-deep-cash">Description</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-deep-cash">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {deductions.map((el, idx) => (
+                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                      <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
+                        {formatMoney(el.amount, el.currency)}
                       </td>
                     </tr>
                   ))}
+                  {deductions.length === 0 && (
+                    <tr>
+                      <td colSpan={2} className="px-4 py-3 text-center text-cash-green/50 text-xs">No deductions</td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-mint-light">
-                    <td className="pt-2 text-sm font-semibold text-deep-cash">Total Deductions</td>
-                    <td className="pt-2 text-right font-bold text-red-500 tabular-nums">
-                      ({formatMoney(payslip.totalDeductions, payslip.currency)})
+                  <tr className="bg-fresh-cash/20 border-t-2 border-deep-cash/20">
+                    <td className="px-4 py-3 font-bold text-deep-cash">Total Deductions</td>
+                    <td className="px-4 py-3 text-right font-bold text-deep-cash tabular-nums">
+                      {formatMoney(payslip.totalDeductions, payslip.currency)}
                     </td>
                   </tr>
                 </tfoot>
@@ -232,49 +289,121 @@ export default function PayslipViewer() {
             </div>
           </div>
 
-          {contributions.length > 0 && (
-            <div className="mt-6">
-              <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">
-                Employer Contributions (informational)
-              </p>
+          {/* Taxes Section */}
+          {taxes.length > 0 && (
+            <div className="mb-6 bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <div className="bg-deep-cash text-white px-4 py-2 text-center font-semibold text-sm uppercase tracking-wide">
+                Taxes
+              </div>
               <table className="w-full text-sm">
-                <tbody>
-                  {contributions.map((el) => (
-                    <tr key={el.id} className="text-cash-green/70">
-                      <td className="py-1.5">{el.name}</td>
-                      <td className="py-1.5 text-right tabular-nums">{formatMoney(el.amount, el.currency)}</td>
+                <thead>
+                  <tr className="bg-fresh-cash/10 border-b border-fresh-cash/30">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-deep-cash">Description</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-deep-cash">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {taxes.map((el, idx) => (
+                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                      <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
+                        {formatMoney(el.amount, el.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-fresh-cash/20 border-t-2 border-deep-cash/20">
+                    <td className="px-4 py-3 font-bold text-deep-cash">Total Taxes</td>
+                    <td className="px-4 py-3 text-right font-bold text-deep-cash tabular-nums">
+                      {formatMoney(taxes.reduce((sum, el) => sum + el.amount, 0), payslip.currency)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* Employee Contributions Section */}
+          {employeeContributions.length > 0 && (
+            <div className="mb-6 bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <div className="bg-deep-cash text-white px-4 py-2 text-center font-semibold text-sm uppercase tracking-wide">
+                Employee Contributions
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-fresh-cash/10 border-b border-fresh-cash/30">
+                    <th className="px-4 py-2 text-left text-xs font-semibold text-deep-cash">Description</th>
+                    <th className="px-4 py-2 text-right text-xs font-semibold text-deep-cash">Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white">
+                  {employeeContributions.map((el, idx) => (
+                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                      <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
+                      <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
+                        {formatMoney(el.amount, el.currency)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-fresh-cash/20 border-t-2 border-deep-cash/20">
+                    <td className="px-4 py-3 font-bold text-deep-cash">Total Contributions</td>
+                    <td className="px-4 py-3 text-right font-bold text-deep-cash tabular-nums">
+                      {formatMoney(employeeContributions.reduce((sum, el) => sum + el.amount, 0), payslip.currency)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+
+          {/* Net Pay Banner */}
+          <div className="bg-gradient-to-r from-deep-cash to-cash-green rounded-lg px-8 py-5 flex items-center justify-between shadow-md">
+            <div>
+              <p className="text-white/80 text-sm font-semibold uppercase tracking-wide">Net Pay</p>
+              <p className="text-white text-3xl font-bold mt-1 tabular-nums">
+                {formatMoney(payslip.netPay, payslip.currency)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-white/70 text-xs uppercase tracking-wide">Payslip ID</p>
+              <p className="text-white/90 text-xs font-mono mt-0.5">{payslip.id.slice(0, 8)}</p>
+            </div>
+          </div>
+
+          {/* Employer Contributions */}
+          {employerContributions.length > 0 && (
+            <div className="mt-6 bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
+              <div className="bg-fresh-cash/10 px-4 py-2 border-b border-fresh-cash/30">
+                <p className="text-xs font-semibold text-deep-cash uppercase tracking-wide">
+                  Employer Contributions (For Information Only)
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <tbody className="bg-white">
+                  {employerContributions.map((el, idx) => (
+                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                      <td className="px-4 py-2.5 text-cash-green/80 border-b border-mint-light/20">{el.name}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums text-cash-green/80 border-b border-mint-light/20">{formatMoney(el.amount, el.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           )}
-
-          {/* Net pay summary */}
-          <div className="mt-6 pt-5 border-t-2 border-deep-cash/10">
-            <div className="bg-deep-cash rounded-xl px-6 py-4 flex items-center justify-between">
-              <div>
-                <p className="text-mint-light/70 text-xs font-semibold uppercase tracking-wide">Net Pay</p>
-                <p className="text-white text-2xl font-bold mt-0.5 tabular-nums">
-                  {formatMoney(payslip.netPay, payslip.currency)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-mint-light/60 text-xs">{payslip.currency}</p>
-                <p className="text-mint-light/60 text-xs mt-0.5">{formatPeriod(payslip.period)}</p>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
-        <div className="px-8 py-4 bg-soft-white border-t border-mint-light text-xs text-cash-green/50 text-center">
-          Generated by PayRole · {formatDate(payslip.generatedAt || payslip.createdAt || '')} · This is a computer-generated document and requires no signature.
+        <div className="px-8 py-4 bg-gradient-to-r from-white to-mint-light/10 border-t border-fresh-cash/20">
+          <p className="text-xs text-cash-green/60 text-center italic">
+            Generated by PayRole on {formatDate(payslip.generatedAt || payslip.createdAt || '')} · This is a computer-generated document and requires no signature.
+          </p>
         </div>
       </div>
 
-      {/* Calculation detail - a diagnostic view of how each line above was
-          actually derived, not part of the official payslip document. */}
+      {/* Calculation detail - diagnostic view */}
       {payslip.payrollWorkerId && (
         <div className="mt-4 print:hidden">
           <button
@@ -315,8 +444,6 @@ export default function PayslipViewer() {
                               {item.formulaUsed ?? '—'}
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums text-cash-green/70">
-                              {/* originalAmount is a decimal(18,4) column - can carry a fractional
-                                  part, which BigInt()-based minorToMajor would throw on. */}
                               {formatMoney(Number(item.originalAmount) / 100, payslip.currency)}
                             </td>
                             <td className="px-4 py-2.5 text-right tabular-nums font-medium text-deep-cash">
