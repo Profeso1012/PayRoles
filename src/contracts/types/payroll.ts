@@ -98,7 +98,7 @@ export interface Payslip {
   employeeId: string;
   employeeName: string;
   employeeNumber: string;
-  period: string;
+  period?: string;
   name?: string;
   payGroupName?: string;
   elements: PayElement[];

@@ -231,14 +231,19 @@ export default function PayRunDetail() {
   const [approveModalOpen, setApproveModalOpen] = useState(false);
 
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
   const cancelMutation = useMutation({
     mutationFn: () =>
-      apiClient(ENDPOINTS.PAYROLL.RUNS.CANCEL(id!), { method: 'PATCH', body: JSON.stringify({}) }),
+      apiClient(ENDPOINTS.PAYROLL.RUNS.CANCEL(id!), {
+        method: 'PATCH',
+        body: JSON.stringify(cancelReason ? { reason: cancelReason } : {}),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run cancelled');
       setCancelModalOpen(false);
+      setCancelReason('');
     },
     onError: (err) => toast.error('Failed to cancel pay run', err instanceof Error ? err.message : undefined),
   });
@@ -762,16 +767,30 @@ export default function PayRunDetail() {
         isLoading={approveMutation.isPending}
       />
 
-      <ConfirmModal
-        isOpen={cancelModalOpen}
-        onClose={() => setCancelModalOpen(false)}
-        onConfirm={() => cancelMutation.mutate()}
-        title="Cancel Pay Run"
-        message="Cancel this pay run before approval? This cannot be undone."
-        confirmLabel="Cancel Run"
-        variant="danger"
-        isLoading={cancelMutation.isPending}
-      />
+      <Modal isOpen={cancelModalOpen} onClose={() => setCancelModalOpen(false)} title="Cancel Pay Run" size="sm">
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Cancel this pay run before it reaches approval? Optionally provide a reason for cancellation.
+          </p>
+          <textarea
+            className="w-full border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+            rows={3}
+            value={cancelReason}
+            onChange={(e) => setCancelReason(e.target.value)}
+            placeholder="e.g. Incorrect pay period selected (optional)"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setCancelModalOpen(false)}>Cancel</Button>
+            <Button
+              variant="danger"
+              loading={cancelMutation.isPending}
+              onClick={() => cancelMutation.mutate()}
+            >
+              Cancel Pay Run
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={reverseModalOpen} onClose={() => setReverseModalOpen(false)} title="Reverse Pay Run" size="sm">
         <div className="flex flex-col gap-4">

@@ -41,8 +41,10 @@ export function formatDate(iso: string): string {
   }).format(new Date(iso));
 }
 
-export function formatPeriod(period: string): string {
+export function formatPeriod(period: string | undefined | null): string {
+  if (!period) return '—';
   const [year, month] = period.split('-');
+  if (!year || !month) return period; // Return original if not in expected format
   return new Intl.DateTimeFormat('en-GB', {
     month: 'long',
     year: 'numeric',

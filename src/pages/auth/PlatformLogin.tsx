@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, Shield } from 'lucide-react';
+import { Eye, EyeOff, Shield } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
@@ -16,38 +16,27 @@ interface BackendPlatformUserMe {
   platformRole: string;
 }
 
-type Step = 'email' | 'password';
-
 /**
  * Platform Admin Login Page
  * 
- * Separate login flow for platform administrators.
+ * Single-page login flow for platform administrators.
  * Uses /api/platform/auth/login endpoint (no tenant slug required).
  */
 export default function PlatformLogin() {
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
 
-  const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const passwordRef = useRef<HTMLInputElement>(null);
-
-  const handleEmailNext = () => {
+  const handleSignIn = async () => {
     if (!email.trim()) {
       setError('Please enter your email');
       return;
     }
-    setStep('password');
-    setError('');
-    setTimeout(() => passwordRef.current?.focus(), 50);
-  };
-
-  const handleSignIn = async () => {
     if (!password.trim()) {
       setError('Please enter your password');
       return;
@@ -136,76 +125,49 @@ export default function PlatformLogin() {
           </p>
         </div>
 
-        {step === 'email' && (
-          <>
-            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Platform Sign in</h1>
+        <h1 className="text-2xl font-semibold text-deep-cash mb-6">Platform Sign in</h1>
 
-            <div>
-              <p className="text-xs font-medium text-cash-green mb-1.5">Administrator Email</p>
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-medium text-cash-green mb-1.5">Administrator Email</p>
+            <input
+              className="w-full bg-transparent border-0 border-b border-cash-green/30 py-3 text-base text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="admin@platform.internal"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-cash-green mb-1.5">Password</p>
+            <div className="relative">
               <input
-                className="w-full bg-transparent border-0 border-b border-cash-green/30 py-3 text-base text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
-                placeholder="admin@platform.internal"
-                autoFocus
+                className="w-full bg-soft-white border-0 border-b border-cash-green/30 py-3 pr-10 text-base text-deep-cash outline-none focus:border-cash-green transition-colors"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-1 top-1/2 -translate-y-1/2 text-cash-green/60 hover:text-cash-green"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
+          </div>
+        </div>
 
-            {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
+        {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
-            <div className="flex justify-end mt-6">
-              <Button variant="primary" onClick={handleEmailNext} loading={false}>
-                Next
-              </Button>
-            </div>
-          </>
-        )}
-
-        {step === 'password' && (
-          <>
-            <button
-              onClick={() => setStep('email')}
-              className="flex items-center gap-2 text-sm text-deep-cash hover:underline mb-5"
-            >
-              <ArrowLeft size={16} />
-              <span className="truncate max-w-[200px]">{email}</span>
-            </button>
-
-            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Enter password</h1>
-
-            <div>
-              <p className="text-xs font-medium text-cash-green mb-1.5">Password</p>
-              <div className="relative">
-                <input
-                  ref={passwordRef}
-                  className="w-full bg-soft-white border-0 border-b border-cash-green/30 py-3 pr-10 text-base text-deep-cash outline-none focus:border-cash-green transition-colors"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-cash-green/60 hover:text-cash-green"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
-
-            <div className="flex justify-end mt-6">
-              <Button variant="primary" onClick={handleSignIn} loading={loading}>
-                Sign in
-              </Button>
-            </div>
-          </>
-        )}
+        <div className="flex justify-end mt-6">
+          <Button variant="primary" onClick={handleSignIn} loading={loading}>
+            Sign in
+          </Button>
+        </div>
 
         <div className="mt-8 text-center">
           <button

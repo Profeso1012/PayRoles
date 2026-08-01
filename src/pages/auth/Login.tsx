@@ -47,13 +47,13 @@ async function buildAuthUser(): Promise<AuthUser> {
   };
 }
 
-type Step = 'email' | 'tenant' | 'password';
+type Step = 'slug' | 'credentials';
 
 export default function Login() {
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
 
-  const [step, setStep] = useState<Step>('email');
+  const [step, setStep] = useState<Step>('slug');
   const [email, setEmail] = useState('');
   const [tenantSlug, setTenantSlug] = useState('');
   const [password, setPassword] = useState('');
@@ -61,30 +61,24 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const tenantRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
-  const handleEmailNext = () => {
-    if (!email.trim()) {
-      setError('Please enter your email');
-      return;
-    }
-    setStep('tenant');
-    setError('');
-    setTimeout(() => tenantRef.current?.focus(), 50);
-  };
-
-  const handleTenantNext = () => {
+  const handleSlugNext = () => {
     if (!tenantSlug.trim()) {
       setError('Please enter your company code');
       return;
     }
-    setStep('password');
+    setStep('credentials');
     setError('');
-    setTimeout(() => passwordRef.current?.focus(), 50);
+    setTimeout(() => emailRef.current?.focus(), 50);
   };
 
   const handleSignIn = async () => {
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
     if (!password.trim()) {
       setError('Please enter your password');
       return;
@@ -131,61 +125,18 @@ export default function Login() {
       <div className="w-full max-w-sm mx-auto">
         <img src="/assets/payrole-logo.png" alt="PayRole" className="h-8 mb-10" />
 
-        {step === 'email' && (
+        {step === 'slug' && (
           <>
-            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Sign in</h1>
+            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Sign in to PayRole</h1>
 
             <div>
-              <p className="text-xs font-medium text-cash-green mb-1.5">Email address</p>
+              <p className="text-xs font-medium text-cash-green mb-1.5">Company code</p>
               <input
-                className="w-full bg-transparent border-0 border-b border-cash-green/30 py-3 text-base text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
-                placeholder="you@company.com"
-                autoFocus
-              />
-            </div>
-
-            {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
-
-            <div className="flex justify-end mt-6 mb-8">
-              <Button variant="primary" onClick={handleEmailNext} loading={false}>
-                Next
-              </Button>
-            </div>
-
-            <div className="h-px bg-cash-green/10 mb-6" />
-
-            <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
-              <KeyRound size={20} className="text-cash-green/50 flex-shrink-0" />
-              <span>Forgot your password? Contact your administrator to reset it.</span>
-            </div>
-          </>
-        )}
-
-        {step === 'tenant' && (
-          <>
-            <button
-              onClick={() => setStep('email')}
-              className="flex items-center gap-2 text-sm text-deep-cash hover:underline mb-5"
-            >
-              <ArrowLeft size={16} />
-              <span className="truncate max-w-[200px]">{email}</span>
-            </button>
-
-            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Company code</h1>
-
-            <div>
-              <p className="text-xs font-medium text-cash-green mb-1.5">Enter your company code</p>
-              <input
-                ref={tenantRef}
                 className="w-full bg-transparent border-0 border-b border-cash-green/30 py-3 text-base text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
                 type="text"
                 value={tenantSlug}
                 onChange={(e) => setTenantSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
-                onKeyDown={(e) => e.key === 'Enter' && handleTenantNext()}
+                onKeyDown={(e) => e.key === 'Enter' && handleSlugNext()}
                 placeholder="e.g., acme-corp"
                 autoFocus
               />
@@ -197,7 +148,7 @@ export default function Login() {
             {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
             <div className="flex justify-end mt-6 mb-8">
-              <Button variant="primary" onClick={handleTenantNext} loading={false}>
+              <Button variant="primary" onClick={handleSlugNext} loading={false}>
                 Next
               </Button>
             </div>
@@ -211,43 +162,53 @@ export default function Login() {
           </>
         )}
 
-        {step === 'password' && (
+        {step === 'credentials' && (
           <>
             <button
-              onClick={() => setStep('tenant')}
+              onClick={() => setStep('slug')}
               className="flex items-center gap-2 text-sm text-deep-cash hover:underline mb-5"
             >
               <ArrowLeft size={16} />
               <span className="truncate max-w-[200px]">{tenantSlug}</span>
             </button>
 
-            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Enter password</h1>
+            <h1 className="text-2xl font-semibold text-deep-cash mb-6">Sign in</h1>
 
-            <div>
-              <p className="text-xs font-medium text-cash-green mb-1.5">Password</p>
-              <div className="relative">
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs font-medium text-cash-green mb-1.5">Email address</p>
                 <input
-                  ref={passwordRef}
-                  className="w-full bg-soft-white border-0 border-b border-cash-green/30 py-3 pr-10 text-base text-deep-cash outline-none focus:border-cash-green transition-colors"
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
+                  ref={emailRef}
+                  className="w-full bg-transparent border-0 border-b border-cash-green/30 py-3 text-base text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
                   autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 text-cash-green/60 hover:text-cash-green"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
+              </div>
+
+              <div>
+                <p className="text-xs font-medium text-cash-green mb-1.5">Password</p>
+                <div className="relative">
+                  <input
+                    ref={passwordRef}
+                    className="w-full bg-soft-white border-0 border-b border-cash-green/30 py-3 pr-10 text-base text-deep-cash outline-none focus:border-cash-green transition-colors"
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSignIn()}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 text-cash-green/60 hover:text-cash-green"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
             </div>
-
-            <p className="text-sm text-cash-green/70 mt-3">
-              Forgot your password? Contact your administrator to reset it.
-            </p>
 
             {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
@@ -255,6 +216,13 @@ export default function Login() {
               <Button variant="primary" onClick={handleSignIn} loading={loading}>
                 Sign in
               </Button>
+            </div>
+
+            <div className="h-px bg-cash-green/10 mb-6" />
+
+            <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
+              <KeyRound size={20} className="text-cash-green/50 flex-shrink-0" />
+              <span>Forgot your password? Contact your administrator to reset it.</span>
             </div>
           </>
         )}
