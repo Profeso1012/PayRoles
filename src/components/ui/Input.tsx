@@ -7,7 +7,7 @@ interface InputProps {
   type?: 'text' | 'email' | 'password' | 'number' | 'date';
   placeholder?: string;
   error?: string;
-  hint?: string;
+  hint?: React.ReactNode;
   leadingIcon?: React.ReactNode;
   trailingIcon?: React.ReactNode;
   disabled?: boolean;

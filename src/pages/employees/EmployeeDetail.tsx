@@ -5,7 +5,7 @@ import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields, minorToMajor } from '@/lib/api/transforms';
-import { formatDate, formatPeriod } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import { useToast } from '@/hooks/useToast';
 import { useAuthStore } from '@/store/authStore';
@@ -77,6 +77,14 @@ const blankWpeForm = {
   endDate: '',
   remarks: '',
 };
+
+// Helper to format period from start/end dates or single period string
+function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
+  if (period) return period;
+  if (!periodStart) return '—';
+  const start = new Date(periodStart);
+  return start.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+}
 
 const TAB_IDS = ['profile', 'compensation', 'payElements', 'payslips'];
 

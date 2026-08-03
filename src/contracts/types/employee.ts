@@ -18,6 +18,12 @@ export interface Employee {
   status: 'active' | 'inactive' | 'suspended' | 'archived';
   terminationDate: string | null;
   avatarUrl: string | null;
+  // Flat on the real Worker entity (see BackendWorker in lib/api/types.ts) -
+  // not sub-objects/relations.
+  legalEntityId?: string | null;
+  position?: string | null;
+  department?: string | null;
+  employmentType?: 'full_time' | 'part_time' | 'contract' | 'temporary' | 'intern';
   // Real Worker entity keeps bank fields flat (not a sub-array) - see BackendWorker
   // in lib/api/types.ts. `bankDetails` is kept only for pages not yet migrated off it.
   bankName?: string | null;

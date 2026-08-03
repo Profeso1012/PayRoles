@@ -63,7 +63,7 @@ export interface PayRunEmployee {
 export interface PayElement {
   id: string;
   name: string;
-  type: 'earning' | 'deduction' | 'employer_contribution';
+  type: 'earning' | 'deduction' | 'employer_contribution' | 'tax' | 'benefit';
   amount: number;
   currency: string;
   isStatutory: boolean;

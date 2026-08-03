@@ -14,6 +14,8 @@ interface SelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   error?: string;
+  hint?: React.ReactNode;
+  required?: boolean;
   disabled?: boolean;
   className?: string;
 }
@@ -25,6 +27,8 @@ export default function Select({
   onChange,
   placeholder = 'Select an option',
   error,
+  hint,
+  required,
   disabled,
   className,
 }: SelectProps) {
@@ -71,7 +75,10 @@ export default function Select({
   return (
     <div ref={containerRef} className={cn('flex flex-col gap-1', className)}>
       {label && (
-        <span className="text-sm text-cash-green font-medium">{label}</span>
+        <span className="text-sm text-cash-green font-medium">
+          {label}
+          {required && <span className="ml-1 text-red-500">*</span>}
+        </span>
       )}
       <div className="relative">
         <button
@@ -130,6 +137,7 @@ export default function Select({
         )}
       </div>
       {error && <p className="text-xs text-red-500">{error}</p>}
+      {!error && hint && <p className="text-xs text-gray-400">{hint}</p>}
     </div>
   );
 }

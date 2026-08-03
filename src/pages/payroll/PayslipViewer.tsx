@@ -116,7 +116,7 @@ export default function PayslipViewer() {
   const earnings = payslip.elements.filter((e: PayElement) => e.type === 'earning');
   const deductions = payslip.elements.filter((e: PayElement) => e.type === 'deduction');
   const taxes = payslip.elements.filter((e: PayElement) => e.type === 'tax');
-  const employeeContributions = payslip.elements.filter((e: PayElement) => e.type === 'employee_contribution');
+  const benefits = payslip.elements.filter((e: PayElement) => e.type === 'benefit');
   const employerContributions = payslip.elements.filter((e: PayElement) => e.type === 'employer_contribution');
 
   return (
@@ -332,11 +332,11 @@ export default function PayslipViewer() {
             </div>
           )}
 
-          {/* Employee Contributions Section */}
-          {employeeContributions.length > 0 && (
+          {/* Benefits Section */}
+          {benefits.length > 0 && (
             <div className="mb-6 bg-white rounded-lg border border-fresh-cash/30 overflow-hidden">
               <div className="bg-deep-cash text-white px-4 py-2 text-center font-semibold text-sm uppercase tracking-wide">
-                Employee Contributions
+                Benefits
               </div>
               <table className="w-full text-sm">
                 <thead>
@@ -346,7 +346,7 @@ export default function PayslipViewer() {
                   </tr>
                 </thead>
                 <tbody className="bg-white">
-                  {employeeContributions.map((el, idx) => (
+                  {benefits.map((el, idx) => (
                     <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
                       <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
                       <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
@@ -357,9 +357,9 @@ export default function PayslipViewer() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-fresh-cash/20 border-t-2 border-deep-cash/20">
-                    <td className="px-4 py-3 font-bold text-deep-cash">Total Contributions</td>
+                    <td className="px-4 py-3 font-bold text-deep-cash">Total Benefits</td>
                     <td className="px-4 py-3 text-right font-bold text-deep-cash tabular-nums">
-                      {formatMoney(employeeContributions.reduce((sum, el) => sum + el.amount, 0), payslip.currency)}
+                      {formatMoney(benefits.reduce((sum, el) => sum + el.amount, 0), payslip.currency)}
                     </td>
                   </tr>
                 </tfoot>
