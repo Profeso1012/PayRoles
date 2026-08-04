@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, ListChecks, BadgeCheck, Settings2, LayoutDashboard } from 'lucide-react';
-import { apiClient, apiClientWithMeta, BASE_URL } from '@/lib/api';
+import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, ListChecks, BadgeCheck, Settings2, LayoutDashboard, FileBarChart } from 'lucide-react';
+import { apiClient, apiClientWithMeta, downloadFile } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
 import { useAuthStore } from '@/store/authStore';
@@ -12,12 +12,28 @@ import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
+import Select from '@/components/ui/Select';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import type { BackendDisbursementBatch, BackendBatchStatus, BackendDisbursementTransaction, BackendTransactionStatus } from '@/lib/api/types';
 import type { PayRun } from '@contracts/types/payroll';
+
+// Batch statuses where money has already moved or the batch is otherwise
+// resolved - these no longer count toward "still pending disbursement".
+// completed/reconciled/expired/reversed never actually occur in the current
+// backend (dead states - see disbursement audit), but are excluded anyway so
+// the stat card stays correct if that ever changes.
+const RESOLVED_BATCH_STATUSES: BackendBatchStatus[] = [
+  'paid', 'completed', 'reconciled', 'cancelled', 'expired', 'reversed',
+];
+
+const BULK_FILE_FORMAT_OPTIONS = [
+  { value: 'csv', label: 'CSV' },
+  { value: 'excel', label: 'Excel (.xlsx)' },
+  { value: 'nibss', label: 'NIBSS (pipe-delimited)' },
+];
 
 const txStatusVariant: Record<BackendTransactionStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
   pending: 'draft',
@@ -102,34 +118,18 @@ const batchStatusLabel: Record<BackendBatchStatus, string> = {
   awaiting_confirmation: 'Awaiting Confirmation',
 };
 
-/** Authenticated blob download - apiClient always parses JSON, this streams raw bytes instead. */
-async function downloadFile(path: string, fallbackFilename: string) {
-  const { accessToken } = useAuthStore.getState();
-  const response = await fetch(`${BASE_URL}${path}`, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-  });
-  if (!response.ok) throw new Error('Download failed');
-  const blob = await response.blob();
-  const disposition = response.headers.get('Content-Disposition') || '';
-  const match = /filename="?([^"]+)"?/.exec(disposition);
-  const filename = match?.[1] || fallbackFilename;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 export default function PaymentFiles() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  const canApprove = role === 'finance_manager' || role === 'tenant_admin' || role === 'super_admin';
-  const canManage = canApprove || role === 'payroll_manager' || role === 'payroll_officer';
+  // Backend has one permission (DISBURSEMENT_MANAGE) covering initiate,
+  // approve, reject, execute, retry, cancel, confirm, and mark-paid - there
+  // is no separate "approve" permission, so every DISBURSEMENT_MANAGE holder
+  // (tenant_admin/super_admin/finance_manager/payroll_manager) can do all of
+  // it. DISBURSEMENT_CONFIGURE (provider/settings) is narrower - see canConfigure.
+  const canManage = role === 'finance_manager' || role === 'payroll_manager' || role === 'tenant_admin' || role === 'super_admin';
+  const canConfigure = role === 'tenant_admin' || role === 'super_admin';
 
   const [rejectTarget, setRejectTarget] = useState<DisbursementRow | null>(null);
   const [rejectReason, setRejectReason] = useState('');
@@ -143,6 +143,9 @@ export default function PaymentFiles() {
   const [confirmRemarks, setConfirmRemarks] = useState('');
   const [approveTarget, setApproveTarget] = useState<DisbursementRow | null>(null);
   const [executeTarget, setExecuteTarget] = useState<DisbursementRow | null>(null);
+  const [downloadTarget, setDownloadTarget] = useState<DisbursementRow | null>(null);
+  const [downloadFormat, setDownloadFormat] = useState<'csv' | 'excel' | 'nibss'>('csv');
+  const [downloading, setDownloading] = useState(false);
 
   const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
@@ -304,22 +307,28 @@ export default function PaymentFiles() {
     onError: (err) => toast.error('Failed to cancel batch', err instanceof Error ? err.message : undefined),
   });
 
-  const handleDownload = async (row: DisbursementRow) => {
-    if (!row.batch) return;
+  const fileExtension: Record<typeof downloadFormat, string> = { csv: 'csv', excel: 'xlsx', nibss: 'txt' };
+
+  const handleDownload = async () => {
+    if (!downloadTarget?.batch) return;
+    setDownloading(true);
     try {
       await downloadFile(
-        ENDPOINTS.DISBURSEMENT.BULK_FILE(row.run.id, row.batch.id, 'csv'),
-        `${row.batch.reference}.csv`,
+        ENDPOINTS.DISBURSEMENT.BULK_FILE(downloadTarget.run.id, downloadTarget.batch.id, downloadFormat),
+        `${downloadTarget.batch.reference}.${fileExtension[downloadFormat]}`,
       );
       toast.success('File downloaded');
-    } catch {
-      toast.error('Failed to download file');
+      setDownloadTarget(null);
+    } catch (err) {
+      toast.error('Failed to download file', err instanceof Error ? err.message : undefined);
+    } finally {
+      setDownloading(false);
     }
   };
 
   const readyToInitiateCount = rows.filter((r) => !r.batch).length;
   const totalNetPending = rows
-    .filter((r) => r.batch && !['completed', 'reconciled', 'cancelled'].includes(r.batch.status))
+    .filter((r) => r.batch && !RESOLVED_BATCH_STATUSES.includes(r.batch.status))
     .reduce((sum, r) => sum + r.run.totalNet, 0);
 
   const columns = [
@@ -374,7 +383,7 @@ export default function PaymentFiles() {
               Initiate
             </Button>
           )}
-          {row.batch?.status === 'pending_approval' && canApprove && (
+          {row.batch?.status === 'pending_approval' && canManage && (
             <>
               <Button variant="secondary" size="sm" onClick={() => setApproveTarget(row)}>
                 <ThumbsUp size={13} />
@@ -409,7 +418,7 @@ export default function PaymentFiles() {
             </Button>
           )}
           {row.batch && row.batch.totalCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => handleDownload(row)}>
+            <Button variant="ghost" size="sm" onClick={() => { setDownloadTarget(row); setDownloadFormat('csv'); }}>
               <DownloadCloud size={13} />
             </Button>
           )}
@@ -438,7 +447,13 @@ export default function PaymentFiles() {
                 Overview
               </Button>
             )}
-            {canApprove && (
+            {canManage && (
+              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/reports')}>
+                <FileBarChart size={14} />
+                Reports
+              </Button>
+            )}
+            {canConfigure && (
               <Button variant="ghost" size="sm" onClick={() => navigate('/payments/settings')}>
                 <Settings2 size={14} />
                 Settings
@@ -559,6 +574,31 @@ export default function PaymentFiles() {
         variant="danger"
         isLoading={cancelMutation.isPending}
       />
+
+      <Modal
+        isOpen={!!downloadTarget}
+        onClose={() => setDownloadTarget(null)}
+        title="Download Bulk Payment File"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Choose the file format your bank (or NIBSS bulk upload portal) expects.
+          </p>
+          <Select
+            label="Format"
+            value={downloadFormat}
+            options={BULK_FILE_FORMAT_OPTIONS}
+            onChange={(v) => setDownloadFormat(v as 'csv' | 'excel' | 'nibss')}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setDownloadTarget(null)}>Cancel</Button>
+            <Button variant="primary" loading={downloading} onClick={handleDownload}>
+              Download
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={!!transactionsTarget}

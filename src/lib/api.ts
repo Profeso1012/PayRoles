@@ -230,4 +230,41 @@ export async function fetchAllPages<T>(buildUrl: (page: number) => string): Prom
   return all;
 }
 
+/**
+ * Authenticated blob download - apiClient()/request() always parse the
+ * response as the {success,data} envelope, which doesn't apply to a raw
+ * file stream. On failure, still parses the body as that envelope (NestJS
+ * error responses are JSON even for routes that normally stream a file) so
+ * the real backend error.message reaches the caller instead of a generic
+ * "Download failed" - mirrors request()'s own error handling above.
+ */
+export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const { accessToken } = useAuthStore.getState();
+  const url = `${BASE_URL}${path}`;
+  const response = await fetchWithTimeout(url, {
+    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+  });
+
+  if (!response.ok) {
+    const json = await response.json().catch(() => null);
+    const message =
+      (json as { error?: { message?: string } } | null)?.error?.message ??
+      'An unexpected error occurred.';
+    throw new ApiError(response.status, message, json);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get('Content-Disposition') || '';
+  const match = /filename="?([^"]+)"?/.exec(disposition);
+  const filename = match?.[1] || fallbackFilename;
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
 export { BASE_URL };

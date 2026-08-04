@@ -51,6 +51,9 @@ export const PATHS = {
 
   // Finance
   PAYMENTS: '/payments',
+  PAYMENTS_SETTINGS: '/payments/settings',
+  PAYMENTS_OVERVIEW: '/payments/overview',
+  PAYMENTS_REPORTS: '/payments/reports',
   REPORTS_REGISTER: '/reports/register',
   REPORTS_STATUTORY: '/reports/statutory',
   REPORTS_COST: '/reports/cost',

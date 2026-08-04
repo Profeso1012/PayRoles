@@ -93,9 +93,11 @@ export default function Landing() {
           .hero-card { right: 32px !important; bottom: 70px !important; max-width: calc(100% - 64px) !important; }
           .hero-content { padding: 0 32px !important; }
           .art-grid { grid-template-columns: 1fr !important; }
-          .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
           .purp-inner { flex-direction: column !important; }
           .purp-sidebar { flex: unset !important; width: 100% !important; padding-right: 0 !important; padding-bottom: 32px !important; }
+        }
+        @media (max-width: 640px) {
+          .stat-divider { border-right: none !important; }
         }
       `}</style>
 
@@ -330,7 +332,7 @@ export default function Landing() {
             gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
             gap: 72,
             alignItems: 'center',
-            padding: '0 56px',
+            padding: '0 clamp(20px, 6vw, 56px)',
           }}
         >
           {/* Image */}
@@ -411,7 +413,7 @@ export default function Landing() {
           style={{
             maxWidth: 1400,
             margin: '0 auto',
-            padding: '0 56px',
+            padding: '0 clamp(20px, 6vw, 56px)',
             display: 'flex',
             gap: 0,
             alignItems: 'flex-start',
@@ -516,7 +518,7 @@ export default function Landing() {
                   <div
                     key={feat.title}
                     style={{
-                      flex: '0 0 230px',
+                      flex: '0 0 clamp(190px, 60vw, 230px)',
                       background: 'white',
                       border: '1px solid #CDEFD7',
                       borderRadius: 2,
@@ -607,9 +609,9 @@ export default function Landing() {
           style={{
             maxWidth: 1400,
             margin: '0 auto',
-            padding: '0 56px',
+            padding: '0 clamp(20px, 6vw, 56px)',
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
           }}
         >
           {[
@@ -620,9 +622,10 @@ export default function Landing() {
           ].map((stat, i, arr) => (
             <div
               key={stat.label}
+              className={i < arr.length - 1 ? 'stat-divider' : undefined}
               style={{
                 textAlign: 'center',
-                padding: '8px 24px',
+                padding: '8px clamp(8px, 3vw, 24px)',
                 borderRight: i < arr.length - 1 ? '1px solid #CDEFD7' : 'none',
               }}
             >
@@ -640,7 +643,7 @@ export default function Landing() {
               </p>
               <p
                 style={{
-                  fontSize: 40,
+                  fontSize: 'clamp(1.75rem, 6vw, 2.5rem)',
                   fontWeight: 700,
                   color: '#4FAD72',
                   lineHeight: 1,
@@ -663,7 +666,7 @@ export default function Landing() {
           style={{
             maxWidth: 1400,
             margin: '0 auto',
-            padding: '0 56px',
+            padding: '0 clamp(20px, 6vw, 56px)',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
             gap: 72,
@@ -733,7 +736,7 @@ export default function Landing() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(3, 1fr)',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
               gap: 16,
             }}
           >
@@ -750,7 +753,7 @@ export default function Landing() {
                     background: 'rgba(255,255,255,0.06)',
                     border: '1px solid rgba(79,173,114,0.18)',
                     borderRadius: 2,
-                    padding: 32,
+                    padding: 'clamp(18px, 4vw, 32px)',
                     display: 'flex',
                     flexDirection: 'column',
                     justifyContent: 'flex-end',
@@ -775,7 +778,7 @@ export default function Landing() {
                   </div>
                   <p
                     style={{
-                      fontSize: 38,
+                      fontSize: 'clamp(1.75rem, 7vw, 2.375rem)',
                       fontWeight: 700,
                       color: '#4FAD72',
                       fontVariantNumeric: 'tabular-nums',
@@ -801,7 +804,7 @@ export default function Landing() {
           style={{
             maxWidth: 1400,
             margin: '0 auto',
-            padding: '0 56px',
+            padding: '0 clamp(20px, 6vw, 56px)',
           }}
         >
           {/* Header row */}
@@ -931,7 +934,7 @@ function FaceCard({ img, name, role, quote }: FaceCardProps) {
         overflow: 'hidden',
         borderRadius: 3,
         cursor: 'pointer',
-        width: 300,
+        width: 'clamp(240px, 80vw, 300px)',
         aspectRatio: '3/4',
         flexShrink: 0,
       }}

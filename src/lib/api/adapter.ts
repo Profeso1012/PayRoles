@@ -231,8 +231,13 @@ export const ENDPOINTS = {
     REPORTS: {
       BATCH: (batchId: string, format: 'csv' | 'excel' | 'pdf' = 'csv') =>
         `${API_VERSION}/disbursement/reports/batches/${batchId}?format=${format}`,
-      SUMMARY: (format: 'csv' | 'excel' | 'pdf' = 'csv') =>
-        `${API_VERSION}/disbursement/reports/summary?format=${format}`,
+      SUMMARY: (params: { format?: 'csv' | 'excel' | 'pdf'; from?: string; to?: string } = {}) => {
+        const query = new URLSearchParams();
+        query.set('format', params.format ?? 'csv');
+        if (params.from) query.set('from', params.from);
+        if (params.to) query.set('to', params.to);
+        return `${API_VERSION}/disbursement/reports/summary?${query.toString()}`;
+      },
     },
   },
 

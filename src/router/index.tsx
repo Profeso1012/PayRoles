@@ -87,6 +87,7 @@ const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
 const DisbursementSettings = lazy(() => import('@/pages/payments/DisbursementSettings'));
 const DisbursementDashboard = lazy(() => import('@/pages/payments/DisbursementDashboard'));
+const DisbursementReports = lazy(() => import('@/pages/payments/DisbursementReports'));
 const Exports = lazy(() => import('@/pages/exports/Exports'));
 // Deprecated: PayrollRegister, StatutoryReports, CostSummary (100% hardcoded
 // mock data - there is no backend /reports module of any kind to back these)
@@ -248,10 +249,18 @@ export const router = createBrowserRouter([
       // Formula guide - public to all authenticated users (no role guard)
       { path: 'formula-guide', element: w(FormulaGuide) },
 
-      // Finance
-      { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(PaymentFiles)}</RoleGuard> },
-      { path: 'payments/settings', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager']}>{w(DisbursementSettings)}</RoleGuard> },
-      { path: 'payments/overview', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager', 'payroll_officer']}>{w(DisbursementDashboard)}</RoleGuard> },
+      // Disbursement access matches the backend's actual permission grants
+      // exactly (roles.enum.ts): DISBURSEMENT_READ/DISBURSEMENT_MANAGE are
+      // held by tenant_admin/super_admin/finance_manager/payroll_manager only
+      // - payroll_officer holds neither and must not reach any of these
+      // routes (it would load a page whose every API call 403s). Settings is
+      // narrower still: DISBURSEMENT_CONFIGURE is tenant_admin/super_admin
+      // only, so finance_manager/payroll_manager can approve/execute batches
+      // but cannot configure providers or general settings.
+      { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(PaymentFiles)}</RoleGuard> },
+      { path: 'payments/settings', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}>{w(DisbursementSettings)}</RoleGuard> },
+      { path: 'payments/overview', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementDashboard)}</RoleGuard> },
+      { path: 'payments/reports', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementReports)}</RoleGuard> },
       {
         path: 'exports',
         element: (

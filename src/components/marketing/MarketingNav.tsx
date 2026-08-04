@@ -84,6 +84,9 @@ export default function MarketingNav() {
         }
         @media (max-width: 767px) {
           .nav-links-desktop { display: none !important; }
+          .nav-hamburger-btn { padding: 0 14px !important; }
+          .nav-logo-link { padding: 0 16px !important; }
+          .nav-signin-btn { padding: 0 16px !important; gap: 6px !important; font-size: 13px !important; }
         }
       `}</style>
 
@@ -107,7 +110,7 @@ export default function MarketingNav() {
         {/* Left side */}
         <div style={{ display: 'flex', alignItems: 'stretch' }}>
           <button
-            className="hamburger-btn"
+            className="hamburger-btn nav-hamburger-btn"
             aria-label={menuOpen ? 'Close menu' : 'Open menu'}
             onClick={() => setMenuOpen((v) => !v)}
             style={{
@@ -138,7 +141,7 @@ export default function MarketingNav() {
 
           <div style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
 
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', padding: '0 52px' }}>
+          <Link to="/" className="nav-logo-link" style={{ display: 'flex', alignItems: 'center', padding: '0 52px' }}>
             <img src="/assets/payrole-logo.png" alt="PayRole" style={{ height: 28 }} />
           </Link>
         </div>
@@ -272,8 +275,8 @@ export default function MarketingNav() {
 
           <a
             href={buildGetStartedMailto()}
+            className="nav-links-desktop"
             style={{
-              display: 'flex',
               alignItems: 'center',
               padding: '0 24px',
               background: 'rgba(79,173,114,0.20)',
@@ -290,10 +293,11 @@ export default function MarketingNav() {
             Get Started
           </a>
 
-          <div style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
+          <div className="nav-links-desktop" style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
 
           <button
             onClick={() => navigate('/login')}
+            className="nav-signin-btn"
             style={{
               display: 'flex',
               alignItems: 'center',

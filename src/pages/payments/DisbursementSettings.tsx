@@ -33,7 +33,20 @@ const PROVIDER_LABELS: Record<BackendProviderType, string> = {
   remita: 'Remita',
 };
 
-const PROVIDER_OPTIONS = PROVIDER_TYPES.map((value) => ({ value, label: PROVIDER_LABELS[value] }));
+// paystack/flutterwave are unimplemented scaffolds (createBatch/executeBatch
+// throw immediately - live disbursement runs will fail); remita makes a real
+// call to a placeholder endpoint and can misreport success. manual_bank_file
+// and monnify are the only fully-implemented providers today.
+const INCOMPLETE_PROVIDERS: Partial<Record<BackendProviderType, string>> = {
+  paystack: 'Not yet implemented — batches will fail when executed',
+  flutterwave: 'Not yet implemented — batches will fail when executed',
+  remita: 'Experimental — integration is unverified, use with caution',
+};
+
+const PROVIDER_OPTIONS = PROVIDER_TYPES.map((value) => ({
+  value,
+  label: INCOMPLETE_PROVIDERS[value] ? `${PROVIDER_LABELS[value]} (Incomplete)` : PROVIDER_LABELS[value],
+}));
 
 const EXECUTION_POLICY_OPTIONS = [
   { value: 'manual', label: 'Manual — Finance clicks Initiate' },
@@ -64,7 +77,12 @@ export default function DisbursementSettings() {
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  const canManage = role === 'finance_manager' || role === 'tenant_admin' || role === 'super_admin';
+  // DISBURSEMENT_CONFIGURE (every write on this page - save settings,
+  // configure/validate a provider) is tenant_admin/super_admin only on the
+  // backend - finance_manager holds DISBURSEMENT_READ/MANAGE but not
+  // CONFIGURE, so it can approve/execute batches on /payments but not touch
+  // provider credentials or general settings here.
+  const canManage = role === 'tenant_admin' || role === 'super_admin';
 
   const { data: settings, isLoading, isError, refetch } = useQuery<BackendDisbursementSettings>({
     queryKey: ['disbursement-settings'],
@@ -178,7 +196,7 @@ export default function DisbursementSettings() {
     return (
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
         <div className="bg-white rounded-xl border border-mint-light p-8 text-center text-cash-green/70 text-sm">
-          You need Finance or Tenant Admin access to manage disbursement settings.
+          You need Tenant Admin access to manage disbursement settings.
         </div>
       </div>
     );
@@ -338,7 +356,10 @@ export default function DisbursementSettings() {
             return (
               <div key={type} className="flex items-center justify-between gap-3 px-6 py-4 flex-wrap">
                 <div>
-                  <p className="text-sm font-medium text-deep-cash">{PROVIDER_LABELS[type]}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-deep-cash">{PROVIDER_LABELS[type]}</p>
+                    {INCOMPLETE_PROVIDERS[type] && <Badge variant="warning" label="Incomplete" />}
+                  </div>
                   <p className="text-xs text-cash-green/60 mt-0.5">
                     {config ? (
                       <>
@@ -349,6 +370,9 @@ export default function DisbursementSettings() {
                       'Not configured'
                     )}
                   </p>
+                  {INCOMPLETE_PROVIDERS[type] && (
+                    <p className="text-xs text-amber-600 mt-1">{INCOMPLETE_PROVIDERS[type]}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
                   {config?.isDefault && <Badge variant="success" label="Default" />}
