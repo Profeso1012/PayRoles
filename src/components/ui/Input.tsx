@@ -4,7 +4,7 @@ interface InputProps {
   label?: string;
   value?: string | number;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  type?: 'text' | 'email' | 'password' | 'number' | 'date';
+  type?: 'text' | 'email' | 'password' | 'number' | 'date' | 'datetime-local';
   placeholder?: string;
   error?: string;
   hint?: React.ReactNode;
@@ -12,6 +12,10 @@ interface InputProps {
   trailingIcon?: React.ReactNode;
   disabled?: boolean;
   required?: boolean;
+  min?: number | string;
+  max?: number | string;
+  step?: number;
+  maxLength?: number;
   name?: string;
   id?: string;
   className?: string;
@@ -29,6 +33,10 @@ export default function Input({
   trailingIcon,
   disabled,
   required,
+  min,
+  max,
+  step,
+  maxLength,
   name,
   id,
   className,
@@ -67,6 +75,10 @@ export default function Input({
           placeholder={placeholder}
           disabled={disabled}
           required={required}
+          min={min}
+          max={max}
+          step={step}
+          maxLength={maxLength}
           className={cn(
             'w-full px-3 py-2.5 text-sm text-deep-cash bg-white outline-none placeholder:text-cash-green/50',
             leadingIcon && 'pl-9',

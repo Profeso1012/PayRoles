@@ -1213,6 +1213,7 @@ export default function EmployeeDetail() {
             <Input
               label="Amount"
               type="number"
+              min={0}
               value={wpeForm.amount}
               onChange={(e) => setWpeForm((f) => ({ ...f, amount: e.target.value }))}
               placeholder="e.g. 50000"
@@ -1222,9 +1223,12 @@ export default function EmployeeDetail() {
             <Input
               label="Percentage"
               type="number"
+              min={0}
+              max={1000}
               value={wpeForm.percentage}
               onChange={(e) => setWpeForm((f) => ({ ...f, percentage: e.target.value }))}
               placeholder="e.g. 30"
+              hint="0-1000%"
             />
           )}
           {wpeForm.calculationMethod === 'formula' && (
@@ -1250,13 +1254,16 @@ export default function EmployeeDetail() {
               type="date"
               className="w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
               value={wpeForm.endDate}
+              min={wpeForm.effectiveDate || undefined}
               onChange={(e) => setWpeForm((f) => ({ ...f, endDate: e.target.value }))}
             />
+            <p className="text-xs text-cash-green/60 mt-1">Must be on or after the effective date.</p>
           </div>
           <Input
             label="Remarks (optional)"
             value={wpeForm.remarks}
-            onChange={(e) => setWpeForm((f) => ({ ...f, remarks: e.target.value }))}
+            maxLength={1000}
+            onChange={(e) => setWpeForm((f) => ({ ...f, remarks: e.target.value.slice(0, 1000) }))}
           />
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => { setAssignWpeOpen(false); setWpeForm(blankWpeForm); setEditingWpeId(null); }}>
@@ -1268,6 +1275,7 @@ export default function EmployeeDetail() {
               disabled={
                 !wpeForm.payElementId ||
                 !wpeForm.effectiveDate ||
+                (!!wpeForm.endDate && wpeForm.endDate < wpeForm.effectiveDate) ||
                 (wpeForm.calculationMethod === 'fixed' && !wpeForm.amount) ||
                 ((wpeForm.calculationMethod === 'percentage_of_basic' || wpeForm.calculationMethod === 'percentage_of_gross') && !wpeForm.percentage)
               }

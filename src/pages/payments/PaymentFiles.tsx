@@ -146,6 +146,16 @@ export default function PaymentFiles() {
   const [downloadTarget, setDownloadTarget] = useState<DisbursementRow | null>(null);
   const [downloadFormat, setDownloadFormat] = useState<'csv' | 'excel' | 'nibss'>('csv');
   const [downloading, setDownloading] = useState(false);
+  const [scheduleTarget, setScheduleTarget] = useState<string | null>(null); // payrollRunId
+  const [scheduledAt, setScheduledAt] = useState('');
+
+  // Shares the ['disbursement-settings'] cache key with DisbursementSettings.tsx -
+  // Initiate needs to know the tenant's configured executionPolicy instead of
+  // always hardcoding 'manual' regardless of what's configured.
+  const { data: settings } = useQuery<{ executionPolicy: 'manual' | 'scheduled' | 'immediate' }>({
+    queryKey: ['disbursement-settings'],
+    queryFn: () => apiClient(ENDPOINTS.DISBURSEMENT.SETTINGS),
+  });
 
   const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
@@ -231,17 +241,33 @@ export default function PaymentFiles() {
   });
 
   const initiateMutation = useMutation({
-    mutationFn: (runId: string) =>
+    mutationFn: ({ runId, scheduledAt: at }: { runId: string; scheduledAt?: string }) =>
       apiClient(ENDPOINTS.DISBURSEMENT.INITIATE(runId), {
         method: 'POST',
-        body: JSON.stringify({ executionPolicy: 'manual' }),
+        body: JSON.stringify({
+          executionPolicy: settings?.executionPolicy ?? 'manual',
+          ...(at ? { scheduledAt: new Date(at).toISOString() } : {}),
+        }),
       }),
     onSuccess: () => {
       toast.success('Disbursement initiated');
+      setScheduleTarget(null);
+      setScheduledAt('');
       invalidate();
     },
     onError: (err) => toast.error('Failed to initiate disbursement', err instanceof Error ? err.message : undefined),
   });
+
+  // Manual/immediate need no extra input - a single click initiates. Scheduled
+  // needs a time the backend has nowhere else to get, so it opens a small
+  // modal to collect one instead of silently omitting it.
+  function handleInitiateClick(runId: string) {
+    if (settings?.executionPolicy === 'scheduled') {
+      setScheduleTarget(runId);
+    } else {
+      initiateMutation.mutate({ runId });
+    }
+  }
 
   const approveMutation = useMutation({
     mutationFn: (row: DisbursementRow) =>
@@ -352,9 +378,16 @@ export default function PaymentFiles() {
     {
       key: 'batchStatus',
       header: 'Disbursement Status',
+      // Falls back instead of rendering nothing if the batch's status is
+      // somehow outside the 17 known values - a silently-blank cell here
+      // previously made it look like the row had no batch/actions at all,
+      // since every action button below also does exact status matching.
       render: (row: DisbursementRow) =>
         row.batch ? (
-          <Badge variant={batchStatusVariant[row.batch.status]} label={batchStatusLabel[row.batch.status]} />
+          <Badge
+            variant={batchStatusVariant[row.batch.status] ?? 'error'}
+            label={batchStatusLabel[row.batch.status] ?? `Unknown (${row.batch.status})`}
+          />
         ) : (
           <Badge variant="draft" label="Not started" />
         ),
@@ -365,8 +398,8 @@ export default function PaymentFiles() {
       render: (row: DisbursementRow) =>
         row.batch ? (
           <span className="text-xs tabular-nums text-cash-green/80">
-            {row.batch.successfulCount}/{row.batch.totalCount} paid
-            {row.batch.failedCount > 0 && <span className="text-red-500"> · {row.batch.failedCount} failed</span>}
+            {row.batch.successfulCount ?? 0}/{row.batch.totalCount ?? 0} paid
+            {(row.batch.failedCount ?? 0) > 0 && <span className="text-red-500"> · {row.batch.failedCount} failed</span>}
           </span>
         ) : (
           <span className="text-cash-green/40 text-xs">—</span>
@@ -378,7 +411,7 @@ export default function PaymentFiles() {
       render: (row: DisbursementRow) => (
         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
           {!row.batch && canManage && (
-            <Button variant="secondary" size="sm" loading={initiateMutation.isPending} onClick={() => initiateMutation.mutate(row.run.id)}>
+            <Button variant="secondary" size="sm" loading={initiateMutation.isPending} onClick={() => handleInitiateClick(row.run.id)}>
               <Play size={13} />
               Initiate
             </Button>
@@ -422,11 +455,19 @@ export default function PaymentFiles() {
               <DownloadCloud size={13} />
             </Button>
           )}
-          {row.batch && ['draft', 'pending_approval', 'approved', 'awaiting_schedule'].includes(row.batch.status) && canManage && (
-            <Button variant="ghost" size="sm" onClick={() => setCancelTarget(row)}>
-              <XCircle size={13} className="text-red-400" />
-            </Button>
-          )}
+          {row.batch &&
+            canManage &&
+            (['draft', 'pending_approval', 'approved', 'awaiting_schedule'].includes(row.batch.status) ||
+              // A batch whose status doesn't match anything we recognize would
+              // otherwise show zero actions at all - offer Cancel as a
+              // best-effort recovery path. The backend still has the final
+              // say on whether this status is actually cancellable; if not,
+              // the real error message surfaces via the existing toast.
+              !(row.batch.status in batchStatusVariant)) && (
+              <Button variant="ghost" size="sm" onClick={() => setCancelTarget(row)}>
+                <XCircle size={13} className="text-red-400" />
+              </Button>
+            )}
         </div>
       ),
     },
@@ -437,28 +478,30 @@ export default function PaymentFiles() {
       <PageHeader
         title="Payments"
         action={
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
             <p className="text-sm text-cash-green/70">
               Initiate and track salary disbursement for approved pay runs
             </p>
-            {canManage && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/overview')}>
-                <LayoutDashboard size={14} />
-                Overview
-              </Button>
-            )}
-            {canManage && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/reports')}>
-                <FileBarChart size={14} />
-                Reports
-              </Button>
-            )}
-            {canConfigure && (
-              <Button variant="ghost" size="sm" onClick={() => navigate('/payments/settings')}>
-                <Settings2 size={14} />
-                Settings
-              </Button>
-            )}
+            <div className="flex items-center gap-1">
+              {canManage && (
+                <Button variant="ghost" size="sm" onClick={() => navigate('/payments/overview')}>
+                  <LayoutDashboard size={14} />
+                  <span className="hidden sm:inline">Overview</span>
+                </Button>
+              )}
+              {canManage && (
+                <Button variant="ghost" size="sm" onClick={() => navigate('/payments/reports')}>
+                  <FileBarChart size={14} />
+                  <span className="hidden sm:inline">Reports</span>
+                </Button>
+              )}
+              {canConfigure && (
+                <Button variant="ghost" size="sm" onClick={() => navigate('/payments/settings')}>
+                  <Settings2 size={14} />
+                  <span className="hidden sm:inline">Settings</span>
+                </Button>
+              )}
+            </div>
           </div>
         }
       />
@@ -518,6 +561,39 @@ export default function PaymentFiles() {
           emptyMessage="No approved pay runs found"
         />
       )}
+
+      <Modal
+        isOpen={!!scheduleTarget}
+        onClose={() => { setScheduleTarget(null); setScheduledAt(''); }}
+        title="Schedule Disbursement"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Your tenant's execution policy is set to Scheduled — pick when this batch should run.
+            It still goes through approval first; execution starts at this time only once approved.
+          </p>
+          <Input
+            label="Run at"
+            type="datetime-local"
+            value={scheduledAt}
+            onChange={(e) => setScheduledAt(e.target.value)}
+            min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+            hint="Local date and time"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setScheduleTarget(null); setScheduledAt(''); }}>Cancel</Button>
+            <Button
+              variant="primary"
+              loading={initiateMutation.isPending}
+              disabled={!scheduledAt}
+              onClick={() => scheduleTarget && initiateMutation.mutate({ runId: scheduleTarget, scheduledAt })}
+            >
+              Schedule
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <ConfirmModal
         isOpen={!!approveTarget}

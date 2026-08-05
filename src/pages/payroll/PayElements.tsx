@@ -329,11 +329,12 @@ export default function PayElements() {
             label="Code"
             value={form.code}
             disabled={!!editing}
+            maxLength={50}
             onChange={(e) =>
               setForm((f) => ({
                 ...f,
-                // Backend requires UPPER_SNAKE_CASE (/^[A-Z][A-Z0-9_]*$/), starting with a letter.
-                code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '').replace(/^[0-9_]+/, ''),
+                // Backend requires UPPER_SNAKE_CASE (/^[A-Z][A-Z0-9_]*$/), starting with a letter, max 50 chars.
+                code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '').replace(/^[0-9_]+/, '').slice(0, 50),
               }))
             }
             placeholder="e.g. TRANSPORT_ALLOWANCE"
@@ -342,7 +343,8 @@ export default function PayElements() {
           <Input
             label="Name"
             value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            maxLength={200}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value.slice(0, 200) }))}
             placeholder="e.g. Transport Allowance"
           />
           <Select
@@ -427,10 +429,11 @@ export default function PayElements() {
           <Input
             label="Sort Order"
             type="number"
+            min={0}
             value={form.sortOrder}
-            onChange={(e) => setForm((f) => ({ ...f, sortOrder: parseInt(e.target.value, 10) || 100 }))}
+            onChange={(e) => setForm((f) => ({ ...f, sortOrder: Math.max(parseInt(e.target.value, 10) || 0, 0) }))}
             placeholder="100"
-            hint="Display order on payslips (lower numbers appear first)"
+            hint="Display order on payslips (lower numbers appear first, minimum 0)"
           />
           
           <div>

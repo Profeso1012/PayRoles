@@ -16,8 +16,8 @@ interface PageHeaderProps {
 
 export default function PageHeader({ title, breadcrumbs, action, className }: PageHeaderProps) {
   return (
-    <div className={cn('mb-6 flex items-start justify-between gap-4', className)}>
-      <div>
+    <div className={cn('mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 sm:gap-4', className)}>
+      <div className="min-w-0">
         {breadcrumbs && breadcrumbs.length > 0 && (
           <nav className="flex items-center gap-1 mb-1">
             {breadcrumbs.map((crumb, index) => {
@@ -43,7 +43,7 @@ export default function PageHeader({ title, breadcrumbs, action, className }: Pa
           {title}
         </h1>
       </div>
-      {action && <div className="flex-shrink-0">{action}</div>}
+      {action && <div className="sm:flex-shrink-0 min-w-0">{action}</div>}
     </div>
   );
 }

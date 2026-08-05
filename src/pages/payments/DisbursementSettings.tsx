@@ -54,21 +54,83 @@ const EXECUTION_POLICY_OPTIONS = [
   { value: 'scheduled', label: 'Scheduled — runs at a configured time' },
 ];
 
+// Every option below is really just an approval COUNT, not a role check - the
+// backend doesn't verify a "Finance"/"CEO" approval actually comes from a
+// finance_manager/CEO-flagged user, and "Multi-level" is hardcoded to require
+// exactly 3 approvals from anyone with DISBURSEMENT_MANAGE, not a
+// configurable number - labels say so directly so this isn't assumed to be
+// stricter or more configurable than it actually is.
 const APPROVAL_WORKFLOW_OPTIONS = [
   { value: 'none', label: 'None — no separate batch approval' },
-  { value: 'single', label: 'Single approver' },
-  { value: 'dual', label: 'Dual approval' },
-  { value: 'finance', label: 'Finance sign-off' },
-  { value: 'ceo', label: 'CEO sign-off' },
-  { value: 'multi_level', label: 'Multi-level' },
+  { value: 'single', label: 'Single approver — 1 approval, from anyone who can manage disbursements' },
+  { value: 'dual', label: 'Dual approval — 2 approvals, from 2 different people' },
+  { value: 'finance', label: 'Finance sign-off — 1 approval (not role-restricted to Finance)' },
+  { value: 'ceo', label: 'CEO sign-off — 1 approval (not role-restricted to CEO)' },
+  { value: 'multi_level', label: 'Multi-level — fixed at 3 approvals (not configurable)' },
 ];
+
+// Matches the backend's exact DTO bounds (update-disbursement-settings.dto.ts)
+// so the form can't produce a request the backend will 400 on.
+function clamp(n: number, min: number, max: number) {
+  if (Number.isNaN(n)) return min;
+  return Math.min(Math.max(n, min), max);
+}
+function clampMin(n: number, min: number) {
+  if (Number.isNaN(n)) return min;
+  return Math.max(n, min);
+}
+
+// What each provider actually reads (from its own *.types.ts credentials
+// interface on the backend) - showing every field for every provider would
+// mean e.g. Manual Bank File (which makes no external API call at all) asks
+// for an API key it never uses, and Paystack/Flutterwave show an unused
+// "API Key" field alongside their real "Secret Key".
+interface CredentialField {
+  key: string;
+  label: string;
+}
+
+const PROVIDER_CREDENTIAL_FIELDS: Record<BackendProviderType, CredentialField[]> = {
+  manual_bank_file: [],
+  monnify: [
+    { key: 'apiKey', label: 'API Key' },
+    { key: 'secretKey', label: 'Secret Key' },
+    { key: 'contractCode', label: 'Contract Code' },
+    { key: 'walletAccountNumber', label: 'Wallet Account Number' },
+  ],
+  paystack: [{ key: 'secretKey', label: 'Secret Key' }],
+  flutterwave: [{ key: 'secretKey', label: 'Secret Key' }],
+  remita: [
+    { key: 'merchantId', label: 'Merchant ID' },
+    { key: 'serviceTypeId', label: 'Service Type ID' },
+    { key: 'apiKey', label: 'API Key' },
+    { key: 'apiToken', label: 'API Token (optional)' },
+  ],
+};
+
+// Manual Bank File has no external API to call, so "sandbox vs production"
+// and a webhook secret are meaningless for it - both are hidden for that
+// provider only.
+const PROVIDER_HAS_ENVIRONMENT: Record<BackendProviderType, boolean> = {
+  manual_bank_file: false,
+  monnify: true,
+  paystack: true,
+  flutterwave: true,
+  remita: true,
+};
+const PROVIDER_HAS_WEBHOOK: Record<BackendProviderType, boolean> = {
+  manual_bank_file: false,
+  monnify: true,
+  paystack: true,
+  flutterwave: true,
+  remita: true,
+};
 
 const blankProviderForm = {
   environment: 'sandbox' as 'sandbox' | 'production',
   enabled: true,
   isDefault: false,
-  apiKey: '',
-  secretKey: '',
+  credentials: {} as Record<string, string>,
   webhookSecret: '',
 };
 
@@ -130,15 +192,20 @@ export default function DisbursementSettings() {
 
   const configureMutation = useMutation({
     mutationFn: () => {
+      const fields = PROVIDER_CREDENTIAL_FIELDS[providerTarget!];
       const credentials: Record<string, string> = {};
-      if (providerForm.apiKey.trim()) credentials.apiKey = providerForm.apiKey.trim();
-      if (providerForm.secretKey.trim()) credentials.secretKey = providerForm.secretKey.trim();
+      fields.forEach(({ key }) => {
+        const v = providerForm.credentials[key]?.trim();
+        if (v) credentials[key] = v;
+      });
       const body: ConfigureProviderRequest = {
-        environment: providerForm.environment,
+        ...(PROVIDER_HAS_ENVIRONMENT[providerTarget!] ? { environment: providerForm.environment } : {}),
         enabled: providerForm.enabled,
         isDefault: providerForm.isDefault,
         ...(Object.keys(credentials).length > 0 ? { credentials } : {}),
-        ...(providerForm.webhookSecret.trim() ? { webhookSecret: providerForm.webhookSecret.trim() } : {}),
+        ...(PROVIDER_HAS_WEBHOOK[providerTarget!] && providerForm.webhookSecret.trim()
+          ? { webhookSecret: providerForm.webhookSecret.trim() }
+          : {}),
       };
       return apiClient(ENDPOINTS.DISBURSEMENT.PROVIDER_CONFIGURE(providerTarget!), {
         method: 'PATCH',
@@ -174,8 +241,7 @@ export default function DisbursementSettings() {
       environment: existing?.environment ?? 'sandbox',
       enabled: existing?.enabled ?? true,
       isDefault: existing?.isDefault ?? false,
-      apiKey: '',
-      secretKey: '',
+      credentials: {},
       webhookSecret: '',
     });
   }
@@ -281,22 +347,35 @@ export default function DisbursementSettings() {
         </label>
         <div className="grid gap-4 sm:grid-cols-3">
           <Input
-            label="Max retries"
+            label="Max retries (1-10)"
             type="number"
+            min={1}
+            max={10}
             value={String(form.retryPolicy?.maxRetries ?? '')}
-            onChange={(e) => setForm((f) => ({ ...f, retryPolicy: { ...f.retryPolicy!, maxRetries: Number(e.target.value) } }))}
+            onChange={(e) => setForm((f) => ({
+              ...f,
+              retryPolicy: { ...f.retryPolicy!, maxRetries: clamp(Number(e.target.value), 1, 10) },
+            }))}
           />
           <Input
-            label="Retry interval (minutes)"
+            label="Retry interval (minutes, min 5)"
             type="number"
+            min={5}
             value={String(form.retryPolicy?.retryIntervalMinutes ?? '')}
-            onChange={(e) => setForm((f) => ({ ...f, retryPolicy: { ...f.retryPolicy!, retryIntervalMinutes: Number(e.target.value) } }))}
+            onChange={(e) => setForm((f) => ({
+              ...f,
+              retryPolicy: { ...f.retryPolicy!, retryIntervalMinutes: clampMin(Number(e.target.value), 5) },
+            }))}
           />
           <Input
-            label="Retry window (hours)"
+            label="Retry window (hours, min 1)"
             type="number"
+            min={1}
             value={String(form.retryPolicy?.maxRetryWindowHours ?? '')}
-            onChange={(e) => setForm((f) => ({ ...f, retryPolicy: { ...f.retryPolicy!, maxRetryWindowHours: Number(e.target.value) } }))}
+            onChange={(e) => setForm((f) => ({
+              ...f,
+              retryPolicy: { ...f.retryPolicy!, maxRetryWindowHours: clampMin(Number(e.target.value), 1) },
+            }))}
           />
         </div>
       </div>
@@ -363,7 +442,12 @@ export default function DisbursementSettings() {
                   <p className="text-xs text-cash-green/60 mt-0.5">
                     {config ? (
                       <>
-                        {config.environment} · {config.credentialsEncrypted ? 'Credentials configured' : 'No credentials set'}
+                        {PROVIDER_HAS_ENVIRONMENT[type] && <>{config.environment} · </>}
+                        {PROVIDER_CREDENTIAL_FIELDS[type].length === 0
+                          ? 'No credentials needed'
+                          : config.credentialsEncrypted
+                            ? 'Credentials configured'
+                            : 'No credentials set'}
                         {config.lastValidatedAt && <> · validated {formatDate(config.lastValidatedAt)}</>}
                       </>
                     ) : (
@@ -404,15 +488,23 @@ export default function DisbursementSettings() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <Select
-            label="Environment"
-            value={providerForm.environment}
-            options={[
-              { value: 'sandbox', label: 'Sandbox' },
-              { value: 'production', label: 'Production' },
-            ]}
-            onChange={(v) => setProviderForm((f) => ({ ...f, environment: v as 'sandbox' | 'production' }))}
-          />
+          {providerTarget === 'manual_bank_file' && (
+            <p className="text-sm text-cash-green/70">
+              Manual Bank File makes no external API calls, so there's nothing to authenticate —
+              Execute just generates a payment file for you to upload to your bank yourself.
+            </p>
+          )}
+          {providerTarget && PROVIDER_HAS_ENVIRONMENT[providerTarget] && (
+            <Select
+              label="Environment"
+              value={providerForm.environment}
+              options={[
+                { value: 'sandbox', label: 'Sandbox' },
+                { value: 'production', label: 'Production' },
+              ]}
+              onChange={(v) => setProviderForm((f) => ({ ...f, environment: v as 'sandbox' | 'production' }))}
+            />
+          )}
           <label className="flex items-center gap-2 text-sm text-deep-cash">
             <input
               type="checkbox"
@@ -429,27 +521,34 @@ export default function DisbursementSettings() {
             />
             Set as default provider
           </label>
-          <Input
-            label="API Key (leave blank to keep current)"
-            type="password"
-            value={providerForm.apiKey}
-            onChange={(e) => setProviderForm((f) => ({ ...f, apiKey: e.target.value }))}
-          />
-          <Input
-            label="Secret Key (leave blank to keep current)"
-            type="password"
-            value={providerForm.secretKey}
-            onChange={(e) => setProviderForm((f) => ({ ...f, secretKey: e.target.value }))}
-          />
-          <Input
-            label="Webhook Secret (leave blank to keep current)"
-            type="password"
-            value={providerForm.webhookSecret}
-            onChange={(e) => setProviderForm((f) => ({ ...f, webhookSecret: e.target.value }))}
-          />
-          <p className="text-xs text-cash-green/50">
-            Credentials are encrypted at rest and never shown again once saved.
-          </p>
+          {providerTarget &&
+            PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label }) => (
+              <Input
+                key={key}
+                label={`${label} (leave blank to keep current)`}
+                type="password"
+                value={providerForm.credentials[key] ?? ''}
+                onChange={(e) =>
+                  setProviderForm((f) => ({
+                    ...f,
+                    credentials: { ...f.credentials, [key]: e.target.value },
+                  }))
+                }
+              />
+            ))}
+          {providerTarget && PROVIDER_HAS_WEBHOOK[providerTarget] && (
+            <Input
+              label="Webhook Secret (leave blank to keep current)"
+              type="password"
+              value={providerForm.webhookSecret}
+              onChange={(e) => setProviderForm((f) => ({ ...f, webhookSecret: e.target.value }))}
+            />
+          )}
+          {providerTarget && PROVIDER_CREDENTIAL_FIELDS[providerTarget].length > 0 && (
+            <p className="text-xs text-cash-green/50">
+              Credentials are encrypted at rest and never shown again once saved.
+            </p>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={() => { setProviderTarget(null); setProviderForm(blankProviderForm); }}>
               Cancel

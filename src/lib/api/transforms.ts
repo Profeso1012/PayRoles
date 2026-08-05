@@ -340,8 +340,18 @@ export function extractResponseData<T>(response: any): {
   traceId?: string;
   correlationId?: string;
 } {
+  // `response.data ?? response` would look equivalent but isn't: `??` only
+  // falls back when `data` is null/undefined, same as this - the bug this
+  // fixes was `response.data || response`, which ALSO fell back on a
+  // legitimate falsy data value (`0`, `false`, or - the one that actually
+  // bit us - a genuine `data: null` meaning "nothing here yet", e.g. no
+  // disbursement batch initiated for a run). `||` silently substituted the
+  // whole envelope object in that case, which is truthy but has none of the
+  // real resource's fields - every property read off it (id, status, ...)
+  // came back undefined instead of the caller ever seeing the real `null`.
+  const hasEnvelope = response && typeof response === 'object' && 'data' in response;
   return {
-    data: response.data || response,
+    data: hasEnvelope ? response.data : response,
     meta: response.meta,
     traceId: response.traceId,
     correlationId: response.correlationId,
