@@ -14,6 +14,7 @@ import Select from '@/components/ui/Select';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import RevealedPasswordModal from '@/components/shared/RevealedPasswordModal';
 import type {
   BackendPlatformUser,
   CreatePlatformUserRequest,
@@ -60,6 +61,7 @@ export default function SAUsers() {
   const [disableTarget, setDisableTarget] = useState<BackendPlatformUser | null>(null);
   const [editTarget, setEditTarget] = useState<BackendPlatformUser | null>(null);
   const [editForm, setEditForm] = useState<UpdatePlatformUserRequest>({});
+  const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
 
   const { data: users, isLoading, isError, refetch } = useQuery<BackendPlatformUser[]>({
     queryKey: ['platform-users'],
@@ -76,7 +78,8 @@ export default function SAUsers() {
       apiClient(ENDPOINTS.PLATFORM_USERS.CREATE, { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['platform-users'] });
-      toast.success(`Platform user created for ${vars.email}`, `Share the temporary password with them directly: ${vars.password}`);
+      toast.success(`Platform user created for ${vars.email}`, 'Copy the temporary password before closing the next dialog.');
+      setRevealedPassword({ subject: vars.email, password: vars.password });
       resetForm();
     },
     onError: (err) => toast.error('Failed to create platform user', err instanceof Error ? err.message : undefined),
@@ -134,7 +137,7 @@ export default function SAUsers() {
 
   if (!canRead) {
     return (
-      <div className="p-6 max-w-[900px] mx-auto">
+      <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[900px] mx-auto">
         <div className="bg-white border border-mint-light rounded-xl p-8 text-center text-cash-green/70 text-sm">
           You don't have permission to view platform users.
         </div>
@@ -155,7 +158,7 @@ export default function SAUsers() {
   }
 
   return (
-    <div className="p-6 max-w-[1200px] mx-auto">
+    <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[1200px] mx-auto">
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold text-deep-cash">Platform Users</h1>
@@ -343,6 +346,14 @@ export default function SAUsers() {
         variant="danger"
         isLoading={disableMutation.isPending}
       />
+
+      {revealedPassword && (
+        <RevealedPasswordModal
+          subject={revealedPassword.subject}
+          password={revealedPassword.password}
+          onDone={() => setRevealedPassword(null)}
+        />
+      )}
     </div>
   );
 }

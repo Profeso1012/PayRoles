@@ -26,7 +26,9 @@ const statusOptions = [
   { value: 'calculating', label: 'Processing' },
   { value: 'calculated', label: 'Calculated' },
   { value: 'in_review', label: 'In Review' },
-  { value: 'approved', label: 'Approved' },
+  // No 'approved' option - approve() jumps a run straight from in_review to
+  // paid/completed on the real backend, so 'approved' is never an actual
+  // resting status a run can be filtered to.
   { value: 'paid', label: 'Completed' },
   { value: 'failed', label: 'Failed' },
   { value: 'rejected', label: 'Rejected' },

@@ -30,6 +30,7 @@ export interface Employee {
   bankAccount?: string | null;
   bankRoutingCode?: string | null;
   bankDetails: BankDetail[];
+  hireDate: string;
   createdAt: string;
 }
 

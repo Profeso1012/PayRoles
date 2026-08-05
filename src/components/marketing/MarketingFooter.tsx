@@ -262,20 +262,6 @@ export default function MarketingFooter() {
               {item}
             </a>
           ))}
-          {/* Temporary link to fix Vercel direct URL navigation */}
-          <Link
-            to="/platform-login"
-            style={{
-              color: 'rgba(255,255,255,0.50)',
-              fontSize: 12,
-              textDecoration: 'none',
-              transition: 'color 0.2s',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = '#4FAD72' }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.color = 'rgba(255,255,255,0.50)' }}
-          >
-            Platform Login
-          </Link>
           <button
             style={{
               background: 'none',

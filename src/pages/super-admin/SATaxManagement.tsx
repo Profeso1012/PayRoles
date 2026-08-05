@@ -258,7 +258,7 @@ export default function SATaxManagement() {
   }
 
   return (
-    <div className="p-6 max-w-[1200px] mx-auto">
+    <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[1200px] mx-auto">
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
           <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold text-deep-cash">Tax Rules</h1>

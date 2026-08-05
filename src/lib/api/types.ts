@@ -102,9 +102,23 @@ export interface CreateWorkerRequest {
   bankRoutingCode?: string;
   /** Minor units (e.g. 100000000 = NGN 1,000,000/year). Feeds the Nigerian PAYE rent relief calc only. */
   annualRentMinor?: number;
+  /**
+   * Required on create only - atomically provisions the worker's first
+   * Compensation record in the same transaction. Never sent on PATCH
+   * /workers/:id (see UpdateWorkerRequest below) - a raise/currency/frequency
+   * change goes through POST /compensation instead, to preserve history.
+   */
+  basicSalaryMinor: number;
+  currency: string;
+  payFrequency?: BackendPayFrequency;
 }
 
-export interface UpdateWorkerRequest extends Partial<CreateWorkerRequest> {}
+// UpdateWorkerDto on the backend is OmitType(CreateWorkerDto, ['basicSalaryMinor',
+// 'currency', 'payFrequency']) - those three aren't just optional on update, they
+// don't exist on the DTO at all, and forbidNonWhitelisted:true 400s the whole
+// request if they're sent. Mirror that exclusion here instead of a plain
+// Partial<CreateWorkerRequest>, so a caller can't accidentally include them.
+export type UpdateWorkerRequest = Partial<Omit<CreateWorkerRequest, 'basicSalaryMinor' | 'currency' | 'payFrequency'>>;
 
 export interface TerminateWorkerRequest {
   terminationDate: string;

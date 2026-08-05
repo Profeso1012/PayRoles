@@ -10,6 +10,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
+import RevealedPasswordModal from '@/components/shared/RevealedPasswordModal';
 import { useToast } from '@/hooks/useToast';
 import { formatDate, generateTempPassword } from '@/lib/utils';
 import type { BackendTenant, CreateTenantRequest } from '@/lib/api/types';
@@ -68,6 +69,7 @@ export default function SACompanies() {
   // `form.slug` is non-empty after the very first auto-populated character,
   // which previously made `f.slug || slugify(...)` freeze after one keystroke.
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
+  const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
 
   const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
@@ -110,10 +112,8 @@ export default function SACompanies() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['platform-tenants'] });
-      toast.success(
-        'Company onboarded',
-        `Share these credentials with ${form.contactEmail} directly: temp password ${form.adminPassword}`,
-      );
+      toast.success('Company onboarded', 'Copy the admin password before closing the next dialog.');
+      setRevealedPassword({ subject: form.contactEmail, password: form.adminPassword });
       resetForm();
     },
     onError: (err) => toast.error('Failed to onboard company', err instanceof Error ? err.message : undefined),
@@ -142,7 +142,7 @@ export default function SACompanies() {
   );
 
   return (
-    <div className="p-6 max-w-[1200px] mx-auto">
+    <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[1200px] mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
         <div>
@@ -307,6 +307,14 @@ export default function SACompanies() {
           </div>
         </div>
       </Modal>
+
+      {revealedPassword && (
+        <RevealedPasswordModal
+          subject={revealedPassword.subject}
+          password={revealedPassword.password}
+          onDone={() => setRevealedPassword(null)}
+        />
+      )}
     </div>
   );
 }

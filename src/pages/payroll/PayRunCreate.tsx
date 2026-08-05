@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import { Building2 } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { mapPayrollRunFields } from '@/lib/api/transforms';
@@ -10,6 +11,8 @@ import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import Input from '@/components/ui/Input';
+import EmptyState from '@/components/ui/EmptyState';
+import Spinner from '@/components/ui/Spinner';
 import type { PayRun } from '@contracts/types/payroll';
 
 interface LegalEntity {
@@ -90,6 +93,39 @@ export default function PayRunCreate() {
   });
 
   const selectedEntity = (legalEntities ?? []).find((e) => e.id === legalEntityId);
+
+  if (loadingEntities) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  // A pay run always needs a legalEntityId - guard upfront rather than
+  // letting someone fill out the whole form only to find the Legal Entity
+  // select empty and Create silently disabled.
+  if (entityOptions.length === 0) {
+    return (
+      <div style={{ width: '100%', maxWidth: '600px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+        <PageHeader
+          title="New Pay Run"
+          breadcrumbs={[
+            { label: 'Pay Runs', path: '/payroll/runs' },
+            { label: 'New Pay Run' },
+          ]}
+        />
+        <div className="bg-white rounded-xl border border-mint-light">
+          <EmptyState
+            icon={Building2}
+            title="No legal entities yet"
+            description="A pay run is always created against a legal entity. Create one first, then come back to run payroll."
+            action={{ label: 'Go to Legal Entities', onClick: () => navigate('/organisation/legal-entities') }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: '600px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>

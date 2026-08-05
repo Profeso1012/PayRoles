@@ -137,7 +137,7 @@ export default function EditEmployee() {
         department: employee.department || '',
         legalEntityId: employee.legalEntityId || '',
         employmentType: employee.employmentType || 'full_time',
-        hireDate: employee.createdAt?.slice(0, 10) || '',
+        hireDate: employee.hireDate?.slice(0, 10) || '',
       });
       setBank({
         bankName: employee.bankName || '',
@@ -338,13 +338,22 @@ export default function EditEmployee() {
               value={employment.department}
               onChange={(e) => setEmployment((f) => ({ ...f, department: e.target.value }))}
             />
-            <Select
-              label="Legal Entity"
-              value={employment.legalEntityId}
-              options={leOptions}
-              onChange={(v) => setEmployment((f) => ({ ...f, legalEntityId: v }))}
-              placeholder="Select legal entity"
-            />
+            <div>
+              <Select
+                label="Legal Entity"
+                value={employment.legalEntityId}
+                options={leOptions}
+                onChange={(v) => setEmployment((f) => ({ ...f, legalEntityId: v }))}
+                placeholder="Select legal entity"
+              />
+              {leOptions.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">
+                  No active legal entities — go to{' '}
+                  <a href="/organisation/legal-entities" className="underline">Organisation → Legal Entities</a>{' '}
+                  to create or reactivate one before changing this.
+                </p>
+              )}
+            </div>
             <Select
               label="Employment Type"
               value={employment.employmentType}

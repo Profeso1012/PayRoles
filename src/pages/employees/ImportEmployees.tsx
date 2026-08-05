@@ -19,6 +19,7 @@ import type {
   BackendUser,
   CreateUserRequest,
   CreateWorkerRequest,
+  UpdateWorkerRequest,
   BackendEmploymentType,
 } from '@/lib/api/types';
 
@@ -44,7 +45,12 @@ function isExcelFile(file: File): boolean {
  * this bypass is being kept anyway for now (simpler to reason about, no
  * async job/polling to build), not because the real endpoint is broken.
  * Revisit if the per-row-request approach becomes a real bottleneck for
- * large files.
+ * large files. Also a deliberate choice over the real importer for a second
+ * reason: that endpoint's CSV schema has no salary column at all and never
+ * creates a Compensation record, leaving every imported worker unpayable
+ * until a separate POST /compensation call per worker - this bypass instead
+ * collects basicSalary/currency per row so CreateWorkerDto's atomic
+ * worker+compensation creation can run the same way AddEmployee.tsx does.
  */
 async function parseRows(file: File): Promise<Record<string, string>[]> {
   // For CSV, `raw: true` here is load-bearing: without it, SheetJS infers a
@@ -77,6 +83,8 @@ const SAMPLE_TEMPLATE_COLUMNS = [
   'middleName',
   'hireDate',
   'employmentType',
+  'basicSalary',
+  'currency',
   'email',
   'phone',
   'dateOfBirth',
@@ -97,6 +105,8 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: '',
     hireDate: '2023-01-10',
     employmentType: 'full_time',
+    basicSalary: '500000',
+    currency: 'NGN',
     email: 'employee.one@example.com',
     phone: '+2348000000001',
     dateOfBirth: '1990-01-15',
@@ -115,6 +125,8 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: 'A',
     hireDate: '2022-03-01',
     employmentType: 'part_time',
+    basicSalary: '250000',
+    currency: 'NGN',
     email: '',
     phone: '',
     dateOfBirth: '1988-06-22',
@@ -133,6 +145,8 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: '',
     hireDate: '2024-07-01',
     employmentType: 'contract',
+    basicSalary: '300000',
+    currency: 'NGN',
     email: 'employee.three@example.com',
     phone: '',
     dateOfBirth: '',
@@ -174,13 +188,17 @@ interface RowOutcome {
   error?: string;
 }
 
-function buildPayload(row: Record<string, string>, legalEntityId: string): { payload: CreateWorkerRequest | null; error?: string } {
+function buildPayload(
+  row: Record<string, string>,
+  legalEntityId: string,
+  isExistingWorker: boolean,
+): { payload: CreateWorkerRequest | UpdateWorkerRequest | null; error?: string } {
   const missing = REQUIRED_FIELDS.filter((f) => !(row[f] ?? '').trim());
   if (missing.length > 0) {
     return { payload: null, error: `Missing ${missing.join(', ')}` };
   }
 
-  const payload: CreateWorkerRequest = {
+  const base: Omit<CreateWorkerRequest, 'basicSalaryMinor' | 'currency'> = {
     employeeNumber: row.employeeNumber.trim(),
     firstName: row.firstName.trim(),
     lastName: row.lastName.trim(),
@@ -191,7 +209,7 @@ function buildPayload(row: Record<string, string>, legalEntityId: string): { pay
 
   const rawEmploymentType = (row.employmentType ?? '').trim().toLowerCase();
   if (VALID_EMPLOYMENT_TYPES.includes(rawEmploymentType as BackendEmploymentType)) {
-    payload.employmentType = rawEmploymentType as BackendEmploymentType;
+    base.employmentType = rawEmploymentType as BackendEmploymentType;
   }
 
   // Only ever set a key when the cell actually has a value - omitting it
@@ -199,7 +217,7 @@ function buildPayload(row: Record<string, string>, legalEntityId: string): { pay
   // real SQL NULL instead of an empty string. See parseRows() doc comment.
   for (const field of OPTIONAL_TEXT_FIELDS) {
     const value = (row[field] ?? '').trim();
-    if (value) (payload as unknown as Record<string, string>)[field] = value;
+    if (value) (base as unknown as Record<string, string>)[field] = value;
   }
 
   // annualRentMinor is a number field - parse it separately. Empty = NULL.
@@ -207,7 +225,7 @@ function buildPayload(row: Record<string, string>, legalEntityId: string): { pay
   if (rawAnnualRent) {
     const parsed = Number(rawAnnualRent);
     if (!isNaN(parsed) && parsed >= 0) {
-      payload.annualRentMinor = parsed;
+      base.annualRentMinor = parsed;
     }
   }
 
@@ -215,10 +233,35 @@ function buildPayload(row: Record<string, string>, legalEntityId: string): { pay
   // sheet gives a bank name but no explicit code, resolve it from the same
   // NIGERIAN_BANKS list rather than requiring the filler-out to know it.
   // An explicit bankRoutingCode cell (e.g. for a bank not in the list) wins.
-  if (payload.bankName && !payload.bankRoutingCode) {
-    const match = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === payload.bankName!.trim().toLowerCase());
-    if (match) payload.bankRoutingCode = match.code;
+  if (base.bankName && !base.bankRoutingCode) {
+    const match = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === base.bankName!.trim().toLowerCase());
+    if (match) base.bankRoutingCode = match.code;
   }
+
+  // basicSalaryMinor/currency are required by CreateWorkerDto on new-worker
+  // creation only - the backend atomically provisions the worker's first
+  // Compensation record from them, same as AddEmployee.tsx. They must NOT be
+  // sent on update (UpdateWorkerDto omits them entirely; forbidNonWhitelisted
+  // would 400 the whole request) - a salary change goes through
+  // POST /compensation instead, which this bulk-import flow doesn't attempt.
+  if (isExistingWorker) {
+    return { payload: base };
+  }
+
+  const rawSalary = (row.basicSalary ?? '').trim();
+  if (!rawSalary) {
+    return { payload: null, error: 'Missing basicSalary' };
+  }
+  const salaryMajor = Number(rawSalary);
+  if (isNaN(salaryMajor) || salaryMajor <= 0) {
+    return { payload: null, error: 'Invalid basicSalary' };
+  }
+
+  const payload: CreateWorkerRequest = {
+    ...base,
+    basicSalaryMinor: Math.round(salaryMajor * 100),
+    currency: (row.currency ?? '').trim().toUpperCase() || 'NGN',
+  };
 
   return { payload };
 }
@@ -308,14 +351,14 @@ export default function ImportEmployees() {
         const rowNumber = index + 2; // header is row 1
         const name = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim() || '—';
         const employeeNumber = (row.employeeNumber ?? '').trim();
-        const { payload, error } = buildPayload(row, selectedLegalEntityId);
+        const existingId = byEmployeeNumber.get(employeeNumber);
+        const { payload, error } = buildPayload(row, selectedLegalEntityId, !!existingId);
 
         let outcome: RowOutcome;
         if (!payload) {
           outcome = { rowNumber, employeeNumber, name, status: 'error', error };
         } else {
           try {
-            const existingId = byEmployeeNumber.get(payload.employeeNumber);
             if (existingId) {
               await apiClient(ENDPOINTS.WORKERS.UPDATE(existingId), { method: 'PATCH', body: JSON.stringify(payload) });
               outcome = { rowNumber, employeeNumber, name, status: 'updated' };
@@ -488,12 +531,16 @@ export default function ImportEmployees() {
           Columns required: <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">employeeNumber</code>,{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">firstName</code>,{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">lastName</code>,{' '}
-          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">hireDate</code>. Optional columns include{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">hireDate</code>, and{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">basicSalary</code> (in naira, e.g. 500000) — the last one
+          only for brand-new employee numbers, since it provisions their starting pay; rows updating an existing employee number
+          can leave it blank. Optional columns include{' '}
+          <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">currency</code> (defaults to NGN),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">email</code> (needed for portal login),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">nationalId</code> (NIN),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">annualRentMinor</code> (annual rent in kobo for PAYE tax relief),
-          and bank details. Rows matching an existing employee number update that employee; new employee numbers are created. 
-          Excel files use their first sheet. Each row is processed independently, so one bad row never blocks the rest of the file. 
+          and bank details. Rows matching an existing employee number update that employee; new employee numbers are created.
+          Excel files use their first sheet. Each row is processed independently, so one bad row never blocks the rest of the file.
           Not sure where to start? Download the sample template above, edit it with your own data, then upload it below.
         </p>
         <div className="flex items-center gap-3 flex-wrap">

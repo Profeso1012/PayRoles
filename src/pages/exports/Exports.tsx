@@ -103,8 +103,8 @@ export default function Exports() {
     try {
       const { downloadUrl } = await apiClient<{ downloadUrl: string }>(ENDPOINTS.EXPORTS.DOWNLOAD(job.id));
       window.open(downloadUrl, '_blank');
-    } catch {
-      toast.error('Failed to get download link — it may have expired');
+    } catch (err) {
+      toast.error('Failed to get download link', err instanceof Error ? err.message : undefined);
     } finally {
       setDownloadingId(null);
     }
@@ -153,6 +153,11 @@ export default function Exports() {
                     {entityLabel[job.entityType]} <span className="text-cash-green/60 uppercase text-xs">· {job.format}</span>
                   </p>
                   <p className="text-xs text-cash-green/70 mt-0.5">{formatDate(job.createdAt)}</p>
+                  {job.status === 'failed' && job.errorSummary && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {typeof job.errorSummary.message === 'string' ? job.errorSummary.message : 'Export failed'}
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <Badge variant={statusVariant[job.status]} label={statusLabel[job.status]} />

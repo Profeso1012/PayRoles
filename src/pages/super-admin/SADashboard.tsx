@@ -52,7 +52,7 @@ export default function SADashboard() {
   ];
 
   return (
-    <div className="p-6 max-w-[1200px] mx-auto">
+    <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[1200px] mx-auto">
       <div className="mb-8">
         <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold text-deep-cash">Platform Overview</h1>
         <p className="text-sm text-cash-green/70 mt-1">All companies on the PayRole platform</p>

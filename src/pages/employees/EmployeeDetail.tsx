@@ -273,7 +273,12 @@ export default function EmployeeDetail() {
     enabled: !!id && tab === 'payElements',
   });
 
-  // Catalog of tenant-wide pay element definitions, only needed to populate the assign modal's picker.
+  // Catalog of tenant-wide pay element definitions, used to populate the
+  // assign modal's picker AND to know upfront (before the modal ever opens)
+  // whether the tenant has any pay elements to assign at all - loads
+  // alongside workerPayElements as soon as this tab is viewed, rather than
+  // only once the modal is already open, so the Assign button itself can be
+  // guarded instead of opening onto an empty, dead-end picker.
   const { data: payElementCatalog } = useQuery<BackendPayElement[]>({
     queryKey: ['pay-elements'],
     queryFn: async () => {
@@ -282,8 +287,9 @@ export default function EmployeeDetail() {
       const response = await apiClient<any>(`${ENDPOINTS.PAY_ELEMENTS.LIST}?${buildPaginationParams({ limit: 100 })}`);
       return Array.isArray(response) ? response : (response.data || []);
     },
-    enabled: assignWpeOpen,
+    enabled: tab === 'payElements',
   });
+  const hasNoPayElements = !!payElementCatalog && payElementCatalog.length === 0;
 
   const assignPayElementMutation = useMutation({
     mutationFn: () => {
@@ -455,7 +461,7 @@ export default function EmployeeDetail() {
   const voidCompensationMutation = useMutation({
     mutationFn: () => {
       return apiClient(ENDPOINTS.COMPENSATION.VOID(voidCompTarget!.id), {
-        method: 'POST',
+        method: 'PATCH',
         body: JSON.stringify({ reason: voidReason || undefined }),
       });
     },
@@ -728,7 +734,7 @@ export default function EmployeeDetail() {
               <h3 className="text-sm font-semibold text-deep-cash">Assigned Pay Elements</h3>
             </div>
             {canWritePayElements && (
-              <Button variant="secondary" size="sm" onClick={() => setAssignWpeOpen(true)}>
+              <Button variant="secondary" size="sm" disabled={hasNoPayElements} onClick={() => setAssignWpeOpen(true)}>
                 <Plus size={14} />
                 Assign Pay Element
               </Button>
@@ -740,11 +746,23 @@ export default function EmployeeDetail() {
             <div>
               <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY is auto-managed</p>
               <p className="text-sm text-cash-green">
-                Basic salary is automatically pulled from the employee's compensation record during payroll calculations. 
+                Basic salary is automatically pulled from the employee's compensation record during payroll calculations.
                 You don't need to manually assign it here. Use this tab to assign additional allowances, deductions, or benefits.
               </p>
             </div>
           </div>
+
+          {canWritePayElements && hasNoPayElements && (
+            <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg mb-4">
+              <AlertCircle size={16} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-deep-cash">
+                No pay elements exist for this tenant yet, so there's nothing to assign. Create allowances,
+                deductions, or benefits under{' '}
+                <a href="/payroll/pay-elements" className="text-fresh-cash underline">Payroll → Pay Elements</a>{' '}
+                first.
+              </p>
+            </div>
+          )}
 
           {!workerPayElements ? (
             <div className="flex justify-center py-8"><Spinner /></div>

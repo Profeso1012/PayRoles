@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { CheckCircle, ChevronRight, Plus, X } from 'lucide-react';
+import { Building2, CheckCircle, ChevronRight, Plus, X } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
@@ -10,6 +10,8 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Select from '@/components/ui/Select';
 import BankSelect from '@/components/ui/BankSelect';
+import EmptyState from '@/components/ui/EmptyState';
+import Spinner from '@/components/ui/Spinner';
 import type { Employee } from '@contracts/types/employee';
 
 interface LegalEntity {
@@ -41,6 +43,7 @@ type EmploymentForm = {
 
 type CompensationForm = {
   basicSalary: string;
+  currency: string;
   salaryType: string;
   payFrequency: string;
   effectiveDate: string;
@@ -94,6 +97,17 @@ const PAY_FREQUENCY_OPTIONS = [
   { value: 'annual', label: 'Annual' },
 ];
 
+// Compensation.currency is a plain string on the backend (no fixed enum) -
+// this list just covers the countries Legal Entities already supports
+// (NG/GB/CA/US), so a UK/Canada/US legal entity's employees aren't silently
+// forced into NGN like every worker used to be regardless of country.
+const CURRENCY_OPTIONS = [
+  { value: 'NGN', label: 'NGN — Nigerian Naira' },
+  { value: 'GBP', label: 'GBP — British Pound' },
+  { value: 'CAD', label: 'CAD — Canadian Dollar' },
+  { value: 'USD', label: 'USD — US Dollar' },
+];
+
 export default function AddEmployee() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -115,6 +129,7 @@ export default function AddEmployee() {
 
   const [compensation, setCompensation] = useState<CompensationForm>({
     basicSalary: '',
+    currency: 'NGN',
     salaryType: 'fixed',
     payFrequency: 'monthly',
     effectiveDate: '',
@@ -127,7 +142,7 @@ export default function AddEmployee() {
     bankName: '', accountNumber: '', routingCode: '',
   });
 
-  const { data: legalEntities } = useQuery<LegalEntity[]>({
+  const { data: legalEntities, isLoading: loadingEntities } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
     queryFn: async () => {
       const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
@@ -142,6 +157,7 @@ export default function AddEmployee() {
   const leOptions = (legalEntities ?? [])
     .filter((le) => le.status !== 'inactive')
     .map((le) => ({ value: le.id, label: le.name }));
+  const hasNoLegalEntities = !loadingEntities && leOptions.length === 0;
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -170,8 +186,8 @@ export default function AddEmployee() {
         
         // NEW: Basic salary fields now required in worker creation
         // Backend automatically creates first compensation record
-        basicSalaryMinor: compensation.basicSalary ? Math.round(parseFloat(compensation.basicSalary) * 100) : 0,
-        currency: 'NGN',
+        basicSalaryMinor: Math.round(parseFloat(compensation.basicSalary) * 100),
+        currency: compensation.currency || 'NGN',
         payFrequency: compensation.payFrequency || 'monthly',
       };
 
@@ -191,6 +207,39 @@ export default function AddEmployee() {
 
   const fieldClass =
     'w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors placeholder:text-cash-green/40';
+
+  if (loadingEntities) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  // Every worker needs a legalEntityId - guard upfront rather than letting
+  // someone fill out four steps only to find the Legal Entity select empty
+  // and the submit button silently disabled.
+  if (hasNoLegalEntities) {
+    return (
+      <div style={{ width: '100%', maxWidth: '760px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+        <PageHeader
+          title="Add Employee"
+          breadcrumbs={[
+            { label: 'Employees', path: '/employees' },
+            { label: 'New Employee' },
+          ]}
+        />
+        <div className="bg-white rounded-xl border border-mint-light">
+          <EmptyState
+            icon={Building2}
+            title="No legal entities yet"
+            description="Every employee must belong to a legal entity. Create one first, then come back to add employees."
+            action={{ label: 'Go to Legal Entities', onClick: () => navigate('/organisation/legal-entities') }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: '100%', maxWidth: '760px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -367,17 +416,25 @@ export default function AddEmployee() {
             Basic salary is required. This will automatically create the employee's first compensation record effective from their hire date.
           </p>
           <div className="flex flex-col gap-4">
-            <div>
-              <p className="text-sm text-cash-green font-medium mb-1">Total Amount (₦) *</p>
-              <input
-                type="number"
-                className={fieldClass}
-                value={compensation.basicSalary}
-                onChange={(e) => setCompensation((f) => ({ ...f, basicSalary: e.target.value }))}
-                placeholder="e.g. 500000"
-                min={0}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-cash-green font-medium mb-1">Total Amount *</p>
+                <input
+                  type="number"
+                  className={fieldClass}
+                  value={compensation.basicSalary}
+                  onChange={(e) => setCompensation((f) => ({ ...f, basicSalary: e.target.value }))}
+                  placeholder="e.g. 500000"
+                  min={0}
+                />
+                <p className="text-xs text-cash-green/60 mt-1">Required - Employee's basic salary amount</p>
+              </div>
+              <Select
+                label="Currency"
+                value={compensation.currency}
+                options={CURRENCY_OPTIONS}
+                onChange={(v) => setCompensation((f) => ({ ...f, currency: v }))}
               />
-              <p className="text-xs text-cash-green/60 mt-1">Required - Employee's basic salary amount</p>
             </div>
 
             <Select
@@ -503,7 +560,7 @@ export default function AddEmployee() {
               <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <dt className="text-cash-green/60">Basic Salary</dt>
                 <dd className="text-deep-cash font-semibold">
-                  ₦{Number(compensation.basicSalary).toLocaleString()}
+                  {compensation.currency} {Number(compensation.basicSalary).toLocaleString()}
                 </dd>
                 <dt className="text-cash-green/60">Pay Frequency</dt>
                 <dd className="text-deep-cash capitalize">{compensation.payFrequency}</dd>
@@ -553,7 +610,7 @@ export default function AddEmployee() {
             disabled={
               (step === 0 && (!personal.firstName || !personal.lastName || !personal.email)) ||
               (step === 1 && (!employment.employeeNumber || !employment.hireDate || !employment.legalEntityId)) ||
-              (step === 2 && !compensation.basicSalary)
+              (step === 2 && !(Number(compensation.basicSalary) > 0))
             }
             onClick={() => setStep((s) => s + 1)}
           >
@@ -563,7 +620,7 @@ export default function AddEmployee() {
           <Button
             variant="primary"
             loading={createMutation.isPending}
-            disabled={!personal.firstName || !personal.lastName || !personal.email || !employment.employeeNumber || !employment.hireDate || !compensation.basicSalary}
+            disabled={!personal.firstName || !personal.lastName || !personal.email || !employment.employeeNumber || !employment.hireDate || !(Number(compensation.basicSalary) > 0)}
             onClick={() => createMutation.mutate()}
           >
             Add Employee

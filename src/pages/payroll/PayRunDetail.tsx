@@ -19,7 +19,6 @@ import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
-import ConfirmModal from '@/components/ui/ConfirmModal';
 import Input from '@/components/ui/Input';
 import type { PayRun, PayRunStatus } from '@contracts/types/payroll';
 import type { BackendPayslip, BackendWorker } from '@/lib/api/types';
@@ -72,8 +71,12 @@ const statusLabel: Record<PayRunStatus, string> = {
 };
 
 // 'calculating' and 'processing' are transient states — not shown as their
-// own steps, just folded into the step they're transitioning from/to.
-const DISPLAY_STEPS: PayRunStatus[] = ['draft', 'calculated', 'in_review', 'approved', 'completed'];
+// own steps, just folded into the step they're transitioning from/to. The
+// last step is the literal 'paid' - mapPayrollStatus (transforms.ts) aliases
+// backend 'completed' to frontend 'paid', which is the value a finished run
+// actually carries; using 'completed' here made indexOf() return -1 for every
+// finished run, silently falling back to step 0 (Draft) instead of the last step.
+const DISPLAY_STEPS: PayRunStatus[] = ['draft', 'calculated', 'in_review', 'approved', 'paid'];
 
 function displayStepIndex(s: PayRunStatus): number {
   if (s === 'calculating') return 0; // still at draft visually
@@ -198,14 +201,19 @@ export default function PayRunDetail() {
     onError: (err) => toast.error('Failed to submit', err instanceof Error ? err.message : undefined),
   });
 
+  const [approveNotes, setApproveNotes] = useState('');
   const approveMutation = useMutation({
     mutationFn: () =>
-      apiClient(ENDPOINTS.PAYROLL.RUNS.APPROVE(id!), { method: 'PATCH', body: JSON.stringify({}) }),
+      apiClient(ENDPOINTS.PAYROLL.RUNS.APPROVE(id!), {
+        method: 'PATCH',
+        body: JSON.stringify({ notes: approveNotes.trim() || undefined }),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['pay-run', id] });
       qc.invalidateQueries({ queryKey: ['pay-runs-list'] });
       toast.success('Pay run approved');
       setApproveModalOpen(false);
+      setApproveNotes('');
     },
     onError: (err) => toast.error('Failed to approve', err instanceof Error ? err.message : undefined),
   });
@@ -428,7 +436,7 @@ export default function PayRunDetail() {
       )}
 
       {/* Status-specific action panels */}
-      {run.status === 'draft' && (
+      {run.status === 'draft' && canManage && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
           <div className="flex items-center gap-4 mb-4">
             <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
@@ -451,12 +459,10 @@ export default function PayRunDetail() {
               <Play size={15} />
               Calculate Payroll
             </Button>
-            {canManage && (
-              <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
-                <XCircle size={15} />
-                Cancel Run
-              </Button>
-            )}
+            <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
+              <XCircle size={15} />
+              Cancel Run
+            </Button>
           </div>
         </div>
       )}
@@ -467,7 +473,7 @@ export default function PayRunDetail() {
             <div className="w-10 h-10 rounded-full bg-cash-gold/10 flex items-center justify-center shrink-0">
               <Clock size={18} className="text-cash-gold animate-pulse" />
             </div>
-            <div>
+            <div className="flex-1">
               <p className="font-semibold text-deep-cash mb-1">Calculating payroll…</p>
               <p className="text-sm text-cash-green/70">
                 Processing employee earnings, deductions, and taxes. This usually takes a few seconds.
@@ -475,6 +481,14 @@ export default function PayRunDetail() {
             </div>
             <Spinner className="ml-auto" />
           </div>
+          {canManage && (
+            <div className="mt-4">
+              <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
+                <XCircle size={15} />
+                Cancel Run
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -498,6 +512,12 @@ export default function PayRunDetail() {
                   <Send size={15} />
                   Submit for Review
                 </Button>
+                {canApprove && (
+                  <Button variant="secondary" onClick={() => setRejectModalOpen(true)}>
+                    <ThumbsDown size={15} />
+                    Reject
+                  </Button>
+                )}
                 <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
                   <XCircle size={15} />
                   Cancel Run
@@ -534,13 +554,37 @@ export default function PayRunDetail() {
                   <ThumbsDown size={15} />
                   Reject
                 </Button>
+                <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
+                  <XCircle size={15} />
+                  Cancel Run
+                </Button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {run.status === 'in_review' && !canApprove && (
+      {run.status === 'in_review' && !canApprove && canManage && (
+        <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
+          <div className="flex items-start gap-4">
+            <div className="w-10 h-10 rounded-full bg-cash-gold/10 flex items-center justify-center shrink-0">
+              <Clock size={18} className="text-cash-gold" />
+            </div>
+            <div className="flex-1">
+              <p className="font-semibold text-deep-cash mb-1">Submitted for approval</p>
+              <p className="text-sm text-cash-green/70 mb-4">
+                Awaiting review — you can still cancel this run before it's approved.
+              </p>
+              <Button variant="ghost" onClick={() => setCancelModalOpen(true)}>
+                <XCircle size={15} />
+                Cancel Run
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {run.status === 'in_review' && !canManage && (
         <div className="bg-white rounded-xl border border-cash-gold/30 p-4 mb-5 flex items-center gap-3">
           <Clock size={16} className="text-cash-gold shrink-0" />
           <p className="text-sm text-cash-green/80">
@@ -602,17 +646,23 @@ export default function PayRunDetail() {
               </p>
             </div>
             
-            {/* Add retry button for failed pay runs */}
+            {/* Add retry/cancel buttons for failed pay runs */}
             {run.status === 'failed' && canCalculate && (
-              <Button 
-                variant="secondary" 
-                size="sm" 
-                onClick={() => calculateMutation.mutate()}
-                loading={calculateMutation.isPending}
-              >
-                <RefreshCw size={14} />
-                Retry Calculation
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => calculateMutation.mutate()}
+                  loading={calculateMutation.isPending}
+                >
+                  <RefreshCw size={14} />
+                  Retry Calculation
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setCancelModalOpen(true)}>
+                  <XCircle size={14} />
+                  Cancel Run
+                </Button>
+              </div>
             )}
           </div>
           
@@ -757,15 +807,31 @@ export default function PayRunDetail() {
         </div>
       </Modal>
 
-      <ConfirmModal
+      <Modal
         isOpen={approveModalOpen}
-        onClose={() => setApproveModalOpen(false)}
-        onConfirm={() => approveMutation.mutate()}
+        onClose={() => { setApproveModalOpen(false); setApproveNotes(''); }}
         title="Approve Pay Run"
-        message="Approve this pay run? It will move to disbursement and cannot be undone from here."
-        confirmLabel="Approve"
-        isLoading={approveMutation.isPending}
-      />
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Approve this pay run? It will move to disbursement and cannot be undone from here.
+          </p>
+          <textarea
+            className="w-full border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors"
+            rows={2}
+            value={approveNotes}
+            onChange={(e) => setApproveNotes(e.target.value)}
+            placeholder="Notes (optional)"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => { setApproveModalOpen(false); setApproveNotes(''); }}>Cancel</Button>
+            <Button variant="primary" loading={approveMutation.isPending} onClick={() => approveMutation.mutate()}>
+              Approve
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       <Modal isOpen={cancelModalOpen} onClose={() => setCancelModalOpen(false)} title="Cancel Pay Run" size="sm">
         <div className="flex flex-col gap-4">

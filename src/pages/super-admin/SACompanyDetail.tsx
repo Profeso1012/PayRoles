@@ -10,6 +10,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Modal from '@/components/ui/Modal';
+import RevealedPasswordModal from '@/components/shared/RevealedPasswordModal';
 import { useToast } from '@/hooks/useToast';
 import { formatDate, generateTempPassword } from '@/lib/utils';
 import { useState } from 'react';
@@ -28,6 +29,7 @@ export default function SACompanyDetail() {
     email: '',
     password: generateTempPassword(),
   });
+  const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
 
   const { data: tenant, isLoading, isError, refetch } = useQuery<BackendTenant>({
     queryKey: ['platform-tenant', id],
@@ -60,7 +62,8 @@ export default function SACompanyDetail() {
         body: JSON.stringify({ ...userForm, role: 'tenant_admin' }),
       }),
     onSuccess: () => {
-      toast.success('User created', `Share the temporary password with ${userForm.email} directly: ${userForm.password}`);
+      toast.success('User created', 'Copy the temporary password before closing the next dialog.');
+      setRevealedPassword({ subject: userForm.email, password: userForm.password });
       setAddUserOpen(false);
       setUserForm({ firstName: '', lastName: '', email: '', password: generateTempPassword() });
     },
@@ -81,7 +84,7 @@ export default function SACompanyDetail() {
   ];
 
   return (
-    <div className="p-6 max-w-[860px] mx-auto">
+    <div className="p-[clamp(0.75rem,4vw,1.5rem)] max-w-[860px] mx-auto">
       {/* Back */}
       <button
         onClick={() => navigate('/admin/companies')}
@@ -177,6 +180,14 @@ export default function SACompanyDetail() {
         variant={isSuspended ? 'default' : 'danger'}
         isLoading={toggleStatus.isPending}
       />
+
+      {revealedPassword && (
+        <RevealedPasswordModal
+          subject={revealedPassword.subject}
+          password={revealedPassword.password}
+          onDone={() => setRevealedPassword(null)}
+        />
+      )}
     </div>
   );
 }

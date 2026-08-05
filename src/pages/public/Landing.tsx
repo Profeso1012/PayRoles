@@ -60,19 +60,27 @@ const FEATURES = [
 ]
 
 export default function Landing() {
-  const [cardOffset, setCardOffset] = useState(0)
   const cardTrackRef = useRef<HTMLDivElement>(null)
 
+  // Reads the track's real scrollLeft at click time instead of a separately
+  // tracked offset in React state - the old version tracked its own
+  // `cardOffset` state and scrolled relative to that, which desyncs the
+  // instant a user swipes the track directly (the primary way anyone
+  // scrolls a horizontal list on a touch device) - after that, the buttons
+  // would jump to/from a stale position instead of the card actually in
+  // view, which read as "the arrows don't do anything" on mobile. Also
+  // pages by the track's own rendered width rather than a hardcoded 260px,
+  // so one click reliably advances by exactly one card's width whatever
+  // that is at the current breakpoint (one full card on mobile, several on desktop).
   const scrollCards = (dir: 'left' | 'right') => {
     const track = cardTrackRef.current
     if (!track) return
-    const amount = 260
+    const amount = track.clientWidth
     const maxScroll = track.scrollWidth - track.clientWidth
     const next =
       dir === 'right'
-        ? Math.min(cardOffset + amount, maxScroll)
-        : Math.max(cardOffset - amount, 0)
-    setCardOffset(next)
+        ? Math.min(track.scrollLeft + amount, maxScroll)
+        : Math.max(track.scrollLeft - amount, 0)
     track.scrollTo({ left: next, behavior: 'smooth' })
   }
 
@@ -95,6 +103,7 @@ export default function Landing() {
           .art-grid { grid-template-columns: 1fr !important; }
           .purp-inner { flex-direction: column !important; }
           .purp-sidebar { flex: unset !important; width: 100% !important; padding-right: 0 !important; padding-bottom: 32px !important; }
+          .trust-card { flex-basis: 100% !important; }
         }
         @media (max-width: 640px) {
           .stat-divider { border-right: none !important; }
@@ -517,6 +526,7 @@ export default function Landing() {
                 return (
                   <div
                     key={feat.title}
+                    className="trust-card"
                     style={{
                       flex: '0 0 clamp(190px, 60vw, 230px)',
                       background: 'white',

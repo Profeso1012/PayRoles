@@ -16,6 +16,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [{ id: 'bd-1', employeeId: 'emp-1', bankName: 'GTBank', accountNumber: '0123456789', accountName: 'Amaka Eze', isPrimary: true }],
+    hireDate: '2024-01-10',
     createdAt: '2024-01-10T08:00:00Z',
   },
   {
@@ -33,6 +34,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [{ id: 'bd-2', employeeId: 'emp-2', bankName: 'Access Bank', accountNumber: '9876543210', accountName: 'Emeka Nwosu', isPrimary: true }],
+    hireDate: '2024-01-15',
     createdAt: '2024-01-15T08:00:00Z',
   },
   {
@@ -50,6 +52,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [{ id: 'bd-3', employeeId: 'emp-3', bankName: 'Zenith Bank', accountNumber: '4567891230', accountName: 'Chidi Okeke', isPrimary: true }],
+    hireDate: '2024-02-01',
     createdAt: '2024-02-01T08:00:00Z',
   },
   {
@@ -67,6 +70,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [],
+    hireDate: '2024-02-15',
     createdAt: '2024-02-15T08:00:00Z',
   },
   {
@@ -84,6 +88,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [{ id: 'bd-5', employeeId: 'emp-5', bankName: 'First Bank', accountNumber: '3214567890', accountName: 'Chioma Okonkwo', isPrimary: true }],
+    hireDate: '2024-01-05',
     createdAt: '2024-01-05T08:00:00Z',
   },
   {
@@ -101,6 +106,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: '2025-05-31',
     avatarUrl: null,
     bankDetails: [{ id: 'bd-6', employeeId: 'emp-6', bankName: 'UBA', accountNumber: '6543219870', accountName: 'Taiwo Adeleke', isPrimary: true }],
+    hireDate: '2023-06-01',
     createdAt: '2023-06-01T08:00:00Z',
   },
   {
@@ -118,6 +124,7 @@ export const mockEmployees: Employee[] = [
     terminationDate: null,
     avatarUrl: null,
     bankDetails: [{ id: 'bd-7', employeeId: 'emp-7', bankName: 'Stanbic IBTC', accountNumber: '1472583690', accountName: 'Ngozi Obiora', isPrimary: true }],
+    hireDate: '2024-03-01',
     createdAt: '2024-03-01T08:00:00Z',
   },
 ];
