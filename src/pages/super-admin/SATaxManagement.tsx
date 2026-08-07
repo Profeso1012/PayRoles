@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, ChevronDown, ChevronUp, Globe, Trash2 } from 'lucide-react';
+import { Plus, ChevronDown, ChevronUp, Globe, Trash2, Eye } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -16,6 +16,7 @@ import type {
   TaxJurisdiction,
   TaxRule,
   TaxVersion,
+  TaxVersionDetail,
   BackendTaxCalculationBasis,
   BackendTaxReliefType,
   CreateTaxRuleRequest,
@@ -89,6 +90,17 @@ export default function SATaxManagement() {
   const [versionModalTarget, setVersionModalTarget] = useState<TaxRule | null>(null);
   const [versionForm, setVersionForm] = useState(blankVersionForm);
   const [togglingCode, setTogglingCode] = useState<string | null>(null);
+  const [viewCode, setViewCode] = useState<string | null>(null);
+
+  // GET /platform/tax/versions/:code already returns the full bands/reliefs
+  // breakdown - this page just never called it before, so there was no way
+  // to see what's actually stored on an existing version (e.g. to confirm
+  // whether it really has zero bands) without querying the API directly.
+  const { data: viewDetail, isLoading: viewLoading, isError: viewError } = useQuery<TaxVersionDetail>({
+    queryKey: ['platform-tax-version-detail', viewCode],
+    queryFn: () => apiClient<TaxVersionDetail>(ENDPOINTS.PLATFORM_TAX.VERSION_DETAIL(viewCode!)),
+    enabled: !!viewCode,
+  });
 
   const { data: rows, isLoading, isError, refetch } = useQuery<JurisdictionRow[]>({
     queryKey: ['platform-tax-tree'],
@@ -344,6 +356,10 @@ export default function SATaxManagement() {
                                   </span>
                                   <div className="flex items-center gap-2 shrink-0">
                                     <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
+                                    <Button variant="ghost" size="sm" onClick={() => setViewCode(v.code)}>
+                                      <Eye size={13} />
+                                      View
+                                    </Button>
                                     {canWrite && (
                                       <Button
                                         variant="secondary"
@@ -595,6 +611,116 @@ export default function SATaxManagement() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* View Version modal — read-only, since versions are immutable once
+          created (no edit endpoint exists on the backend). This is here so
+          "does this version actually have bands?" can be answered from the
+          UI instead of only via a direct API call. */}
+      <Modal
+        isOpen={!!viewCode}
+        onClose={() => setViewCode(null)}
+        title={viewDetail ? `${viewDetail.version.name} (${viewDetail.version.code})` : 'Tax Version'}
+        size="md"
+      >
+        {viewLoading ? (
+          <div className="flex justify-center py-10"><Spinner /></div>
+        ) : viewError || !viewDetail ? (
+          <p className="text-sm text-red-500">Failed to load this version's details.</p>
+        ) : (
+          <div className="flex flex-col gap-5">
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <dt className="text-cash-green/60">Effective</dt>
+              <dd className="text-deep-cash">
+                {viewDetail.version.effectiveDate}
+                {viewDetail.version.endDate ? ` — ${viewDetail.version.endDate}` : ' — ongoing'}
+              </dd>
+              <dt className="text-cash-green/60">Basis</dt>
+              <dd className="text-deep-cash capitalize">{viewDetail.version.basis}</dd>
+              <dt className="text-cash-green/60">Status</dt>
+              <dd>
+                <Badge variant={viewDetail.version.isActive ? 'success' : 'info'} label={viewDetail.version.isActive ? 'Active' : 'Inactive'} />
+              </dd>
+              {viewDetail.version.notes && (
+                <>
+                  <dt className="text-cash-green/60">Notes</dt>
+                  <dd className="text-deep-cash">{viewDetail.version.notes}</dd>
+                </>
+              )}
+            </dl>
+
+            <div>
+              <p className="text-sm font-semibold text-deep-cash mb-2">
+                Tax Bands ({viewDetail.bands.length})
+              </p>
+              {viewDetail.bands.length === 0 ? (
+                <p className="text-sm text-red-500 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                  No bands configured — the tax engine will refuse to calculate against this version
+                  (throws "has no tax bands configured") until this is fixed at the database level.
+                  Versions can't be edited once created, so the only path forward is deactivating this
+                  one and creating a fresh version with bands filled in.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-mint-light text-xs text-cash-green/70 uppercase">
+                        <th className="text-left py-1.5 pr-2">#</th>
+                        <th className="text-right py-1.5 pr-2">From (₦)</th>
+                        <th className="text-right py-1.5 pr-2">To (₦)</th>
+                        <th className="text-right py-1.5">Rate</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...viewDetail.bands]
+                        .sort((a, b) => a.sequence - b.sequence)
+                        .map((b) => (
+                          <tr key={b.id} className="border-b border-mint-light/50 text-deep-cash">
+                            <td className="py-1.5 pr-2">{b.sequence}</td>
+                            <td className="text-right py-1.5 pr-2 tabular-nums">
+                              {(Number(b.lowerBoundMinor) / 100).toLocaleString()}
+                            </td>
+                            <td className="text-right py-1.5 pr-2 tabular-nums">
+                              {b.upperBoundMinor ? (Number(b.upperBoundMinor) / 100).toLocaleString() : '∞'}
+                            </td>
+                            <td className="text-right py-1.5 tabular-nums">{b.ratePercent}%</td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-semibold text-deep-cash mb-2">
+                Reliefs ({viewDetail.reliefs.length})
+              </p>
+              {viewDetail.reliefs.length === 0 ? (
+                <p className="text-xs text-cash-green/60">No reliefs configured for this version.</p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {viewDetail.reliefs.map((r) => (
+                    <div key={r.id} className="border border-mint-light rounded-lg px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-deep-cash">{r.name} <span className="text-cash-green/60 font-mono text-xs">({r.code})</span></p>
+                        <Badge variant={r.isActive ? 'success' : 'info'} label={r.isActive ? 'Active' : 'Inactive'} />
+                      </div>
+                      <p className="text-xs text-cash-green/70 mt-1">
+                        {r.type.replace(/_/g, ' ')} · {r.value}
+                        {r.capMinor ? ` · capped at ₦${(Number(r.capMinor) / 100).toLocaleString()}` : ''}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <Button variant="ghost" onClick={() => setViewCode(null)}>Close</Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   );
