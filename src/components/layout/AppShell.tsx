@@ -11,7 +11,7 @@ export default function AppShell() {
       <div className="flex" style={{ paddingTop: '72px' }}>
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-x-hidden">
-          <div className="p-5 lg:p-8">
+          <div className="p-[clamp(0.25rem,1.5vw,2rem)]">
             <Outlet />
           </div>
         </main>

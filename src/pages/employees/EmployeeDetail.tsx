@@ -587,11 +587,11 @@ export default function EmployeeDetail() {
             </div>
             <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
               <dt className="text-cash-green/60">Full Name</dt>
-              <dd className="text-deep-cash font-medium">{fullName}</dd>
+              <dd className="text-deep-cash font-medium truncate min-w-0" title={fullName}>{fullName}</dd>
               <dt className="text-cash-green/60">Email</dt>
-              <dd className="text-deep-cash">{employee.email}</dd>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.email}>{employee.email}</dd>
               <dt className="text-cash-green/60">Phone</dt>
-              <dd className="text-deep-cash">{employee.phone}</dd>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.phone}>{employee.phone}</dd>
               <dt className="text-cash-green/60">Date of Birth</dt>
               <dd className="text-deep-cash">{formatDate(employee.dateOfBirth)}</dd>
               {employee.gender && (
@@ -604,6 +604,27 @@ export default function EmployeeDetail() {
               <dd className="text-deep-cash font-mono text-xs">
                 {employee.nationalId === '****' ? 'Protected' : employee.nationalId}
               </dd>
+            </dl>
+          </div>
+
+          <div className="bg-white rounded-xl border border-mint-light p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Briefcase size={16} className="text-cash-green" />
+              <h3 className="text-sm font-semibold text-deep-cash">Employment Information</h3>
+            </div>
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
+              <dt className="text-cash-green/60">Employee Number</dt>
+              <dd className="text-deep-cash font-medium">{employee.employeeNumber || '—'}</dd>
+              <dt className="text-cash-green/60">Hire Date</dt>
+              <dd className="text-deep-cash">{employee.hireDate ? formatDate(employee.hireDate) : '—'}</dd>
+              <dt className="text-cash-green/60">Position</dt>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.position ?? undefined}>{employee.position || '—'}</dd>
+              <dt className="text-cash-green/60">Department</dt>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.department ?? undefined}>{employee.department || '—'}</dd>
+              <dt className="text-cash-green/60">Employment Type</dt>
+              <dd className="text-deep-cash capitalize">{employee.employmentType?.replace(/_/g, ' ') || '—'}</dd>
+              <dt className="text-cash-green/60">Legal Entity</dt>
+              <dd className="text-deep-cash truncate min-w-0" title={legalEntity?.name}>{legalEntity?.name || '—'}</dd>
             </dl>
           </div>
 
@@ -1198,7 +1219,11 @@ export default function EmployeeDetail() {
             label="Pay Element"
             value={wpeForm.payElementId}
             options={(payElementCatalog ?? [])
-              .filter((pe) => pe.isActive && pe.code !== 'BASIC_SALARY')  // Filter out BASIC_SALARY
+              // BASIC_SALARY and auto-apply tax elements both apply automatically to
+              // every worker already - assigning them here manually is a silent
+              // no-op (the calculation engine ignores whatever is set and always
+              // uses its own defaults for these), so neither is offered.
+              .filter((pe) => pe.isActive && pe.code !== 'BASIC_SALARY' && !(pe.type === 'tax' && pe.autoApply))
               .map((pe) => ({ value: pe.id, label: `${pe.code} — ${pe.name}` }))}
             onChange={(v) => setWpeForm((f) => ({ ...f, payElementId: v }))}
             placeholder={payElementCatalog ? 'Select a pay element' : 'Loading...'}

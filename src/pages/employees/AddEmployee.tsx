@@ -488,7 +488,7 @@ export default function AddEmployee() {
               {personal.email && (
                 <>
                   <dt className="text-cash-green/60">Email</dt>
-                  <dd className="text-deep-cash">{personal.email}</dd>
+                  <dd className="text-deep-cash truncate min-w-0" title={personal.email}>{personal.email}</dd>
                 </>
               )}
               {personal.phone && (

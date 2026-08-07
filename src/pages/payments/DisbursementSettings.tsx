@@ -88,21 +88,46 @@ function clampMin(n: number, min: number) {
 interface CredentialField {
   key: string;
   label: string;
+  placeholder?: string;
+  hint?: string;
 }
 
+// Placeholders/hints are copied from each provider's own credentials
+// interface docblock on the backend (paystack.types.ts, flutterwave.types.ts,
+// etc.) — not guessed — so the format actually matches what that provider's
+// dashboard hands you.
 const PROVIDER_CREDENTIAL_FIELDS: Record<BackendProviderType, CredentialField[]> = {
   manual_bank_file: [],
   monnify: [
-    { key: 'apiKey', label: 'API Key' },
-    { key: 'secretKey', label: 'Secret Key' },
-    { key: 'contractCode', label: 'Contract Code' },
-    { key: 'walletAccountNumber', label: 'Wallet Account Number' },
+    {
+      key: 'apiKey',
+      label: 'API Key',
+      placeholder: 'MK_TEST_XXXXXXXXXX or MK_PROD_XXXXXXXXXX',
+      hint: "Monnify dashboard → Settings → API Keys. Monnify itself calls the two modes Sandbox / Live.",
+    },
+    { key: 'secretKey', label: 'Secret Key', placeholder: 'Paired with the API Key above, same screen' },
+    { key: 'contractCode', label: 'Contract Code', placeholder: 'e.g. 1234567890', hint: 'Monnify dashboard → Settings → Contract Details' },
+    { key: 'walletAccountNumber', label: 'Wallet Account Number', placeholder: '10-digit NUBAN, e.g. 3012345678' },
   ],
-  paystack: [{ key: 'secretKey', label: 'Secret Key' }],
-  flutterwave: [{ key: 'secretKey', label: 'Secret Key' }],
+  paystack: [
+    {
+      key: 'secretKey',
+      label: 'Secret Key',
+      placeholder: 'sk_test_xxxxxxxxxxxx or sk_live_xxxxxxxxxxxx',
+      hint: 'Paystack dashboard → Settings → API Keys & Webhooks. Paystack calls the two modes Test / Live — use the Secret Key, not the Public Key (pk_...), which this integration never uses.',
+    },
+  ],
+  flutterwave: [
+    {
+      key: 'secretKey',
+      label: 'Secret Key',
+      placeholder: 'FLWSECK_TEST-xxxxxxxxxxxx or FLWSECK-xxxxxxxxxxxx',
+      hint: 'Flutterwave dashboard → Settings → API. Flutterwave calls the two modes Test / Live.',
+    },
+  ],
   remita: [
     { key: 'merchantId', label: 'Merchant ID' },
-    { key: 'serviceTypeId', label: 'Service Type ID' },
+    { key: 'serviceTypeId', label: 'Service Type ID', hint: 'The service type configured for salary/bulk payments on your Remita account' },
     { key: 'apiKey', label: 'API Key' },
     { key: 'apiToken', label: 'API Token (optional)' },
   ],
@@ -124,6 +149,22 @@ const PROVIDER_HAS_WEBHOOK: Record<BackendProviderType, boolean> = {
   paystack: true,
   flutterwave: true,
   remita: true,
+};
+
+// This app verifies webhook signatures itself (HMAC-SHA512 of the raw
+// payload against this stored value) - it is NOT something to go find as a
+// labeled field in the provider's own dashboard. For Monnify/Paystack/Remita,
+// their real webhook signature is computed from your account's own secret
+// key, so this must be set to the exact same value as the Secret/API Key
+// above - there is no separate "webhook secret" in their dashboards to copy
+// instead. Flutterwave is the one exception: it has a real, distinct
+// "Secret Hash" field under Settings -> Webhooks in their dashboard, made
+// for exactly this.
+const WEBHOOK_SECRET_HINTS: Partial<Record<BackendProviderType, string>> = {
+  monnify: "Not a separate field in Monnify's dashboard — paste the same Secret Key you entered above.",
+  paystack: "Not a separate field in Paystack's dashboard — paste the same Secret Key you entered above.",
+  remita: "Remita has no standard self-service webhook secret — check with Remita support for what value to use here.",
+  flutterwave: 'Found in your Flutterwave dashboard under Settings → Webhooks, labeled "Secret Hash" — a real, separate value from your Secret Key.',
 };
 
 const blankProviderForm = {
@@ -499,10 +540,11 @@ export default function DisbursementSettings() {
               label="Environment"
               value={providerForm.environment}
               options={[
-                { value: 'sandbox', label: 'Sandbox' },
-                { value: 'production', label: 'Production' },
+                { value: 'sandbox', label: 'Sandbox / Test' },
+                { value: 'production', label: 'Production / Live' },
               ]}
               onChange={(v) => setProviderForm((f) => ({ ...f, environment: v as 'sandbox' | 'production' }))}
+              hint="Match whichever mode you copied the credentials below from — the label your provider uses (Test/Live, Sandbox/Live) varies, this is the same underlying setting."
             />
           )}
           <label className="flex items-center gap-2 text-sm text-deep-cash">
@@ -522,11 +564,13 @@ export default function DisbursementSettings() {
             Set as default provider
           </label>
           {providerTarget &&
-            PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label }) => (
+            PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label, placeholder, hint }) => (
               <Input
                 key={key}
                 label={`${label} (leave blank to keep current)`}
                 type="password"
+                placeholder={placeholder}
+                hint={hint}
                 value={providerForm.credentials[key] ?? ''}
                 onChange={(e) =>
                   setProviderForm((f) => ({
@@ -542,6 +586,7 @@ export default function DisbursementSettings() {
               type="password"
               value={providerForm.webhookSecret}
               onChange={(e) => setProviderForm((f) => ({ ...f, webhookSecret: e.target.value }))}
+              hint={WEBHOOK_SECRET_HINTS[providerTarget]}
             />
           )}
           {providerTarget && PROVIDER_CREDENTIAL_FIELDS[providerTarget].length > 0 && (

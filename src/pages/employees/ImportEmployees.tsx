@@ -164,6 +164,27 @@ function csvEscape(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
+function downloadLoginCredentials(results: LoginResult[]) {
+  const successes = results.filter((r) => r.status === 'success' && r.password);
+  const lines = [
+    ['firstName', 'lastName', 'email', 'temporaryPassword'].join(','),
+    ...successes.map((r) =>
+      [r.worker.firstName, r.worker.lastName, r.worker.email ?? '', r.password ?? '']
+        .map((v) => csvEscape(v ?? ''))
+        .join(','),
+    ),
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'employee-login-credentials.csv';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 function downloadSampleTemplate() {
   const lines = [
     SAMPLE_TEMPLATE_COLUMNS.join(','),
@@ -646,7 +667,11 @@ export default function ImportEmployees() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-end pt-2">
+            <div className="flex justify-between items-center pt-2">
+              <Button variant="ghost" size="sm" onClick={() => downloadLoginCredentials(loginResults)}>
+                <Download size={14} />
+                Download CSV
+              </Button>
               <Button variant="primary" onClick={() => setBulkLoginOpen(false)}>Done</Button>
             </div>
           </div>

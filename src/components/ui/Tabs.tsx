@@ -15,7 +15,7 @@ interface TabsProps {
 
 export default function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
-    <div className={cn('border-b border-mint-light flex gap-0', className)}>
+    <div className={cn('border-b border-mint-light flex gap-0 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden', className)}>
       {tabs.map((tab) => {
         const isActive = tab.id === activeTab;
         return (
@@ -23,7 +23,7 @@ export default function Tabs({ tabs, activeTab, onChange, className }: TabsProps
             key={tab.id}
             onClick={() => onChange(tab.id)}
             className={cn(
-              'px-4 py-3 text-sm font-medium cursor-pointer relative transition-colors',
+              'px-4 py-3 text-sm font-medium cursor-pointer relative transition-colors shrink-0',
               isActive
                 ? 'text-deep-cash font-semibold'
                 : 'text-cash-green hover:text-deep-cash',
