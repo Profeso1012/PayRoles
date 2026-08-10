@@ -80,9 +80,9 @@ export default function SATaxManagement() {
   const qc = useQueryClient();
   const toast = useToast();
   const platformRole = useAuthStore((s) => s.user?.platformRole);
-  // Only platform super_admin holds PlatformPermission.TAX_RULE_WRITE -
-  // support_engineer/auditor are read-only, devops has neither.
-  const canWrite = platformRole === 'super_admin';
+  // super_admin and platform_admin both hold PlatformPermission.TAX_RULE_WRITE
+  // (platform-roles.enum.ts) - support_engineer/auditor are read-only, devops has neither.
+  const canWrite = platformRole === 'super_admin' || platformRole === 'platform_admin';
 
   const [expandedCodes, setExpandedCodes] = useState<Set<string>>(new Set());
   const [ruleModalOpen, setRuleModalOpen] = useState(false);

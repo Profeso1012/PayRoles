@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Users, Calculator, Play, CreditCard } from 'lucide-react'
-import { buildGetStartedMailto } from '@/lib/supportContact'
+import { PATHS } from '@/router/paths'
 
 const FEATURE_LINKS = [
   {
@@ -274,7 +274,7 @@ export default function MarketingNav() {
           </a>
 
           <a
-            href={buildGetStartedMailto()}
+            href={PATHS.REQUEST_ACCESS}
             className="nav-links-desktop"
             style={{
               alignItems: 'center',
@@ -400,7 +400,7 @@ export default function MarketingNav() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 'auto' }}>
             <button
-              onClick={() => { setMenuOpen(false); window.location.href = buildGetStartedMailto() }}
+              onClick={() => { setMenuOpen(false); navigate(PATHS.REQUEST_ACCESS) }}
               style={{
                 width: '100%',
                 padding: '15px 24px',

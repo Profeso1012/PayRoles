@@ -24,8 +24,7 @@ function w(Component: React.LazyExoticComponent<React.ComponentType<Record<strin
 
 // Public pages
 const Landing = lazy(() => import('@/pages/public/Landing'));
-// Deprecated: RequestAccess (backend has no company-requests endpoint at all)
-// const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
+const RequestAccess = lazy(() => import('@/pages/public/RequestAccess'));
 const FeaturesOverview = lazy(() => import('@/pages/public/features/FeaturesOverview'));
 const FeaturesTeam = lazy(() => import('@/pages/public/features/FeaturesTeam'));
 const FeaturesPaySetup = lazy(() => import('@/pages/public/features/FeaturesPaySetup'));
@@ -33,9 +32,11 @@ const FeaturesPayroll = lazy(() => import('@/pages/public/features/FeaturesPayro
 const FeaturesPayments = lazy(() => import('@/pages/public/features/FeaturesPayments'));
 const Login = lazy(() => import('@/pages/auth/Login'));
 const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
+const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
 // Deprecated: ForgotPassword, ResetPassword, AcceptInvite - the real
-// auth.controller.ts only exposes login/refresh/logout/me, no
-// forgot-password/reset-password/accept-invite routes exist on the backend.
+// auth.controller.ts only exposes signup/verify-email/resend-verification/
+// login/refresh/logout/me, no forgot-password/reset-password/accept-invite
+// routes exist on the backend.
 // const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
 // const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 // const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
@@ -52,6 +53,7 @@ const SACompanies = lazy(() => import('@/pages/super-admin/SACompanies'));
 const SACompanyDetail = lazy(() => import('@/pages/super-admin/SACompanyDetail'));
 const SATaxManagement = lazy(() => import('@/pages/super-admin/SATaxManagement'));
 const SAUsers = lazy(() => import('@/pages/super-admin/SAUsers'));
+const SAWalletProviders = lazy(() => import('@/pages/super-admin/SAWalletProviders'));
 
 // Dashboards
 const HRDashboard = lazy(() => import('@/pages/dashboard/HRDashboard'));
@@ -85,6 +87,7 @@ const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 
 // Finance
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
+const Wallet = lazy(() => import('@/pages/payments/Wallet'));
 const DisbursementSettings = lazy(() => import('@/pages/payments/DisbursementSettings'));
 const DisbursementDashboard = lazy(() => import('@/pages/payments/DisbursementDashboard'));
 const DisbursementReports = lazy(() => import('@/pages/payments/DisbursementReports'));
@@ -144,7 +147,8 @@ function DashboardRouter() {
 export const router = createBrowserRouter([
   // Public
   { path: PATHS.HOME, element: <Suspense fallback={<Loading />}><Landing /></Suspense> },
-  // Deprecated: /request-access (no backend endpoint for company access requests)
+  { path: PATHS.REQUEST_ACCESS, element: w(RequestAccess) },
+  { path: PATHS.VERIFY_EMAIL, element: w(VerifyEmail) },
   { path: PATHS.FEATURES, element: w(FeaturesOverview) },
   { path: PATHS.FEATURES_TEAM, element: w(FeaturesTeam) },
   { path: PATHS.FEATURES_PAY_SETUP, element: w(FeaturesPaySetup) },
@@ -178,6 +182,7 @@ export const router = createBrowserRouter([
       { path: 'companies/:id', element: w(SACompanyDetail) },
       { path: 'tax', element: w(SATaxManagement) },
       { path: 'users', element: w(SAUsers) },
+      { path: 'wallet-providers', element: w(SAWalletProviders) },
     ],
   },
 
@@ -258,6 +263,7 @@ export const router = createBrowserRouter([
       // only, so finance_manager/payroll_manager can approve/execute batches
       // but cannot configure providers or general settings.
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(PaymentFiles)}</RoleGuard> },
+      { path: 'payments/wallet', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(Wallet)}</RoleGuard> },
       { path: 'payments/settings', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}>{w(DisbursementSettings)}</RoleGuard> },
       { path: 'payments/overview', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementDashboard)}</RoleGuard> },
       { path: 'payments/reports', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementReports)}</RoleGuard> },

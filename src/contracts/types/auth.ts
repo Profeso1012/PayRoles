@@ -48,8 +48,9 @@ export interface AuthUser {
    * |'auditor'|'devops'), only present when role === 'PLATFORM_ADMIN'. That field
    * itself is a frontend sentinel collapsing all platform roles into one - this
    * carries the actual granular role from GET /platform/users/me for screens that
-   * need to distinguish them (e.g. only super_admin holds PlatformPermission.
-   * TAX_RULE_WRITE; support_engineer/auditor are read-only, devops has neither).
+   * need to distinguish them (e.g. super_admin and platform_admin both hold
+   * PlatformPermission.TAX_RULE_WRITE/DISBURSEMENT_CONFIGURE; support_engineer/
+   * auditor are read-only, devops has neither).
    */
   platformRole: string | null;
 }

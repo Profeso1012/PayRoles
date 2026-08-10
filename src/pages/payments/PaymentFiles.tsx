@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, ListChecks, BadgeCheck, Settings2, LayoutDashboard, FileBarChart } from 'lucide-react';
-import { apiClient, apiClientWithMeta, downloadFile } from '@/lib/api';
+import { DownloadCloud, Inbox, FileText, CheckCircle2, Clock, ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, ListChecks, BadgeCheck, Settings2, LayoutDashboard, FileBarChart, WalletCards } from 'lucide-react';
+import { apiClient, apiClientWithMeta, downloadFile, ApiError } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
+import { formatMoney } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
@@ -17,7 +18,7 @@ import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
-import type { BackendDisbursementBatch, BackendBatchStatus, BackendDisbursementTransaction, BackendTransactionStatus } from '@/lib/api/types';
+import type { BackendDisbursementBatch, BackendBatchStatus, BackendDisbursementTransaction, BackendTransactionStatus, BackendWallet } from '@/lib/api/types';
 import type { PayRun } from '@contracts/types/payroll';
 
 // Batch statuses where money has already moved or the batch is otherwise
@@ -146,8 +147,9 @@ export default function PaymentFiles() {
   const [downloadTarget, setDownloadTarget] = useState<DisbursementRow | null>(null);
   const [downloadFormat, setDownloadFormat] = useState<'csv' | 'excel' | 'nibss'>('csv');
   const [downloading, setDownloading] = useState(false);
-  const [scheduleTarget, setScheduleTarget] = useState<string | null>(null); // payrollRunId
+  const [initiateTarget, setInitiateTarget] = useState<string | null>(null); // payrollRunId
   const [scheduledAt, setScheduledAt] = useState('');
+  const [fundViaWallet, setFundViaWallet] = useState(false);
 
   // Shares the ['disbursement-settings'] cache key with DisbursementSettings.tsx -
   // Initiate needs to know the tenant's configured executionPolicy instead of
@@ -156,6 +158,15 @@ export default function PaymentFiles() {
     queryKey: ['disbursement-settings'],
     queryFn: () => apiClient(ENDPOINTS.DISBURSEMENT.SETTINGS),
   });
+
+  // Shares the ['wallet'] cache key with the Wallet page - just needs the
+  // balance to decide whether "Fund from wallet" is even offerable here.
+  const { data: wallet } = useQuery<BackendWallet>({
+    queryKey: ['wallet'],
+    queryFn: () => apiClient<BackendWallet>(ENDPOINTS.WALLET.GET),
+    enabled: canManage,
+  });
+  const walletBalanceMinor = wallet ? Number(wallet.balanceMinor) : 0;
 
   const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
@@ -241,32 +252,48 @@ export default function PaymentFiles() {
   });
 
   const initiateMutation = useMutation({
-    mutationFn: ({ runId, scheduledAt: at }: { runId: string; scheduledAt?: string }) =>
+    mutationFn: ({ runId, scheduledAt: at, fundViaWallet: viaWallet }: { runId: string; scheduledAt?: string; fundViaWallet?: boolean }) =>
       apiClient(ENDPOINTS.DISBURSEMENT.INITIATE(runId), {
         method: 'POST',
         body: JSON.stringify({
           executionPolicy: settings?.executionPolicy ?? 'manual',
           ...(at ? { scheduledAt: new Date(at).toISOString() } : {}),
+          ...(viaWallet ? { fundViaWallet: true } : {}),
         }),
       }),
     onSuccess: () => {
       toast.success('Disbursement initiated');
-      setScheduleTarget(null);
+      setInitiateTarget(null);
       setScheduledAt('');
+      setFundViaWallet(false);
       invalidate();
+      qc.invalidateQueries({ queryKey: ['wallet'] });
     },
-    onError: (err) => toast.error('Failed to initiate disbursement', err instanceof Error ? err.message : undefined),
+    onError: (err) => {
+      // shortfallMinor/currency arrive as single-element string arrays in
+      // fieldErrors, same shape as every other backend validation error -
+      // not plain numbers.
+      if (err instanceof ApiError && err.data && typeof err.data === 'object') {
+        const body = err.data as { error?: { code?: string; fieldErrors?: Record<string, string[]> } };
+        if (body.error?.code === 'INSUFFICIENT_WALLET_BALANCE') {
+          const shortfallMinor = Number(body.error.fieldErrors?.shortfallMinor?.[0] ?? 0);
+          const currency = body.error.fieldErrors?.currency?.[0] ?? 'NGN';
+          toast.error(
+            'Insufficient wallet balance',
+            `Top up ${formatMoney(shortfallMinor / 100, currency)} more to fund this batch, or initiate without wallet funding.`,
+          );
+          return;
+        }
+      }
+      toast.error('Failed to initiate disbursement', err instanceof Error ? err.message : undefined);
+    },
   });
 
-  // Manual/immediate need no extra input - a single click initiates. Scheduled
-  // needs a time the backend has nowhere else to get, so it opens a small
-  // modal to collect one instead of silently omitting it.
+  // Always opens the Initiate dialog - manual/immediate skip the schedule
+  // field, but every policy still needs the wallet-funding choice made
+  // explicitly rather than always defaulting to the configured provider.
   function handleInitiateClick(runId: string) {
-    if (settings?.executionPolicy === 'scheduled') {
-      setScheduleTarget(runId);
-    } else {
-      initiateMutation.mutate({ runId });
-    }
+    setInitiateTarget(runId);
   }
 
   const approveMutation = useMutation({
@@ -384,10 +411,13 @@ export default function PaymentFiles() {
       // since every action button below also does exact status matching.
       render: (row: DisbursementRow) =>
         row.batch ? (
-          <Badge
-            variant={batchStatusVariant[row.batch.status] ?? 'error'}
-            label={batchStatusLabel[row.batch.status] ?? `Unknown (${row.batch.status})`}
-          />
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge
+              variant={batchStatusVariant[row.batch.status] ?? 'error'}
+              label={batchStatusLabel[row.batch.status] ?? `Unknown (${row.batch.status})`}
+            />
+            {row.batch.fundedByWallet && <Badge variant="info" label="Wallet" />}
+          </div>
         ) : (
           <Badge variant="draft" label="Not started" />
         ),
@@ -484,6 +514,12 @@ export default function PaymentFiles() {
             </p>
             <div className="flex items-center gap-1">
               {canManage && (
+                <Button variant="ghost" size="sm" onClick={() => navigate('/payments/wallet')}>
+                  <WalletCards size={14} />
+                  <span className="hidden sm:inline">Wallet</span>
+                </Button>
+              )}
+              {canManage && (
                 <Button variant="ghost" size="sm" onClick={() => navigate('/payments/overview')}>
                   <LayoutDashboard size={14} />
                   <span className="hidden sm:inline">Overview</span>
@@ -563,33 +599,57 @@ export default function PaymentFiles() {
       )}
 
       <Modal
-        isOpen={!!scheduleTarget}
-        onClose={() => { setScheduleTarget(null); setScheduledAt(''); }}
-        title="Schedule Disbursement"
+        isOpen={!!initiateTarget}
+        onClose={() => { setInitiateTarget(null); setScheduledAt(''); setFundViaWallet(false); }}
+        title="Initiate Disbursement"
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-cash-green/70">
-            Your tenant's execution policy is set to Scheduled — pick when this batch should run.
-            It still goes through approval first; execution starts at this time only once approved.
-          </p>
-          <Input
-            label="Run at"
-            type="datetime-local"
-            value={scheduledAt}
-            onChange={(e) => setScheduledAt(e.target.value)}
-            min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
-            hint="Local date and time"
-          />
+          {settings?.executionPolicy === 'scheduled' && (
+            <>
+              <p className="text-sm text-cash-green/70">
+                Your tenant's execution policy is set to Scheduled — pick when this batch should run.
+                It still goes through approval first; execution starts at this time only once approved.
+              </p>
+              <Input
+                label="Run at"
+                type="datetime-local"
+                value={scheduledAt}
+                onChange={(e) => setScheduledAt(e.target.value)}
+                min={new Date(Date.now() + 5 * 60 * 1000).toISOString().slice(0, 16)}
+                hint="Local date and time"
+              />
+            </>
+          )}
+
+          <label className={`flex items-start gap-2 text-sm ${walletBalanceMinor > 0 ? 'text-deep-cash' : 'text-cash-green/40'}`}>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={fundViaWallet}
+              disabled={walletBalanceMinor <= 0}
+              onChange={(e) => setFundViaWallet(e.target.checked)}
+            />
+            <span>
+              Fund from wallet balance instead of the configured provider
+              {wallet && (
+                <span className="block text-xs mt-0.5 opacity-80">
+                  Available: {formatMoney(minorToMajor(wallet.balanceMinor, wallet.currency), wallet.currency)}
+                  {walletBalanceMinor <= 0 && ' — top up the wallet to use this'}
+                </span>
+              )}
+            </span>
+          </label>
+
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" onClick={() => { setScheduleTarget(null); setScheduledAt(''); }}>Cancel</Button>
+            <Button variant="ghost" onClick={() => { setInitiateTarget(null); setScheduledAt(''); setFundViaWallet(false); }}>Cancel</Button>
             <Button
               variant="primary"
               loading={initiateMutation.isPending}
-              disabled={!scheduledAt}
-              onClick={() => scheduleTarget && initiateMutation.mutate({ runId: scheduleTarget, scheduledAt })}
+              disabled={settings?.executionPolicy === 'scheduled' && !scheduledAt}
+              onClick={() => initiateTarget && initiateMutation.mutate({ runId: initiateTarget, scheduledAt: scheduledAt || undefined, fundViaWallet })}
             >
-              Schedule
+              Initiate
             </Button>
           </div>
         </div>

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, Pencil } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { apiClient, fetchAllPages } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
 import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
@@ -62,10 +62,11 @@ export default function LegalEntities() {
     refetch,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-      return Array.isArray(response) ? response : response.data || [];
-    },
+    // GET /legal-entities is paginated (limit defaults to 20, capped at 100) -
+    // a bare apiClient() call silently returns only page 1, hiding entity #21+
+    // with no pagination UI to notice. Page through the whole tenant roster.
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((page) => `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`),
   });
 
   const addMutation = useMutation({

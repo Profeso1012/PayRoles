@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react'
 import FeaturePageShell from './FeaturePageShell'
 import { PATHS } from '@/router/paths'
-import { buildGetStartedMailto } from '@/lib/supportContact'
 
 interface StepLink {
   label: string
@@ -117,7 +116,7 @@ export default function FeatureDetailLayout({
             </div>
 
             <a
-              href={buildGetStartedMailto()}
+              href={PATHS.REQUEST_ACCESS}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

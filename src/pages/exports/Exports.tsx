@@ -65,8 +65,9 @@ export default function Exports() {
   const qc = useQueryClient();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  // hr_officer has EXPORT_READ but not EXPORT_CREATE/EXPORT_DOWNLOAD on the real backend.
-  const canCreate = role !== 'hr_officer' && role !== 'auditor';
+  // hr_officer holds EXPORT_CREATE+EXPORT_READ but not EXPORT_DOWNLOAD; auditor
+  // holds EXPORT_READ+EXPORT_DOWNLOAD but not EXPORT_CREATE (roles.enum.ts).
+  const canCreate = role !== 'auditor';
   const canDownload = role !== 'hr_officer';
 
   const [entityType, setEntityType] = useState<BackendExportEntityType>('workers');

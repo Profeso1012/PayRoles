@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Building2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { fetchAllPages } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { formatDate } from '@/lib/utils';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
@@ -29,11 +29,11 @@ export default function OrgOverview() {
     refetch,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-      const entities = Array.isArray(response) ? response : (response.data || []);
-      return entities;
-    },
+    // GET /legal-entities is paginated (limit defaults to 20, capped at 100) -
+    // a bare apiClient() call silently returns only page 1, hiding entity #21+
+    // with no pagination UI to notice. Page through the whole tenant roster.
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((page) => `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`),
   });
 
   if (isLoading) {

@@ -18,7 +18,6 @@ import {
 import MarketingNav from '@/components/marketing/MarketingNav'
 import MarketingFooter from '@/components/marketing/MarketingFooter'
 import { PATHS } from '@/router/paths'
-import { buildGetStartedMailto } from '@/lib/supportContact'
 
 const FEATURES = [
   {
@@ -202,7 +201,7 @@ export default function Landing() {
 
           <div style={{ marginTop: 32, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
             <a
-              href={buildGetStartedMailto()}
+              href={PATHS.REQUEST_ACCESS}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -288,7 +287,7 @@ export default function Landing() {
             Nigeria, United Kingdom, Canada and United States — all in one payroll run
           </h3>
           <a
-            href={buildGetStartedMailto()}
+            href={PATHS.REQUEST_ACCESS}
             style={{
               color: '#4FAD72',
               fontSize: 14,
@@ -722,7 +721,7 @@ export default function Landing() {
             </p>
 
             <a
-              href={buildGetStartedMailto()}
+              href={PATHS.REQUEST_ACCESS}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -879,7 +878,7 @@ export default function Landing() {
                 </button>
               ))}
               <a
-                href={buildGetStartedMailto()}
+                href={PATHS.REQUEST_ACCESS}
                 style={{
                   background: '#F2B35E',
                   color: '#0F2E23',

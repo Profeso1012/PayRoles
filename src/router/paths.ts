@@ -2,21 +2,20 @@ export const PATHS = {
   // Public
   HOME: '/',
   REQUEST_ACCESS: '/request-access',
+  VERIFY_EMAIL: '/verify-email',
   FEATURES: '/features',
   FEATURES_TEAM: '/features/team',
   FEATURES_PAY_SETUP: '/features/pay-setup',
   FEATURES_PAYROLL: '/features/payroll',
   FEATURES_PAYMENTS: '/features/payments',
   LOGIN: '/login',
-  FORGOT_PASSWORD: '/forgot-password',
-  RESET_PASSWORD: '/reset-password',
-  ACCEPT_INVITE: '/accept-invite',
 
   // Platform Admin
   ADMIN: '/admin',
   ADMIN_COMPANIES: '/admin/companies',
   ADMIN_COMPANY_DETAIL: (id = ':id') => `/admin/companies/${id}`,
   ADMIN_TAX: '/admin/tax',
+  ADMIN_WALLET_PROVIDERS: '/admin/wallet-providers',
 
   // Onboarding
   ONBOARDING: '/onboarding',
@@ -54,6 +53,7 @@ export const PATHS = {
   PAYMENTS_SETTINGS: '/payments/settings',
   PAYMENTS_OVERVIEW: '/payments/overview',
   PAYMENTS_REPORTS: '/payments/reports',
+  PAYMENTS_WALLET: '/payments/wallet',
   REPORTS_REGISTER: '/reports/register',
   REPORTS_STATUTORY: '/reports/statutory',
   REPORTS_COST: '/reports/cost',

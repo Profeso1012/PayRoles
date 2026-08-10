@@ -31,14 +31,17 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Authentication - Tenant
   // ---------------------------------------------------------------------------
+  // No forgot-password/reset-password/accept-invite here - auth.controller.ts
+  // exposes no such routes. The only password-recovery path on this backend is
+  // an admin-issued PATCH /users/:id/reset-password (see USERS.RESET_PASSWORD).
   AUTH: {
+    SIGNUP: `${API_VERSION}/auth/signup`,
+    VERIFY_EMAIL: `${API_VERSION}/auth/verify-email`,
+    RESEND_VERIFICATION: `${API_VERSION}/auth/resend-verification`,
     LOGIN: `${API_VERSION}/auth/login`,
     LOGOUT: `${API_VERSION}/auth/logout`,
     ME: `${API_VERSION}/auth/me`,
     REFRESH: `${API_VERSION}/auth/refresh`,
-    FORGOT_PASSWORD: `${API_VERSION}/auth/forgot-password`,
-    RESET_PASSWORD: `${API_VERSION}/auth/reset-password`,
-    ACCEPT_INVITE: `${API_VERSION}/auth/accept-invite`,
   },
 
   // ---------------------------------------------------------------------------
@@ -242,6 +245,24 @@ export const ENDPOINTS = {
   },
 
   // ---------------------------------------------------------------------------
+  // Wallet (New in backend) - tenant-scoped, funds disbursement as an
+  // alternative to a configured provider. Balance/ledger are tenant-facing;
+  // topping up happens out-of-band via the provisioned virtual account.
+  // ---------------------------------------------------------------------------
+  WALLET: {
+    GET: `${API_VERSION}/wallet`,
+    TRANSACTIONS: `${API_VERSION}/wallet/transactions`,
+    PROVISION_VIRTUAL_ACCOUNT: `${API_VERSION}/wallet/virtual-account`,
+  },
+
+  // Platform-admin-only: the platform's own shared Paystack/Flutterwave
+  // config, used to fund wallet-based disbursement and provision tenant
+  // top-up virtual accounts. Not tenant-scoped - VERSION_NEUTRAL, no /v1.
+  PLATFORM_DISBURSEMENT: {
+    PROVIDER_CONFIG: (providerType: string) => `${PLATFORM_PREFIX}/disbursement/providers/${providerType}`,
+  },
+
+  // ---------------------------------------------------------------------------
   // Tax Engine
   // ---------------------------------------------------------------------------
   // Import/Export (New in backend)
@@ -326,35 +347,6 @@ export const ENDPOINTS = {
     UNASSIGN: (workerId: string, id: string) => `${API_VERSION}/workers/${workerId}/pay-elements/${id}/unassign`,
   },
 
-  // ---------------------------------------------------------------------------
-  // Dashboard (Mock only - needs aggregation)
-  // ---------------------------------------------------------------------------
-  DASHBOARD: {
-    HR: `/dashboard/hr`,
-    PAYROLL: `/dashboard/payroll`,
-    FINANCE: `/dashboard/finance`,
-    EMPLOYEE: `/dashboard/employee`,
-  },
-
-  // ---------------------------------------------------------------------------
-  // Organisation (Mock only - simplified in backend)
-  // ---------------------------------------------------------------------------
-  ORGANISATION: {
-    SETUP_STATUS: `/organisation/setup-status`,
-    OVERVIEW: `/organisation/overview`,
-    DEPARTMENTS: `/organisation/departments`,
-    LOCATIONS: `/organisation/locations`,
-    PAY_GROUPS: `/organisation/pay-groups`,
-    JOB_GRADES: `/organisation/job-grades`,
-  },
-
-  // ---------------------------------------------------------------------------
-  // Settings
-  // ---------------------------------------------------------------------------
-  SETTINGS: {
-    BANK: `/settings/bank`,
-    JURISDICTIONS: `/settings/jurisdictions`,
-  },
 };
 
 // ============================================================================

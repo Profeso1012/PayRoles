@@ -116,9 +116,13 @@ export default function MyProfile() {
   }
 
   const fullName = `${profile.firstName} ${profile.lastName}`;
+  // ChangePlatformPasswordDto requires @MinLength(10); tenant ChangePasswordDto
+  // only requires 8 - platform admins need the stricter bound enforced here too,
+  // or the button enables a request the backend will 400 on.
+  const minPasswordLength = isPlatformAdmin ? 10 : 8;
   const canSubmitPassword =
     currentPassword.length > 0 &&
-    newPassword.length >= 8 &&
+    newPassword.length >= minPasswordLength &&
     newPassword === confirmPassword;
 
   return (
@@ -187,7 +191,7 @@ export default function MyProfile() {
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              hint="At least 8 characters"
+              hint={`At least ${minPasswordLength} characters`}
             />
             <Input
               label="Confirm new password"

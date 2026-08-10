@@ -2,7 +2,6 @@ import { Link } from 'react-router-dom'
 import { ArrowRight, Users, Calculator, Play, CreditCard } from 'lucide-react'
 import FeaturePageShell from '@/components/marketing/FeaturePageShell'
 import { PATHS } from '@/router/paths'
-import { buildGetStartedMailto } from '@/lib/supportContact'
 
 const STEPS = [
   {
@@ -53,7 +52,7 @@ export default function FeaturesOverview() {
               just add your team, set up their pay, run payroll, and get everyone paid.
             </p>
             <a
-              href={buildGetStartedMailto()}
+              href={PATHS.REQUEST_ACCESS}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',

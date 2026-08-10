@@ -3,8 +3,12 @@ import Topbar from './Topbar';
 import Sidebar from './Sidebar';
 import ToastProvider from '@/components/ui/ToastProvider';
 import TourGuide from '@/components/tour/TourGuide';
+import ForceChangePasswordModal from '@/components/shared/ForceChangePasswordModal';
+import { useAuthStore } from '@/store/authStore';
 
 export default function AppShell() {
+  const mustChangePassword = useAuthStore((s) => s.mustChangePassword);
+
   return (
     <div className="min-h-screen bg-soft-white font-sans">
       <Topbar />
@@ -18,6 +22,7 @@ export default function AppShell() {
       </div>
       <ToastProvider />
       <TourGuide />
+      {mustChangePassword && <ForceChangePasswordModal />}
     </div>
   );
 }

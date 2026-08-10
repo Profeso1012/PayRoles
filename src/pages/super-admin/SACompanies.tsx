@@ -10,9 +10,8 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
-import RevealedPasswordModal from '@/components/shared/RevealedPasswordModal';
 import { useToast } from '@/hooks/useToast';
-import { formatDate, generateTempPassword } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import type { BackendTenant, CreateTenantRequest } from '@/lib/api/types';
 
 const COUNTRY_OPTIONS = [
@@ -52,7 +51,6 @@ const blankForm = {
   currency: 'NGN',
   adminFirstName: '',
   adminLastName: '',
-  adminPassword: generateTempPassword(),
 };
 
 export default function SACompanies() {
@@ -69,7 +67,6 @@ export default function SACompanies() {
   // `form.slug` is non-empty after the very first auto-populated character,
   // which previously made `f.slug || slugify(...)` freeze after one keystroke.
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
 
   const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
@@ -83,7 +80,9 @@ export default function SACompanies() {
   // Real CreateTenantDto only has {name, slug, contactEmail, contactPhone?, country?,
   // timezone?, currency?} - no plan/adminEmail/setupComplete field exists. A newly
   // created tenant also has zero users, so it can't log in yet - follow up with
-  // POST /platform/tenants/:id/users to create its first tenant_admin.
+  // POST /platform/tenants/:id/users to create its first tenant_admin. That endpoint
+  // no longer accepts a client-supplied password - the backend generates one and
+  // emails it to the admin directly, alongside a mandatory first-login password change.
   const onboard = useMutation({
     mutationFn: async () => {
       const tenant = await apiClient<BackendTenant>(ENDPOINTS.PLATFORM_TENANTS.CREATE, {
@@ -101,7 +100,6 @@ export default function SACompanies() {
         method: 'POST',
         body: JSON.stringify({
           email: form.contactEmail,
-          password: form.adminPassword,
           firstName: form.adminFirstName,
           lastName: form.adminLastName,
           role: 'tenant_admin',
@@ -112,15 +110,14 @@ export default function SACompanies() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['platform-tenants'] });
-      toast.success('Company onboarded', 'Copy the admin password before closing the next dialog.');
-      setRevealedPassword({ subject: form.contactEmail, password: form.adminPassword });
+      toast.success('Company onboarded', `Login credentials were emailed to ${form.contactEmail}.`);
       resetForm();
     },
     onError: (err) => toast.error('Failed to onboard company', err instanceof Error ? err.message : undefined),
   });
 
   const resetForm = () => {
-    setForm({ ...blankForm, adminPassword: generateTempPassword() });
+    setForm(blankForm);
     setFormError('');
     setSlugManuallyEdited(false);
     setShowModal(false);
@@ -264,14 +261,14 @@ export default function SACompanies() {
               onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))}
             />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
             <Select label="Country" value={form.country} options={COUNTRY_OPTIONS} onChange={(v) => setForm((f) => ({ ...f, country: v }))} />
             <Select label="Currency" value={form.currency} options={CURRENCY_OPTIONS} onChange={(v) => setForm((f) => ({ ...f, currency: v }))} />
           </div>
 
           <div className="pt-2 border-t border-mint-light">
             <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3 mt-3">First Admin User</p>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '1rem' }}>
               <input
                 className="w-full bg-transparent border-b border-cash-green/30 py-2.5 text-sm text-deep-cash outline-none focus:border-cash-green transition-colors placeholder:text-cash-green/40"
                 placeholder="First name"
@@ -285,17 +282,10 @@ export default function SACompanies() {
                 onChange={(e) => setForm((f) => ({ ...f, adminLastName: e.target.value }))}
               />
             </div>
-            <div className="mt-4">
-              <p className="text-xs font-medium text-cash-green mb-1.5">Temporary password</p>
-              <input
-                className="w-full bg-transparent border-b border-cash-green/30 py-2.5 text-sm text-deep-cash outline-none focus:border-cash-green transition-colors font-mono"
-                value={form.adminPassword}
-                onChange={(e) => setForm((f) => ({ ...f, adminPassword: e.target.value }))}
-              />
-              <p className="text-xs text-cash-green/50 mt-1">
-                There is no invite email — share this with them directly.
-              </p>
-            </div>
+            <p className="text-xs text-cash-green/50 mt-3">
+              A temporary password will be generated and emailed to the contact email above, along
+              with a link to verify and set a permanent password on first login.
+            </p>
           </div>
 
           {formError && <p className="text-sm text-red-500">{formError}</p>}
@@ -307,14 +297,6 @@ export default function SACompanies() {
           </div>
         </div>
       </Modal>
-
-      {revealedPassword && (
-        <RevealedPasswordModal
-          subject={revealedPassword.subject}
-          password={revealedPassword.password}
-          onDone={() => setRevealedPassword(null)}
-        />
-      )}
     </div>
   );
 }

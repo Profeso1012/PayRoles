@@ -2,9 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Users, UserCheck, Clock, UserX, UserPlus, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { apiClient, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
-import { transformPaginatedResponse, mapWorkerStatus } from '@/lib/api/transforms';
+import { mapWorkerStatus } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
@@ -36,13 +36,18 @@ interface HRDashboardData {
 
 // Build HR dashboard data from workers API
 async function buildHRDashboard(): Promise<HRDashboardData> {
-  // Fetch all workers (or at least first 100 for stats)
-  const params = buildPaginationParams({ page: 1, limit: 100 });
-  params.set('sortBy', 'createdAt');
-  params.set('sortDir', 'desc');
-  
-  const response = await apiClientWithMeta<any[]>(`${ENDPOINTS.WORKERS.LIST}?${params}`);
-  const { data: workers, total } = transformPaginatedResponse<any>(response.data, response.meta);
+  // worker.service.ts's findAll() hardcodes `order: { lastName: 'ASC',
+  // firstName: 'ASC' }` and never reads sortBy/sortDir at all - a page-1
+  // request sorted alphabetically can't tell you who was hired most
+  // recently, and stats over just that page would undercount past 100
+  // workers. Page through the whole tenant roster and sort client-side.
+  const allWorkers = await fetchAllPages<any>(
+    (page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+  );
+  const workers = [...allWorkers].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
+  const total = workers.length;
 
   // Calculate stats
   const now = new Date();

@@ -6,7 +6,6 @@ import { NIGERIAN_BANKS } from '@/lib/data/nigerianBanks';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { generateTempPassword } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -164,27 +163,6 @@ function csvEscape(value: string): string {
   return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
 }
 
-function downloadLoginCredentials(results: LoginResult[]) {
-  const successes = results.filter((r) => r.status === 'success' && r.password);
-  const lines = [
-    ['firstName', 'lastName', 'email', 'temporaryPassword'].join(','),
-    ...successes.map((r) =>
-      [r.worker.firstName, r.worker.lastName, r.worker.email ?? '', r.password ?? '']
-        .map((v) => csvEscape(v ?? ''))
-        .join(','),
-    ),
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'employee-login-credentials.csv';
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
 function downloadSampleTemplate() {
   const lines = [
     SAMPLE_TEMPLATE_COLUMNS.join(','),
@@ -303,7 +281,6 @@ async function runWithConcurrency<T, R>(items: T[], limit: number, worker: (item
 interface LoginResult {
   worker: BackendWorker;
   status: 'success' | 'error';
-  password?: string;
   error?: string;
 }
 
@@ -454,19 +431,17 @@ export default function ImportEmployees() {
     setCreatingLogins(true);
     const outcomes = await Promise.allSettled(
       targets.map(async (worker): Promise<LoginResult> => {
-        const password = generateTempPassword();
         await apiClient(ENDPOINTS.USERS.CREATE, {
           method: 'POST',
           body: JSON.stringify({
             email: worker.email!,
-            password,
             firstName: worker.firstName,
             lastName: worker.lastName,
             role: 'employee_self_service',
             workerId: worker.id,
           } satisfies CreateUserRequest),
         });
-        return { worker, status: 'success', password };
+        return { worker, status: 'success' };
       }),
     );
     const loginOutcomes: LoginResult[] = outcomes.map((outcome, i) =>
@@ -642,7 +617,8 @@ export default function ImportEmployees() {
         ) : loginResults ? (
           <div className="flex flex-col gap-3">
             <p className="text-sm text-cash-green/70">
-              Share each temporary password with that employee directly — there is no invite email.
+              Login credentials were emailed directly to each employee, along with a prompt to set a
+              permanent password on first login.
             </p>
             <div className="max-h-80 overflow-y-auto flex flex-col gap-2">
               {loginResults.map((r) => (
@@ -654,9 +630,9 @@ export default function ImportEmployees() {
                     <p className="text-xs text-cash-green/70 truncate">{r.worker.email}</p>
                   </div>
                   {r.status === 'success' ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Check size={14} className="text-fresh-cash" />
-                      <code className="text-xs bg-mint-light px-2 py-1 rounded font-mono">{r.password}</code>
+                    <div className="flex items-center gap-2 shrink-0 text-fresh-cash">
+                      <Check size={14} />
+                      <span className="text-xs">Email sent</span>
                     </div>
                   ) : (
                     <div className="flex items-center gap-1.5 shrink-0 text-red-500">
@@ -667,11 +643,7 @@ export default function ImportEmployees() {
                 </div>
               ))}
             </div>
-            <div className="flex justify-between items-center pt-2">
-              <Button variant="ghost" size="sm" onClick={() => downloadLoginCredentials(loginResults)}>
-                <Download size={14} />
-                Download CSV
-              </Button>
+            <div className="flex justify-end pt-2">
               <Button variant="primary" onClick={() => setBulkLoginOpen(false)}>Done</Button>
             </div>
           </div>

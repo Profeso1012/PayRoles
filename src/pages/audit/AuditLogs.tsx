@@ -32,47 +32,67 @@ interface AuditLog {
   createdAt: string;
 }
 
+// Real AuditAction enum (common.enum.ts) is lowercase and validated with
+// @IsEnum - any other casing 400s the whole request, not just that filter.
 const ACTION_LABELS: Record<string, string> = {
-  CREATE: 'Created',
-  UPDATE: 'Updated',
-  DELETE: 'Deleted',
-  LOGIN: 'Logged in',
-  LOGOUT: 'Logged out',
-  APPROVE: 'Approved',
-  REJECT: 'Rejected',
-  SUBMIT: 'Submitted',
+  create: 'Created',
+  update: 'Updated',
+  delete: 'Deleted',
+  approve: 'Approved',
+  reject: 'Rejected',
+  cancel: 'Cancelled',
+  reverse: 'Reversed',
+  calculate: 'Calculated',
+  assign: 'Assigned',
+  unassign: 'Unassigned',
+  payroll_run: 'Payroll Run',
+  login: 'Logged in',
+  logout: 'Logged out',
+  permission_change: 'Permission Changed',
+  import: 'Imported',
+  export: 'Exported',
+  view: 'Viewed',
 };
 
 const ACTION_VARIANTS: Record<string, 'success' | 'info' | 'warning' | 'danger'> = {
-  CREATE: 'success',
-  UPDATE: 'info',
-  DELETE: 'danger',
-  LOGIN: 'info',
-  LOGOUT: 'info',
-  APPROVE: 'success',
-  REJECT: 'danger',
-  SUBMIT: 'warning',
+  create: 'success',
+  update: 'info',
+  delete: 'danger',
+  approve: 'success',
+  reject: 'danger',
+  cancel: 'danger',
+  reverse: 'danger',
+  calculate: 'info',
+  assign: 'info',
+  unassign: 'warning',
+  payroll_run: 'info',
+  login: 'info',
+  logout: 'info',
+  permission_change: 'warning',
+  import: 'info',
+  export: 'info',
+  view: 'info',
 };
 
+// entityType is a plain string compared with exact equality (audit.service.ts)
+// - the real values written across the codebase are PascalCase entity/class
+// names, not the snake_case resource names used elsewhere in this app. Limited
+// to entity types actually logged anywhere (grepped every `auditService.log`
+// call site) - Worker/LegalEntity/Compensation/PayElement are never logged by
+// any backend module, so filtering by them can never return a result.
 const ENTITY_OPTIONS = [
   { value: '', label: 'All entities' },
-  { value: 'worker', label: 'Workers' },
-  { value: 'payroll_run', label: 'Payroll Runs' },
-  { value: 'user', label: 'Users' },
-  { value: 'legal_entity', label: 'Legal Entities' },
-  { value: 'compensation', label: 'Compensation' },
-  { value: 'pay_element', label: 'Pay Elements' },
+  { value: 'User', label: 'Users' },
+  { value: 'PayrollRun', label: 'Payroll Runs' },
+  { value: 'WorkerPayElement', label: 'Worker Pay Elements' },
+  { value: 'DisbursementBatch', label: 'Disbursement Batches' },
+  { value: 'ImportJob', label: 'Import Jobs' },
+  { value: 'ExportJob', label: 'Export Jobs' },
+  { value: 'Tenant', label: 'Tenant' },
 ];
 
-const ACTION_OPTIONS = [
-  { value: '', label: 'All actions' },
-  { value: 'CREATE', label: 'Created' },
-  { value: 'UPDATE', label: 'Updated' },
-  { value: 'DELETE', label: 'Deleted' },
-  { value: 'APPROVE', label: 'Approved' },
-  { value: 'REJECT', label: 'Rejected' },
-  { value: 'SUBMIT', label: 'Submitted' },
-];
+const ACTION_OPTIONS = Object.entries(ACTION_LABELS).map(([value, label]) => ({ value, label }));
+ACTION_OPTIONS.unshift({ value: '', label: 'All actions' });
 
 export default function AuditLogs() {
   const role = useAuthStore((s) => s.user?.role);

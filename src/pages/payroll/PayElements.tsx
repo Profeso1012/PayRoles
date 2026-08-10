@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Plus, Pencil, Trash2, Lock, AlertCircle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
+import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
@@ -56,6 +57,16 @@ const blank = {
 export default function PayElements() {
   const qc = useQueryClient();
   const toast = useToast();
+  const role = useAuthStore((s) => s.user?.role);
+  // PAY_ELEMENT_WRITE is tenant_admin/super_admin only (roles.enum.ts) -
+  // payroll_manager/payroll_officer/finance_manager can reach this route
+  // (shared RoleGuard on the whole /payroll path) but would 403 on any write.
+  const canWrite = role === 'tenant_admin' || role === 'super_admin';
+  // finance_manager is the one role on that shared RoleGuard with no
+  // PAY_ELEMENT_READ grant at all - the list call itself 403s for it, so
+  // skip the request entirely and show an explicit message instead of an
+  // opaque ErrorState.
+  const canRead = role !== 'finance_manager';
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<PayElementDefinition | null>(null);
@@ -71,6 +82,7 @@ export default function PayElements() {
       const items = Array.isArray(response) ? response : (response.data || []);
       return items;
     },
+    enabled: canRead,
   });
 
   // Fetch tax rules for dropdown
@@ -182,6 +194,16 @@ export default function PayElements() {
     setForm(blank);
   }
 
+  if (!canRead) {
+    return (
+      <div style={{ maxWidth: '700px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+        <div className="bg-white rounded-xl border border-mint-light p-8 text-center text-cash-green/70 text-sm">
+          Finance Managers don't have access to Pay Elements. Contact a Tenant Admin or Payroll Manager.
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -236,7 +258,7 @@ export default function PayElements() {
                 <td className="px-5 py-3 font-mono text-xs text-cash-green/70">{el.formula ?? '—'}</td>
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-1 justify-end">
-                    {el.isActive ? (
+                    {!canWrite ? null : el.isActive ? (
                       <>
                         <button
                           onClick={() => openEdit(el)}
@@ -281,10 +303,12 @@ export default function PayElements() {
       <PageHeader
         title="Pay Elements"
         action={
-          <Button variant="primary" onClick={openAdd}>
-            <Plus size={16} />
-            Add Element
-          </Button>
+          canWrite ? (
+            <Button variant="primary" onClick={openAdd}>
+              <Plus size={16} />
+              Add Element
+            </Button>
+          ) : undefined
         }
       />
       <p className="text-sm text-cash-green/70 mb-6">
@@ -306,7 +330,7 @@ export default function PayElements() {
         <EmptyState
           title="No pay elements defined"
           description="Add earnings, deductions and contributions to run payroll."
-          action={{ label: 'Add Element', onClick: openAdd }}
+          action={canWrite ? { label: 'Add Element', onClick: openAdd } : undefined}
         />
       ) : (
         <>

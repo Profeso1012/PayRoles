@@ -22,6 +22,32 @@ export interface LoginResponse {
   refreshToken: string;
   expiresIn: string;
   tokenType: 'Bearer';
+  /** Only ever set on login (never on refresh) - true when the account still holds a temporary/emailed password. */
+  mustChangePassword?: boolean;
+}
+
+/** POST /auth/signup body (SignupDto) - self-service tenant + first admin creation. No password: one is generated and emailed. */
+export interface SignupRequest {
+  tenantName: string;
+  tenantSlug: string;
+  contactEmail: string;
+  adminFirstName: string;
+  adminLastName: string;
+  adminEmail: string;
+}
+
+export interface SignupResponse {
+  tenantId: string;
+  userId: string;
+}
+
+export interface VerifyEmailRequest {
+  token: string;
+}
+
+export interface ResendVerificationRequest {
+  email: string;
+  tenantSlug: string;
 }
 
 export interface RefreshTokenRequest {
@@ -624,10 +650,9 @@ export interface UpdatePlatformUserRequest {
   platformRole?: BackendPlatformRole;
 }
 
-/** POST /users body (CreateUserDto) - password is required (this creates the account directly, there is no separate invite-token flow on the backend). */
+/** POST /users body (CreateUserDto) - no password field: the backend generates a temporary one and emails it to the new user directly. */
 export interface CreateUserRequest {
   email: string;
-  password: string;
   firstName: string;
   lastName: string;
   role?: BackendRole; // Defaults to READ_ONLY if omitted
@@ -896,6 +921,39 @@ export interface ConfigureProviderRequest {
   metadata?: Record<string, unknown>;
 }
 
+// ============================================================================
+// Wallet (New in backend)
+// ============================================================================
+
+/** GET /wallet - wallet.controller.ts. balanceMinor is a bigint column - treat as string-coercible, same as totalAmountMinor elsewhere. */
+export interface BackendWallet {
+  balanceMinor: string;
+  currency: string;
+}
+
+export type BackendWalletTransactionType = 'credit' | 'debit' | 'release';
+
+/** GET /wallet/transactions - wallet-transaction.entity.ts. Append-only ledger. */
+export interface BackendWalletTransaction {
+  id: string;
+  tenantId: string;
+  walletId: string;
+  type: BackendWalletTransactionType;
+  amountMinor: string;
+  balanceAfterMinor: string;
+  referenceType: string; // e.g. 'disbursement_batch', 'topup_webhook'
+  referenceId: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+/** POST /wallet/virtual-account - dedicated top-up account. Idempotent. */
+export interface BackendVirtualAccount {
+  accountNumber: string;
+  bankName: string;
+  accountName: string;
+}
+
 export interface BackendDisbursementBatch {
   id: string;
   tenantId: string;
@@ -907,6 +965,8 @@ export interface BackendDisbursementBatch {
   providerBatchReference: string | null;
   currency: string;
   totalAmountMinor: string; // bigint - may serialize as number or string depending on driver, treat as string-coercible
+  /** True when this batch was funded by debiting the tenant wallet instead of the configured provider. */
+  fundedByWallet: boolean;
   totalCount: number;
   successfulCount: number;
   failedCount: number;

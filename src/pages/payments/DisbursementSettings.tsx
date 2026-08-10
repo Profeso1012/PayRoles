@@ -33,13 +33,11 @@ const PROVIDER_LABELS: Record<BackendProviderType, string> = {
   remita: 'Remita',
 };
 
-// paystack/flutterwave are unimplemented scaffolds (createBatch/executeBatch
-// throw immediately - live disbursement runs will fail); remita makes a real
-// call to a placeholder endpoint and can misreport success. manual_bank_file
-// and monnify are the only fully-implemented providers today.
+// manual_bank_file, monnify, paystack, and flutterwave all have real
+// createBatch/executeBatch implementations now. remita's executeBatch still
+// calls placeholder endpoints (see remita.provider.ts TODOs) and can
+// misreport success - that one alone stays flagged.
 const INCOMPLETE_PROVIDERS: Partial<Record<BackendProviderType, string>> = {
-  paystack: 'Not yet implemented — batches will fail when executed',
-  flutterwave: 'Not yet implemented — batches will fail when executed',
   remita: 'Experimental — integration is unverified, use with caution',
 };
 

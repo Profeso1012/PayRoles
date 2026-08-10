@@ -10,11 +10,12 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Modal from '@/components/ui/Modal';
-import RevealedPasswordModal from '@/components/shared/RevealedPasswordModal';
 import { useToast } from '@/hooks/useToast';
-import { formatDate, generateTempPassword } from '@/lib/utils';
+import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import type { BackendTenant } from '@/lib/api/types';
+
+const blankUserForm = { firstName: '', lastName: '', email: '' };
 
 export default function SACompanyDetail() {
   const { id } = useParams<{ id: string }>();
@@ -23,13 +24,7 @@ export default function SACompanyDetail() {
   const qc = useQueryClient();
   const [showConfirm, setShowConfirm] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
-  const [userForm, setUserForm] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: generateTempPassword(),
-  });
-  const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
+  const [userForm, setUserForm] = useState(blankUserForm);
 
   const { data: tenant, isLoading, isError, refetch } = useQuery<BackendTenant>({
     queryKey: ['platform-tenant', id],
@@ -62,10 +57,9 @@ export default function SACompanyDetail() {
         body: JSON.stringify({ ...userForm, role: 'tenant_admin' }),
       }),
     onSuccess: () => {
-      toast.success('User created', 'Copy the temporary password before closing the next dialog.');
-      setRevealedPassword({ subject: userForm.email, password: userForm.password });
+      toast.success('User created', `Login credentials were emailed to ${userForm.email}.`);
       setAddUserOpen(false);
-      setUserForm({ firstName: '', lastName: '', email: '', password: generateTempPassword() });
+      setUserForm(blankUserForm);
     },
     onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
   });
@@ -142,21 +136,20 @@ export default function SACompanyDetail() {
       <Modal isOpen={addUserOpen} onClose={() => setAddUserOpen(false)} title="Add Tenant Admin" size="sm">
         <div className="flex flex-col gap-4">
           <p className="text-sm text-cash-green/70">
-            There is no invite email on this backend — create the user directly and share the
-            temporary password with them.
+            A temporary password will be generated and emailed to them, along with a link to
+            verify and set a permanent password on first login.
           </p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
             <Input label="First name" value={userForm.firstName} onChange={(e) => setUserForm((f) => ({ ...f, firstName: e.target.value }))} />
             <Input label="Last name" value={userForm.lastName} onChange={(e) => setUserForm((f) => ({ ...f, lastName: e.target.value }))} />
           </div>
           <Input label="Email" type="email" value={userForm.email} onChange={(e) => setUserForm((f) => ({ ...f, email: e.target.value }))} />
-          <Input label="Temporary password" value={userForm.password} onChange={(e) => setUserForm((f) => ({ ...f, password: e.target.value }))} />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setAddUserOpen(false)}>Cancel</Button>
             <Button
               variant="primary"
               loading={addUserMutation.isPending}
-              disabled={!userForm.firstName || !userForm.lastName || !userForm.email || !userForm.password}
+              disabled={!userForm.firstName || !userForm.lastName || !userForm.email}
               onClick={() => addUserMutation.mutate()}
             >
               Create User
@@ -180,14 +173,6 @@ export default function SACompanyDetail() {
         variant={isSuspended ? 'default' : 'danger'}
         isLoading={toggleStatus.isPending}
       />
-
-      {revealedPassword && (
-        <RevealedPasswordModal
-          subject={revealedPassword.subject}
-          password={revealedPassword.password}
-          onDone={() => setRevealedPassword(null)}
-        />
-      )}
     </div>
   );
 }

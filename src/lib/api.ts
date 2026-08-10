@@ -24,7 +24,7 @@ let refreshPromise: Promise<string> | null = null;
  * Attempt to refresh the access token using the refresh token
  */
 async function refreshAccessToken(): Promise<string> {
-  const { refreshToken, setSession, clearSession } = useAuthStore.getState();
+  const { refreshToken, user, setSession, clearSession } = useAuthStore.getState();
 
   if (!refreshToken) {
     throw new ApiError(401, 'No refresh token available');
@@ -35,10 +35,17 @@ async function refreshAccessToken(): Promise<string> {
     return refreshPromise;
   }
 
+  // Platform admin sessions are signed with a completely separate JWT secret
+  // (platform-auth.service.ts) and verified by /platform/auth/refresh, not
+  // /auth/refresh - the tenant route would 401 on a platform token every time,
+  // forcing a full logout on every access-token expiry instead of a silent refresh.
+  const isPlatformSession = user?.role === 'PLATFORM_ADMIN';
+  const refreshPath = isPlatformSession ? '/platform/auth/refresh' : '/v1/auth/refresh';
+
   isRefreshing = true;
   refreshPromise = (async () => {
     try {
-      const response = await fetchWithTimeout(`${BASE_URL}/v1/auth/refresh`, {
+      const response = await fetchWithTimeout(`${BASE_URL}${refreshPath}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken }),
@@ -119,7 +126,10 @@ async function request<T>(
   path: string,
   options?: RequestInit & { skipAuthRedirect?: boolean },
 ): Promise<EnvelopeResult<T>> {
-  const { accessToken, clearSession } = useAuthStore.getState();
+  const { accessToken, user, clearSession } = useAuthStore.getState();
+  // Captured before clearSession() wipes `user` - determines which login
+  // screen a session-expiry redirect should land on.
+  const loginPath = user?.role === 'PLATFORM_ADMIN' ? '/platform-login' : '/login';
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -160,7 +170,7 @@ async function request<T>(
       // If still 401 after refresh, logout
       if (response.status === 401) {
         clearSession();
-        window.location.href = '/login';
+        window.location.href = loginPath;
         throw new ApiError(401, 'Session expired. Please sign in again.');
       }
     } catch (error) {
@@ -170,7 +180,7 @@ async function request<T>(
       }
       // Refresh failed, redirect to login
       clearSession();
-      window.location.href = '/login';
+      window.location.href = loginPath;
       throw new ApiError(401, 'Session expired. Please sign in again.');
     }
   }

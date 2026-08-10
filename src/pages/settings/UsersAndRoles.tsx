@@ -5,7 +5,6 @@ import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
-import { generateTempPassword } from '@/lib/utils';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -44,9 +43,10 @@ const ROLE_BADGE_VARIANT: Record<string, 'success' | 'info' | 'warning'> = {
   employee_self_service: 'info',
 };
 
-// Real backend CreateUserDto has no invite-token flow at all - a "new user"
-// is created directly with an initial password (no separate accept-invite
-// step, no pending/expired invite state). This form reflects that.
+// Real backend CreateUserDto has no invite-token flow and no password field -
+// a "new user" is created directly and the backend generates a temporary
+// password, emailed straight to them along with a mandatory first-login
+// password change (mustChangePassword).
 const ROLE_OPTIONS = Object.entries(ROLE_LABELS)
   .filter(([value]) => value !== 'super_admin') // super_admin is reserved, not self-servable here
   .map(([value, label]) => ({ value, label }));
@@ -55,7 +55,6 @@ const blankAddUserForm = {
   firstName: '',
   lastName: '',
   email: '',
-  password: generateTempPassword(),
   role: 'read_only' as BackendRole,
   workerId: '',
 };
@@ -66,6 +65,11 @@ export default function UsersAndRoles() {
   const currentUser = useAuthStore((s) => s.user);
   const role = currentUser?.role;
   const isSuperAdmin = role === 'tenant_admin' || role === 'super_admin';
+  // user.service.ts's update() enforces PRIVILEGED_ROLES = [SUPER_ADMIN, TENANT_ADMIN]:
+  // only a caller whose OWN role is literally super_admin may set a user's role to
+  // tenant_admin (create() has no such restriction, so it stays in ROLE_OPTIONS there).
+  const canReassignToTenantAdmin = role === 'super_admin';
+  const editRoleOptions = canReassignToTenantAdmin ? ROLE_OPTIONS : ROLE_OPTIONS.filter((o) => o.value !== 'tenant_admin');
 
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [form, setForm] = useState(blankAddUserForm);
@@ -113,8 +117,8 @@ export default function UsersAndRoles() {
       apiClient(ENDPOINTS.USERS.CREATE, { method: 'POST', body: JSON.stringify(body) }),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
-      toast.success(`User created for ${vars.email}`, `Share the temporary password with them directly: ${vars.password}`);
-      setForm({ ...blankAddUserForm, password: generateTempPassword() });
+      toast.success(`User created for ${vars.email}`, 'Login credentials were emailed to them.');
+      setForm(blankAddUserForm);
       setAddUserOpen(false);
     },
     onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
@@ -126,7 +130,17 @@ export default function UsersAndRoles() {
   // employee_self_service) can never be linked after the fact through this
   // endpoint - the only fix is creating a fresh, correctly-linked account.
   const updateUserMutation = useMutation({
-    mutationFn: () => apiClient(ENDPOINTS.USERS.UPDATE(editTarget!.id), { method: 'PATCH', body: JSON.stringify(editForm) }),
+    mutationFn: () => {
+      // user.service.ts's update() 403s whenever `role` is present in the body
+      // and is a PRIVILEGED_ROLES value (tenant_admin/super_admin) and the
+      // caller isn't literally super_admin - even if that role is unchanged.
+      // Omitting it when it matches the target's current role means a plain
+      // tenant_admin editing another tenant_admin's name/phone doesn't 403 on
+      // an update that never actually touches their role.
+      const body = { ...editForm };
+      if (body.role === editTarget?.role) delete body.role;
+      return apiClient(ENDPOINTS.USERS.UPDATE(editTarget!.id), { method: 'PATCH', body: JSON.stringify(body) });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success('User updated');
@@ -352,13 +366,13 @@ export default function UsersAndRoles() {
         isOpen={addUserOpen}
         onClose={() => {
           setAddUserOpen(false);
-          setForm({ ...blankAddUserForm, password: generateTempPassword() });
+          setForm(blankAddUserForm);
         }}
         title="Add User"
         size="sm"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
             <Input
               label="First name"
               value={form.firstName}
@@ -401,18 +415,16 @@ export default function UsersAndRoles() {
               </p>
             </div>
           )}
-          <Input
-            label="Temporary password"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-            hint="Share this with the user directly — there is no invite email. They can change it after logging in."
-          />
+          <p className="text-xs text-cash-green/60">
+            A temporary password will be generated and emailed to them, along with a link to
+            verify and set a permanent password on first login.
+          </p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
             <Button
               variant="ghost"
               onClick={() => {
                 setAddUserOpen(false);
-                setForm({ ...blankAddUserForm, password: generateTempPassword() });
+                setForm(blankAddUserForm);
               }}
             >
               Cancel
@@ -424,7 +436,6 @@ export default function UsersAndRoles() {
                 !form.firstName ||
                 !form.lastName ||
                 !form.email ||
-                !form.password ||
                 (form.role === 'employee_self_service' && !form.workerId) ||
                 createUserMutation.isPending
               }
@@ -433,7 +444,6 @@ export default function UsersAndRoles() {
                   firstName: form.firstName,
                   lastName: form.lastName,
                   email: form.email,
-                  password: form.password,
                   role: form.role,
                   workerId: form.role === 'employee_self_service' ? form.workerId : undefined,
                 })
@@ -448,7 +458,7 @@ export default function UsersAndRoles() {
 
       <Modal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title="Edit User" size="sm">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '0.75rem' }}>
             <Input
               label="First name"
               value={editForm.firstName ?? ''}
@@ -468,7 +478,9 @@ export default function UsersAndRoles() {
           <Select
             label="Role"
             value={editForm.role ?? ''}
-            options={ROLE_OPTIONS}
+            options={editTarget?.role === 'tenant_admin' ? ROLE_OPTIONS : editRoleOptions}
+            disabled={editTarget?.role === 'tenant_admin' && !canReassignToTenantAdmin}
+            hint={editTarget?.role === 'tenant_admin' && !canReassignToTenantAdmin ? 'Only a Super Admin can change a Tenant Admin\'s role.' : undefined}
             onChange={(v) => setEditForm((f) => ({ ...f, role: v as BackendRole }))}
           />
           {editForm.role === 'employee_self_service' && editTarget?.role !== 'employee_self_service' && (

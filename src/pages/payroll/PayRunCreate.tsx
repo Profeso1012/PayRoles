@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Building2 } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { apiClient, fetchAllPages } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapPayrollRunFields } from '@/lib/api/transforms';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -25,6 +25,17 @@ interface LegalEntity {
 export default function PayRunCreate() {
   const navigate = useNavigate();
   const toast = useToast();
+  const role = useAuthStore((s) => s.user?.role);
+  // Mirrors PAYROLL_CREATE grants (roles.enum.ts): payroll_manager/
+  // payroll_officer/tenant_admin/super_admin. finance_manager can reach
+  // /payroll/runs/new via the shared router RoleGuard (it needs PAYROLL_READ
+  // for the list/detail pages) but has no PAYROLL_CREATE - without this gate
+  // it could fill out the whole form and only find out via a 403 on submit.
+  const canCreate =
+    role === 'payroll_manager' ||
+    role === 'payroll_officer' ||
+    role === 'tenant_admin' ||
+    role === 'super_admin';
 
   const [legalEntityId, setLegalEntityId] = useState('');
   const [name, setName] = useState('');
@@ -34,11 +45,11 @@ export default function PayRunCreate() {
 
   const { data: legalEntities, isLoading: loadingEntities } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-      const entities = Array.isArray(response) ? response : (response.data || []);
-      return entities;
-    },
+    // GET /legal-entities is paginated (limit defaults to 20, capped at 100) -
+    // a bare apiClient() call silently returns only page 1.
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((page) => `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`),
+    enabled: canCreate,
   });
 
   // GET /legal-entities returns deactivated entities too (no server-side
@@ -93,6 +104,16 @@ export default function PayRunCreate() {
   });
 
   const selectedEntity = (legalEntities ?? []).find((e) => e.id === legalEntityId);
+
+  if (!canCreate) {
+    return (
+      <div style={{ maxWidth: '600px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
+        <div className="bg-white rounded-xl border border-mint-light p-8 text-center text-cash-green/70 text-sm">
+          You don't have access to create pay runs. Contact a Payroll Manager or Tenant Admin.
+        </div>
+      </div>
+    );
+  }
 
   if (loadingEntities) {
     return (

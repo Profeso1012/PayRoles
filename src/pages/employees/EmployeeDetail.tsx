@@ -291,6 +291,12 @@ export default function EmployeeDetail() {
   });
   const hasNoPayElements = !!payElementCatalog && payElementCatalog.length === 0;
 
+  // WorkerPayElement carries no currency field of its own - a fixed-amount
+  // allowance is denominated in whatever currency the worker's active
+  // compensation record uses (AddEmployee.tsx lets this be GBP/CAD/USD too,
+  // not just NGN). Falls back to NGN only if no active compensation exists.
+  const workerCurrency = compensations?.find((c) => !c.effectiveTo && !c.voidedAt)?.currency ?? 'NGN';
+
   const assignPayElementMutation = useMutation({
     mutationFn: () => {
       const body: CreateWorkerPayElementRequest | UpdateWorkerPayElementRequest = {
@@ -660,10 +666,12 @@ export default function EmployeeDetail() {
               <Receipt size={16} className="text-cash-green" />
               <h3 className="text-sm font-semibold text-deep-cash">Compensation History</h3>
             </div>
-            <Button variant="secondary" size="sm" onClick={() => setAddCompOpen(true)}>
-              <Plus size={14} />
-              Add Compensation
-            </Button>
+            {canWritePayElements && (
+              <Button variant="secondary" size="sm" onClick={() => setAddCompOpen(true)}>
+                <Plus size={14} />
+                Add Compensation
+              </Button>
+            )}
           </div>
           {!compensations ? (
             <div className="flex justify-center py-8"><Spinner /></div>
@@ -805,7 +813,7 @@ export default function EmployeeDetail() {
                     </div>
                     <p className="text-xs text-cash-green/70 mt-1">
                       {wpe.calculationMethod === 'fixed' && wpe.amountMinor != null && (
-                        <MoneyDisplay amount={parseInt(wpe.amountMinor, 10) / 100} currency="NGN" size="sm" />
+                        <MoneyDisplay amount={parseInt(wpe.amountMinor, 10) / 100} currency={workerCurrency} size="sm" />
                       )}
                       {(wpe.calculationMethod === 'percentage_of_basic' || wpe.calculationMethod === 'percentage_of_gross') && wpe.percentage != null && (
                         <span>{wpe.percentage}% of {wpe.calculationMethod === 'percentage_of_basic' ? 'basic' : 'gross'}</span>

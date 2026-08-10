@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FolderTree, Users, Calculator,
   CreditCard, BarChart3, Settings, Receipt, User, Landmark,
   ChevronDown, ChevronRight, FileText, MapPin, Layers, Play,
-  TrendingUp, Shield, Bell, History, UploadCloud, FileOutput,
+  TrendingUp, Shield, Bell, History, UploadCloud, FileOutput, WalletCards,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -27,6 +27,7 @@ const PLATFORM_ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
   { label: 'Companies', path: '/admin/companies', icon: Building2 },
   { label: 'Tax Rules', path: '/admin/tax', icon: Landmark },
+  { label: 'Wallet Providers', path: '/admin/wallet-providers', icon: WalletCards },
   { label: 'Platform Users', path: '/admin/users', icon: Users },
 ];
 

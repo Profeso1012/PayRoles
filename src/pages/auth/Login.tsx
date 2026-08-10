@@ -1,12 +1,19 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, ArrowLeft, KeyRound, Building2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, EyeOff, ArrowLeft, KeyRound, Building2, MailWarning } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { apiClient } from '@/lib/api';
+import { apiClient, ApiError } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
+import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
 import type { AuthUser } from '@contracts/types/auth';
 import type { LoginResponse } from '@/lib/api/types';
+
+function errorCode(err: unknown): string | undefined {
+  if (!(err instanceof ApiError) || !err.data || typeof err.data !== 'object') return undefined;
+  const body = err.data as { error?: { code?: string } };
+  return body.error?.code;
+}
 
 // GET /auth/me returns IAuthUser: { id, email, tenantId, role, isActive, workerId? } -
 // no fullName/tenantName/avatarUrl/permissions. fullName is composed client-side
@@ -60,9 +67,26 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [needsVerification, setNeedsVerification] = useState(false);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+
+  const handleResendVerification = async () => {
+    setResendState('sending');
+    try {
+      await apiClient(ENDPOINTS.AUTH.RESEND_VERIFICATION, {
+        method: 'POST',
+        body: JSON.stringify({ email, tenantSlug }),
+        skipAuthRedirect: true,
+      });
+    } finally {
+      // Always resolves as "sent" - the backend responds 204 regardless of
+      // whether the account exists or is already verified (enumeration-safe).
+      setResendState('sent');
+    }
+  };
 
   const handleSlugNext = () => {
     if (!tenantSlug.trim()) {
@@ -85,6 +109,8 @@ export default function Login() {
     }
     setLoading(true);
     setError('');
+    setNeedsVerification(false);
+    setResendState('idle');
     try {
       // Step 1: Login and get tokens
       const loginData = await apiClient<LoginResponse>(
@@ -101,6 +127,7 @@ export default function Login() {
         accessToken: loginData.accessToken,
         refreshToken: loginData.refreshToken,
         expiresIn: loginData.expiresIn,
+        mustChangePassword: loginData.mustChangePassword,
       });
 
       // Step 3: Fetch user profile (combines /auth/me + /users/me)
@@ -109,12 +136,19 @@ export default function Login() {
       // Step 4: Update session with user
       setSession({ user });
 
-      // Navigate based on role
+      // Navigate based on role - if mustChangePassword is set, AppShell
+      // blocks every route behind ForceChangePasswordModal until it's cleared,
+      // so it's safe to navigate straight to the intended destination.
       const role = user.role;
       if (role === 'employee_self_service') navigate('/my-payslips');
       else navigate('/dashboard');
     } catch (err: any) {
-      setError(err?.message || 'An unexpected error occurred.');
+      if (errorCode(err) === 'EMAIL_NOT_VERIFIED') {
+        setNeedsVerification(true);
+        setError(err?.message || 'Please verify your email before signing in.');
+      } else {
+        setError(err?.message || 'An unexpected error occurred.');
+      }
     } finally {
       setLoading(false);
     }
@@ -212,6 +246,26 @@ export default function Login() {
 
             {error && <p className="text-sm text-red-500 mt-3">{error}</p>}
 
+            {needsVerification && (
+              <div className="mt-3 flex items-start gap-3 p-3 rounded-sm border border-cash-gold/30 bg-cash-gold/10">
+                <MailWarning size={18} className="text-cash-gold flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  {resendState === 'sent' ? (
+                    <p className="text-sm text-deep-cash">
+                      If that account needs verifying, a new link is on its way — check your inbox.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-deep-cash mb-2">Haven't received the verification email?</p>
+                      <Button variant="secondary" onClick={handleResendVerification} loading={resendState === 'sending'}>
+                        Resend verification email
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-end mt-6 mb-8">
               <Button variant="primary" onClick={handleSignIn} loading={loading}>
                 Sign in
@@ -227,6 +281,14 @@ export default function Login() {
           </>
         )}
 
+        {step === 'slug' && (
+          <p className="text-sm text-cash-green/70 mt-6 text-center">
+            New here?{' '}
+            <Link to={PATHS.REQUEST_ACCESS} className="text-fresh-cash font-medium hover:underline">
+              Create your company account
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

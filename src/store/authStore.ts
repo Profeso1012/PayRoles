@@ -9,12 +9,16 @@ interface AuthState {
   refreshToken: string | null;
   tokenExpiresAt: number | null;
   isAuthenticated: boolean;
+  /** True right after a login whose temp/emailed password hasn't been changed yet - forces the change-password interstitial before the app renders. Not persisted - only ever set fresh from a login response. */
+  mustChangePassword: boolean;
   setSession: (data: {
     user?: AuthUser;
     accessToken?: string;
     refreshToken?: string;
     expiresIn?: string;
+    mustChangePassword?: boolean;
   }) => void;
+  clearMustChangePassword: () => void;
   clearSession: () => void;
   /**
    * Coarse role-based check only - real permission enforcement is server-side
@@ -33,10 +37,11 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       tokenExpiresAt: null,
       isAuthenticated: false,
+      mustChangePassword: false,
 
-      setSession: ({ user, accessToken, refreshToken, expiresIn }) => {
+      setSession: ({ user, accessToken, refreshToken, expiresIn, mustChangePassword }) => {
         const currentState = get();
-        
+
         // Calculate token expiry if provided
         let tokenExpiresAt = currentState.tokenExpiresAt;
         if (expiresIn) {
@@ -50,8 +55,11 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: refreshToken || currentState.refreshToken,
           tokenExpiresAt,
           isAuthenticated: true,
+          mustChangePassword: mustChangePassword ?? currentState.mustChangePassword,
         });
       },
+
+      clearMustChangePassword: () => set({ mustChangePassword: false }),
 
       clearSession: () =>
         set({
@@ -60,6 +68,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           tokenExpiresAt: null,
           isAuthenticated: false,
+          mustChangePassword: false,
         }),
 
       hasRole: (...roles) => {
