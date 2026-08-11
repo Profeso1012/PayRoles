@@ -38,6 +38,12 @@ export const ENDPOINTS = {
     SIGNUP: `${API_VERSION}/auth/signup`,
     VERIFY_EMAIL: `${API_VERSION}/auth/verify-email`,
     RESEND_VERIFICATION: `${API_VERSION}/auth/resend-verification`,
+    // Distinct from RESEND_VERIFICATION - for an ACTIVE account (already
+    // verified, or platform/admin-created with no verification step at all)
+    // that has never once logged in, meaning its original welcome-credentials
+    // email likely never arrived. Same {email,tenantSlug} body. Stops working
+    // permanently the moment the account logs in even once (auth.controller.ts).
+    RESEND_CREDENTIALS: `${API_VERSION}/auth/resend-credentials`,
     LOGIN: `${API_VERSION}/auth/login`,
     LOGOUT: `${API_VERSION}/auth/logout`,
     ME: `${API_VERSION}/auth/me`,

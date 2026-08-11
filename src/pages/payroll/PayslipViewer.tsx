@@ -6,6 +6,7 @@ import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatMoney, formatDate } from '@/lib/utils';
+import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
@@ -26,6 +27,11 @@ export default function PayslipViewer() {
   const { runId, payslipId } = useParams<{ runId: string; payslipId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
+  const role = useAuthStore((s) => s.user?.role);
+  // finance_manager holds PAYSLIP_READ but not WORKER_READ - skip the
+  // employeeNumber lookup entirely for it rather than firing a call
+  // guaranteed to 403.
+  const canReadWorkers = role !== 'finance_manager';
 
   // Generates (or returns the cached) server-rendered PDF, distinct from the
   // Print button below (which is just the browser's own print-to-PDF of this
@@ -42,16 +48,21 @@ export default function PayslipViewer() {
     queryFn: async (): Promise<Payslip> => {
       if (!runId || !payslipId) throw new Error('Missing IDs');
 
-      // The real Payslip entity has no worker name or run period on it - fetch
-      // those separately (payElements is also shaped differently: {code,name,type,amountMinor}).
+      // payslip.entity.ts denormalizes workerName onto the payslip itself
+      // (populated at calculation time) specifically so PAYSLIP_READ-only
+      // roles like finance_manager never need a separate WORKER_READ-gated
+      // lookup just to see whose payslip this is. Run period still needs its
+      // own fetch (payElements is also shaped differently: {code,name,type,amountMinor}).
       const [backendPayslip, run] = await Promise.all([
         apiClient<BackendPayslip>(ENDPOINTS.PAYROLL.PAYSLIPS.DETAIL(runId, payslipId)),
         apiClient<BackendPayrollRun>(ENDPOINTS.PAYROLL.RUNS.DETAIL(runId)).catch(() => null as BackendPayrollRun | null),
       ]);
 
-      const resolvedWorker = await apiClient<BackendWorker>(
-        ENDPOINTS.WORKERS.DETAIL(backendPayslip.workerId),
-      ).catch(() => null);
+      // employeeNumber has no denormalized field yet, so it's still fetched
+      // best-effort - only for roles that actually hold WORKER_READ.
+      const resolvedWorker = canReadWorkers
+        ? await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(backendPayslip.workerId)).catch(() => null)
+        : null;
 
       const elements: PayElement[] = backendPayslip.payElements.map((el) => ({
         id: el.code,
@@ -67,7 +78,7 @@ export default function PayslipViewer() {
         id: backendPayslip.id,
         payRunId: backendPayslip.payrollRunId,
         employeeId: backendPayslip.workerId,
-        employeeName: resolvedWorker ? `${resolvedWorker.firstName} ${resolvedWorker.lastName}` : backendPayslip.workerId,
+        employeeName: backendPayslip.workerName || backendPayslip.workerId,
         employeeNumber: resolvedWorker?.employeeNumber || '—',
         period: formatPeriod(run?.periodStart, run?.periodEnd),
         name: run?.name,

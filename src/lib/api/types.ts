@@ -297,6 +297,10 @@ export interface BackendPayslip {
   tenantId: string;
   payrollRunId: string;
   workerId: string;
+  /** Denormalized onto the payslip at creation time (payslip.entity.ts) specifically so
+   * roles with PAYSLIP_READ but not WORKER_READ (e.g. finance_manager) never need a
+   * separate GET /workers/:id lookup just to identify whose payslip this is. */
+  workerName: string;
   payrollWorkerId: string | null;
   grossPayMinor: string; // Bigint as string
   deductionsMinor: string; // Bigint as string

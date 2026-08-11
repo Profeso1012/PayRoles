@@ -23,10 +23,11 @@ import Input from '@/components/ui/Input';
 import type { PayRun, PayRunStatus } from '@contracts/types/payroll';
 import type { BackendPayslip, BackendWorker } from '@/lib/api/types';
 
-// The real backend register (GET /payroll/runs/:id/payslips) has no worker
-// name/employee number on the row itself - joined client-side against a
-// fetched worker list. There is also no "flagged/error" calculation-status
-// concept on Payslip; disbursementStatus reflects payment state, not calculation.
+// The real backend register (GET /payroll/runs/:id/payslips) carries
+// workerName directly on each row (denormalized on Payslip), but has no
+// employeeNumber - that's still joined client-side against a fetched worker
+// list. There is also no "flagged/error" calculation-status concept on
+// Payslip; disbursementStatus reflects payment state, not calculation.
 interface RegisterRow {
   payslipId: string;
   employeeId: string;
@@ -135,6 +136,11 @@ export default function PayRunDetail() {
     },
   });
 
+  // finance_manager holds PAYSLIP_READ but not WORKER_READ - skip the
+  // per-worker lookup entirely for it rather than firing N calls that will
+  // all 403 (matches the same permission gate used elsewhere on this page).
+  const canReadWorkers = role !== 'finance_manager';
+
   const { data: register } = useQuery<RegisterRow[]>({
     queryKey: ['pay-run-register', id],
     queryFn: async () => {
@@ -142,33 +148,38 @@ export default function PayRunDetail() {
         `${ENDPOINTS.PAYROLL.RUNS.PAYSLIPS(id!)}?${buildPaginationParams({ limit: 100 })}`,
       );
 
-      // The register row has no worker name - fetch workers and join client-side.
-      const workerIds = Array.from(new Set(payslips.map((p) => p.workerId)));
-      const workerMap = new Map<string, BackendWorker>();
-      await Promise.all(
-        workerIds.map(async (workerId) => {
-          try {
-            const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(workerId));
-            workerMap.set(workerId, worker);
-          } catch {
-            // Worker may have been removed - fall back to showing the ID.
-          }
-        }),
-      );
+      // payslip.entity.ts now denormalizes workerName onto the payslip itself
+      // (populated at calculation time) specifically so PAYSLIP_READ-only
+      // roles like finance_manager never need a separate WORKER_READ-gated
+      // lookup just to see whose payslip this is. employeeNumber has no such
+      // denormalized field yet, so it's still fetched best-effort - only for
+      // roles that actually hold WORKER_READ, so it doesn't fire calls
+      // guaranteed to 403.
+      const workerNumberMap = new Map<string, string>();
+      if (canReadWorkers) {
+        const workerIds = Array.from(new Set(payslips.map((p) => p.workerId)));
+        await Promise.all(
+          workerIds.map(async (workerId) => {
+            try {
+              const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(workerId));
+              workerNumberMap.set(workerId, worker.employeeNumber);
+            } catch {
+              // Worker may have been removed - fall back to showing nothing.
+            }
+          }),
+        );
+      }
 
-      return payslips.map((payslip): RegisterRow => {
-        const worker = workerMap.get(payslip.workerId);
-        return {
-          payslipId: payslip.id,
-          employeeId: payslip.workerId,
-          employeeName: worker ? `${worker.firstName} ${worker.lastName}` : payslip.workerId,
-          employeeNumber: worker?.employeeNumber || '—',
-          grossPay: minorToMajor(payslip.grossPayMinor),
-          totalDeductions: minorToMajor(payslip.deductionsMinor),
-          netPay: minorToMajor(payslip.netPayMinor),
-          disbursementStatus: payslip.disbursementStatus,
-        };
-      });
+      return payslips.map((payslip): RegisterRow => ({
+        payslipId: payslip.id,
+        employeeId: payslip.workerId,
+        employeeName: payslip.workerName || payslip.workerId,
+        employeeNumber: workerNumberMap.get(payslip.workerId) || '—',
+        grossPay: minorToMajor(payslip.grossPayMinor),
+        totalDeductions: minorToMajor(payslip.deductionsMinor),
+        netPay: minorToMajor(payslip.netPayMinor),
+        disbursementStatus: payslip.disbursementStatus,
+      }));
     },
     enabled: !!id && !!run && ['calculated', 'in_review', 'approved', 'processing', 'paid'].includes(run.status),
   });

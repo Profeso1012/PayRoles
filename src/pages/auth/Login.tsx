@@ -69,11 +69,16 @@ export default function Login() {
   const [error, setError] = useState('');
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [resendCredsState, setResendCredsState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
 
   const handleResendVerification = async () => {
+    // Clears the stale "Please verify your email..." banner the moment the
+    // user acts on it - it stays true so the box below (which this same
+    // click lives inside) keeps rendering through to its "sent" confirmation.
+    setError('');
     setResendState('sending');
     try {
       await apiClient(ENDPOINTS.AUTH.RESEND_VERIFICATION, {
@@ -85,6 +90,32 @@ export default function Login() {
       // Always resolves as "sent" - the backend responds 204 regardless of
       // whether the account exists or is already verified (enumeration-safe).
       setResendState('sent');
+    }
+  };
+
+  // Distinct recovery path from resend-verification: for an account that's
+  // already ACTIVE (verified, or created directly by an admin with no
+  // verification step at all) but has never logged in - meaning its original
+  // welcome-credentials email likely never arrived. Stops working forever
+  // once the account logs in even once, so it's always safe to show this.
+  const handleResendCredentials = async () => {
+    if (!email.trim() || !tenantSlug.trim()) return;
+    // The user has switched to a different recovery path than "verify your
+    // email" - clear that banner and collapse its box entirely rather than
+    // leaving both visible at once.
+    setError('');
+    setNeedsVerification(false);
+    setResendCredsState('sending');
+    try {
+      await apiClient(ENDPOINTS.AUTH.RESEND_CREDENTIALS, {
+        method: 'POST',
+        body: JSON.stringify({ email, tenantSlug }),
+        skipAuthRedirect: true,
+      });
+    } finally {
+      // Always resolves as "sent" - the backend responds 204 regardless of
+      // whether the account exists, is already active, or has logged in before.
+      setResendCredsState('sent');
     }
   };
 
@@ -274,9 +305,37 @@ export default function Login() {
 
             <div className="h-px bg-cash-green/10 mb-6" />
 
-            <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
-              <KeyRound size={20} className="text-cash-green/50 flex-shrink-0" />
-              <span>Forgot your password? Contact your administrator to reset it.</span>
+            <div className="w-full flex flex-col gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm bg-soft-white/50">
+              <div className="flex items-start gap-3">
+                <KeyRound size={20} className="text-cash-green/50 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-cash-green/70">Forgot your password? Contact your administrator to reset it.</p>
+                </div>
+              </div>
+              <div className="h-px bg-cash-green/10" />
+              <div className="flex items-start gap-3">
+                <MailWarning size={20} className="text-cash-green/50 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  {resendCredsState === 'sent' ? (
+                    <p className="text-cash-green/70">
+                      If that account is waiting on its first login, fresh credentials are on their way — check your inbox.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="text-cash-green/70 mb-2">
+                        Never signed in before, and never received your login details?
+                      </p>
+                      <button
+                        onClick={handleResendCredentials}
+                        disabled={!email.trim() || !tenantSlug.trim() || resendCredsState === 'sending'}
+                        className="text-fresh-cash font-medium hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {resendCredsState === 'sending' ? 'Sending…' : 'Resend my login details'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
           </>
         )}
