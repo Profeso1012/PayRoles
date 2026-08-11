@@ -9,7 +9,7 @@ interface AuthState {
   refreshToken: string | null;
   tokenExpiresAt: number | null;
   isAuthenticated: boolean;
-  /** True right after a login whose temp/emailed password hasn't been changed yet - forces the change-password interstitial before the app renders. Not persisted - only ever set fresh from a login response. */
+  /** True from a login whose temp/emailed password hasn't been changed yet - forces the change-password interstitial before the app renders. Persisted so the obligation survives a reload/reopen; only cleared by an actual successful password change or a fresh login that returns false. */
   mustChangePassword: boolean;
   setSession: (data: {
     user?: AuthUser;
@@ -86,12 +86,21 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'payrole_auth',
+      // mustChangePassword MUST be persisted: tokens/isAuthenticated already
+      // survive a reload via localStorage, so if this were left transient-only
+      // (as originally designed), abandoning the tab mid-forced-change and
+      // reopening the app later - even days later - would silently drop the
+      // obligation on the next reload (it'd reset to its false default) while
+      // the account's real password on the backend is still the original
+      // temp one. Persisting it closes that gap; it's corrected back to the
+      // authoritative server value on every fresh login regardless.
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         tokenExpiresAt: state.tokenExpiresAt,
         isAuthenticated: state.isAuthenticated,
+        mustChangePassword: state.mustChangePassword,
       }),
     },
   ),

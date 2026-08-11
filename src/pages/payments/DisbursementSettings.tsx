@@ -567,6 +567,7 @@ export default function DisbursementSettings() {
                 key={key}
                 label={`${label} (leave blank to keep current)`}
                 type="password"
+                showPasswordToggle
                 placeholder={placeholder}
                 hint={hint}
                 value={providerForm.credentials[key] ?? ''}
@@ -582,6 +583,7 @@ export default function DisbursementSettings() {
             <Input
               label="Webhook Secret (leave blank to keep current)"
               type="password"
+              showPasswordToggle
               value={providerForm.webhookSecret}
               onChange={(e) => setProviderForm((f) => ({ ...f, webhookSecret: e.target.value }))}
               hint={WEBHOOK_SECRET_HINTS[providerTarget]}

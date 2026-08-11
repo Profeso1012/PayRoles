@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Play, Send, ThumbsUp, ThumbsDown, CheckCircle2,
-  Clock, BarChart3, Users, XCircle, RotateCcw, RefreshCw, Pencil,
+  Clock, BarChart3, Users, XCircle, RotateCcw, RefreshCw, Pencil, AlertTriangle,
 } from 'lucide-react';
 import { apiClient, apiClientWithMeta } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
@@ -899,6 +899,28 @@ export default function PayRunDetail() {
       {/* Edit Pay Run Modal */}
       <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="Edit Pay Run" size="md">
         <div className="flex flex-col gap-4">
+          {run.status === 'calculated' && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-amber-50 border border-amber-200">
+              <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-amber-800">
+                This run was already calculated, and the backend only allows recalculation from Draft or
+                Failed — <strong>there is no "Calculate again" once it's Calculated</strong>. Changing
+                dates here will save, but the payslips will keep reflecting the old period. If the dates
+                were wrong, Cancel this run instead and create a new one with the correct dates before
+                calculating.
+              </p>
+            </div>
+          )}
+          {run.status === 'rejected' && (
+            <div className="flex items-start gap-2 p-3 rounded-md bg-red-50 border border-red-200">
+              <AlertTriangle size={15} className="text-red-600 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-800">
+                A rejected run can't be recalculated, resubmitted, or cancelled on this backend — editing
+                dates here won't change that. If this run needs correcting, the only path forward is
+                creating a brand-new pay run; this one will remain as a permanent record.
+              </p>
+            </div>
+          )}
           <Input
             label="Pay Run Name"
             value={editForm.name}

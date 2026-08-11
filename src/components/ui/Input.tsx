@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface InputProps {
@@ -10,6 +12,8 @@ interface InputProps {
   hint?: React.ReactNode;
   leadingIcon?: React.ReactNode;
   trailingIcon?: React.ReactNode;
+  /** Only meaningful when type="password" - renders a clickable eye icon that toggles plaintext visibility. Takes over the trailing-icon slot. */
+  showPasswordToggle?: boolean;
   disabled?: boolean;
   required?: boolean;
   min?: number | string;
@@ -31,6 +35,7 @@ export default function Input({
   hint,
   leadingIcon,
   trailingIcon,
+  showPasswordToggle,
   disabled,
   required,
   min,
@@ -41,6 +46,10 @@ export default function Input({
   id,
   className,
 }: InputProps) {
+  const [visible, setVisible] = useState(false);
+  const isPasswordToggle = type === 'password' && showPasswordToggle;
+  const effectiveType = isPasswordToggle ? (visible ? 'text' : 'password') : type;
+
   return (
     <div className={cn('flex flex-col gap-1', className)}>
       {label && (
@@ -69,7 +78,7 @@ export default function Input({
         <input
           id={id ?? name}
           name={name}
-          type={type}
+          type={effectiveType}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
@@ -82,11 +91,21 @@ export default function Input({
           className={cn(
             'w-full px-3 py-2.5 text-sm text-deep-cash bg-white outline-none placeholder:text-cash-green/50',
             leadingIcon && 'pl-9',
-            trailingIcon && 'pr-9',
+            (trailingIcon || isPasswordToggle) && 'pr-9',
             disabled && 'cursor-not-allowed bg-transparent',
           )}
         />
-        {trailingIcon && (
+        {isPasswordToggle ? (
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            disabled={disabled}
+            tabIndex={-1}
+            className="absolute right-3 flex items-center text-cash-green/60 hover:text-cash-green disabled:pointer-events-none"
+          >
+            {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        ) : trailingIcon && (
           <span className="absolute right-3 flex items-center text-cash-green/60 pointer-events-none">
             {trailingIcon}
           </span>

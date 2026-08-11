@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle, ChevronRight } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { apiClient, fetchAllPages } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields } from '@/lib/api/transforms';
 import { useToast } from '@/hooks/useToast';
 import PageHeader from '@/components/layout/PageHeader';
@@ -25,11 +25,11 @@ interface LegalEntity {
 
 type PersonalForm = {
   firstName: string;
+  middleName: string;
   lastName: string;
   email: string;
   phone: string;
   dateOfBirth: string;
-  gender: string;
   nationalId: string;
   annualRent: string;
 };
@@ -41,6 +41,7 @@ type EmploymentForm = {
   legalEntityId: string;
   employmentType: string;
   hireDate: string;
+  managerId: string;
 };
 
 type BankForm = {
@@ -54,13 +55,6 @@ const STEPS = [
   { id: 1, label: 'Employment' },
   { id: 2, label: 'Bank Details' },
   { id: 3, label: 'Review' },
-];
-
-const genderOptions = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
 const employmentTypeOptions = [
@@ -79,8 +73,8 @@ export default function EditEmployee() {
   const [step, setStep] = useState(0);
 
   const [personal, setPersonal] = useState<PersonalForm>({
-    firstName: '', lastName: '', email: '', phone: '',
-    dateOfBirth: '', gender: '', nationalId: '', annualRent: '',
+    firstName: '', middleName: '', lastName: '', email: '', phone: '',
+    dateOfBirth: '', nationalId: '', annualRent: '',
   });
 
   const [employment, setEmployment] = useState<EmploymentForm>({
@@ -90,6 +84,7 @@ export default function EditEmployee() {
     legalEntityId: '',
     employmentType: 'full_time',
     hireDate: '',
+    managerId: '',
   });
 
   const [bank, setBank] = useState<BankForm>({
@@ -108,28 +103,41 @@ export default function EditEmployee() {
     .filter((le) => le.status !== 'inactive')
     .map((le) => ({ value: le.id, label: le.name }));
 
+  // For the optional "Manager" picker - managerId is a real, accepted
+  // UpdateWorkerDto field the form previously never collected at all.
+  const { data: potentialManagers } = useQuery<BackendWorker[]>({
+    queryKey: ['workers-all-active'],
+    queryFn: () =>
+      fetchAllPages<BackendWorker>((page) =>
+        `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}&status=active`,
+      ),
+  });
+  // A worker can't manage themself - exclude the one currently being edited.
+  const managerOptions = (potentialManagers ?? [])
+    .filter((w) => w.id !== id)
+    .map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName}${w.position ? ` — ${w.position}` : ''}` }));
+
   const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
     queryKey: ['worker', id],
     queryFn: async () => {
       const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
       const mapped = mapWorkerFields(worker, 'toFrontend');
-      return { ...mapped, status: mapped.status || 'active', annualRentMinor: worker.annualRentMinor } as Employee & { annualRentMinor: string | null };
+      return { ...mapped, status: mapped.status || 'active' } as Employee;
     },
     enabled: !!id,
   });
 
   useEffect(() => {
     if (employee) {
-      const withRent = employee as Employee & { annualRentMinor: string | null };
       setPersonal({
         firstName: employee.firstName || '',
+        middleName: employee.middleName || '',
         lastName: employee.lastName || '',
         email: employee.email || '',
         phone: employee.phone || '',
         dateOfBirth: employee.dateOfBirth || '',
-        gender: employee.gender || '',
         nationalId: employee.nationalId === '****' ? '' : employee.nationalId || '',
-        annualRent: withRent.annualRentMinor ? String(parseInt(withRent.annualRentMinor, 10) / 100) : '',
+        annualRent: employee.annualRentMinor ? String(parseInt(employee.annualRentMinor, 10) / 100) : '',
       });
       setEmployment({
         employeeNumber: employee.employeeNumber || '',
@@ -138,6 +146,7 @@ export default function EditEmployee() {
         legalEntityId: employee.legalEntityId || '',
         employmentType: employee.employmentType || 'full_time',
         hireDate: employee.hireDate?.slice(0, 10) || '',
+        managerId: employee.managerId || '',
       });
       setBank({
         bankName: employee.bankName || '',
@@ -151,6 +160,7 @@ export default function EditEmployee() {
     mutationFn: async () => {
       const payload: Record<string, string | number | undefined> = {
         firstName: personal.firstName,
+        middleName: personal.middleName || undefined,
         lastName: personal.lastName,
         email: personal.email || undefined,
         phone: personal.phone || undefined,
@@ -160,6 +170,7 @@ export default function EditEmployee() {
         position: employment.position || undefined,
         department: employment.department || undefined,
         legalEntityId: employment.legalEntityId || undefined,
+        managerId: employment.managerId || undefined,
         employmentType: employment.employmentType || undefined,
         hireDate: employment.hireDate || undefined,
         bankName: bank.bankName || undefined,
@@ -259,6 +270,13 @@ export default function EditEmployee() {
               value={personal.lastName}
               onChange={(e) => setPersonal((f) => ({ ...f, lastName: e.target.value }))}
             />
+            <div className="col-span-2">
+              <Input
+                label="Middle Name (optional)"
+                value={personal.middleName}
+                onChange={(e) => setPersonal((f) => ({ ...f, middleName: e.target.value }))}
+              />
+            </div>
             <Input
               label="Email Address"
               value={personal.email}
@@ -278,13 +296,6 @@ export default function EditEmployee() {
                 onChange={(e) => setPersonal((f) => ({ ...f, dateOfBirth: e.target.value }))}
               />
             </div>
-            <Select
-              label="Gender"
-              value={personal.gender}
-              options={genderOptions}
-              onChange={(v) => setPersonal((f) => ({ ...f, gender: v }))}
-              placeholder="Select gender"
-            />
             <div className="col-span-2">
               <Input
                 label="National ID (NIN)"
@@ -360,6 +371,15 @@ export default function EditEmployee() {
               options={employmentTypeOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, employmentType: v }))}
             />
+            <div className="col-span-2">
+              <Select
+                label="Manager (optional)"
+                value={employment.managerId}
+                options={managerOptions}
+                onChange={(v) => setEmployment((f) => ({ ...f, managerId: v }))}
+                placeholder="Select this employee's manager"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -393,17 +413,19 @@ export default function EditEmployee() {
             <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Personal</p>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <dt className="text-cash-green/60">Name</dt>
-              <dd className="text-deep-cash font-medium">{personal.firstName} {personal.lastName}</dd>
+              <dd className="text-deep-cash font-medium">
+                {personal.firstName} {personal.middleName} {personal.lastName}
+              </dd>
               <dt className="text-cash-green/60">Email</dt>
               <dd className="text-deep-cash">{personal.email || '—'}</dd>
               <dt className="text-cash-green/60">Phone</dt>
               <dd className="text-deep-cash">{personal.phone || '—'}</dd>
               <dt className="text-cash-green/60">Date of Birth</dt>
               <dd className="text-deep-cash">{personal.dateOfBirth || '—'}</dd>
-              <dt className="text-cash-green/60">Gender</dt>
-              <dd className="text-deep-cash">{genderOptions.find(o => o.value === personal.gender)?.label || '—'}</dd>
               <dt className="text-cash-green/60">National ID</dt>
               <dd className="text-deep-cash">{personal.nationalId ? 'Updated' : (employee?.nationalId === '****' ? 'Protected (Unchanged)' : '—')}</dd>
+              <dt className="text-cash-green/60">Annual Rent</dt>
+              <dd className="text-deep-cash">{personal.annualRent ? `₦${Number(personal.annualRent).toLocaleString()}` : '—'}</dd>
             </dl>
           </div>
           <div>
@@ -421,6 +443,8 @@ export default function EditEmployee() {
               <dd className="text-deep-cash">{leOptions.find(o => o.value === employment.legalEntityId)?.label || '—'}</dd>
               <dt className="text-cash-green/60">Employment Type</dt>
               <dd className="text-deep-cash">{employmentTypeOptions.find(o => o.value === employment.employmentType)?.label || '—'}</dd>
+              <dt className="text-cash-green/60">Manager</dt>
+              <dd className="text-deep-cash">{managerOptions.find(o => o.value === employment.managerId)?.label || '—'}</dd>
             </dl>
           </div>
           <div>

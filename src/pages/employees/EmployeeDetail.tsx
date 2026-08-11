@@ -167,6 +167,21 @@ export default function EmployeeDetail() {
     enabled: !!employee?.legalEntityId,
   });
 
+  // Resolve managerId -> name for display - Worker.managerId is a bare
+  // uuid on the entity, no embedded relation.
+  const { data: manager } = useQuery({
+    queryKey: ['worker', employee?.managerId],
+    queryFn: async () => {
+      if (!employee?.managerId) return null;
+      try {
+        return await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(employee.managerId));
+      } catch {
+        return null;
+      }
+    },
+    enabled: !!employee?.managerId,
+  });
+
   const terminateMutation = useMutation({
     mutationFn: () =>
       apiClient(ENDPOINTS.WORKERS.TERMINATE(id!), {
@@ -594,21 +609,30 @@ export default function EmployeeDetail() {
             <dl className="grid grid-cols-2 gap-x-8 gap-y-3 text-sm">
               <dt className="text-cash-green/60">Full Name</dt>
               <dd className="text-deep-cash font-medium truncate min-w-0" title={fullName}>{fullName}</dd>
-              <dt className="text-cash-green/60">Email</dt>
-              <dd className="text-deep-cash truncate min-w-0" title={employee.email}>{employee.email}</dd>
-              <dt className="text-cash-green/60">Phone</dt>
-              <dd className="text-deep-cash truncate min-w-0" title={employee.phone}>{employee.phone}</dd>
-              <dt className="text-cash-green/60">Date of Birth</dt>
-              <dd className="text-deep-cash">{formatDate(employee.dateOfBirth)}</dd>
-              {employee.gender && (
+              {employee.middleName && (
                 <>
-                  <dt className="text-cash-green/60">Gender</dt>
-                  <dd className="text-deep-cash capitalize">{employee.gender.replace(/_/g, ' ')}</dd>
+                  <dt className="text-cash-green/60">Middle Name</dt>
+                  <dd className="text-deep-cash truncate min-w-0" title={employee.middleName}>{employee.middleName}</dd>
                 </>
               )}
+              <dt className="text-cash-green/60">Email</dt>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.email || undefined}>{employee.email || '—'}</dd>
+              <dt className="text-cash-green/60">Phone</dt>
+              <dd className="text-deep-cash truncate min-w-0" title={employee.phone || undefined}>{employee.phone || '—'}</dd>
+              <dt className="text-cash-green/60">Date of Birth</dt>
+              {/* dateOfBirth is nullable on the real Worker entity, despite the
+                  Employee contract type's stale `string` (non-null) claim -
+                  formatDate(null) silently rendered "01 Jan 1970" (new Date(null)
+                  is epoch, not Invalid Date), which looked like wrong data
+                  rather than simply-not-collected. */}
+              <dd className="text-deep-cash">{employee.dateOfBirth ? formatDate(employee.dateOfBirth) : '—'}</dd>
               <dt className="text-cash-green/60">National ID</dt>
               <dd className="text-deep-cash font-mono text-xs">
-                {employee.nationalId === '****' ? 'Protected' : employee.nationalId}
+                {employee.nationalId === '****' ? 'Protected' : employee.nationalId || '—'}
+              </dd>
+              <dt className="text-cash-green/60">Annual Rent Paid</dt>
+              <dd className="text-deep-cash">
+                {employee.annualRentMinor ? `₦${(parseInt(employee.annualRentMinor, 10) / 100).toLocaleString()}` : '—'}
               </dd>
             </dl>
           </div>
@@ -631,6 +655,10 @@ export default function EmployeeDetail() {
               <dd className="text-deep-cash capitalize">{employee.employmentType?.replace(/_/g, ' ') || '—'}</dd>
               <dt className="text-cash-green/60">Legal Entity</dt>
               <dd className="text-deep-cash truncate min-w-0" title={legalEntity?.name}>{legalEntity?.name || '—'}</dd>
+              <dt className="text-cash-green/60">Manager</dt>
+              <dd className="text-deep-cash truncate min-w-0">
+                {manager ? `${manager.firstName} ${manager.lastName}` : '—'}
+              </dd>
             </dl>
           </div>
 
@@ -649,6 +677,9 @@ export default function EmployeeDetail() {
                     <p className="text-xs text-cash-green font-mono mt-0.5">
                       {employee.bankAccount === '****' ? 'Protected' : employee.bankAccount}
                     </p>
+                    {employee.bankRoutingCode && (
+                      <p className="text-xs text-cash-green/60 mt-0.5">Routing code: {employee.bankRoutingCode}</p>
+                    )}
                   </div>
                   <Badge variant="success" label="Primary" />
                 </div>

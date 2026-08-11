@@ -60,6 +60,7 @@ export default function ForceChangePasswordModal() {
           <Input
             label="Temporary password"
             type="password"
+            showPasswordToggle
             value={currentPassword}
             onChange={(e) => setCurrentPassword(e.target.value)}
             hint="The password you just used to sign in"
@@ -67,6 +68,7 @@ export default function ForceChangePasswordModal() {
           <Input
             label="New password"
             type="password"
+            showPasswordToggle
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             hint="At least 8 characters"
@@ -74,6 +76,7 @@ export default function ForceChangePasswordModal() {
           <Input
             label="Confirm new password"
             type="password"
+            showPasswordToggle
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             error={confirmPassword && newPassword !== confirmPassword ? 'Passwords do not match' : undefined}

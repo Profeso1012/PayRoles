@@ -183,12 +183,14 @@ export default function MyProfile() {
             <Input
               label="Current password"
               type="password"
+              showPasswordToggle
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
             <Input
               label="New password"
               type="password"
+              showPasswordToggle
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               hint={`At least ${minPasswordLength} characters`}
@@ -196,6 +198,7 @@ export default function MyProfile() {
             <Input
               label="Confirm new password"
               type="password"
+              showPasswordToggle
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               error={confirmPassword && newPassword !== confirmPassword ? 'Passwords do not match' : undefined}

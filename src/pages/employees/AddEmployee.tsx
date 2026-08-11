@@ -2,9 +2,10 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Building2, CheckCircle, ChevronRight, Plus, X } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { apiClient, fetchAllPages } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
+import type { BackendWorker } from '@/lib/api/types';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -23,11 +24,11 @@ interface LegalEntity {
 
 type PersonalForm = {
   firstName: string;
+  middleName: string;
   lastName: string;
   email: string;
   phone: string;
   dateOfBirth: string;
-  gender: string;
   nationalId: string;
   annualRent: string;
 };
@@ -39,6 +40,7 @@ type EmploymentForm = {
   legalEntityId: string;
   employmentType: string;
   hireDate: string;
+  managerId: string;
 };
 
 type CompensationForm = {
@@ -64,13 +66,6 @@ const STEPS = [
   { id: 2, label: 'Compensation' },
   { id: 3, label: 'Bank Details' },
   { id: 4, label: 'Review' },
-];
-
-const genderOptions = [
-  { value: 'male', label: 'Male' },
-  { value: 'female', label: 'Female' },
-  { value: 'other', label: 'Other' },
-  { value: 'prefer_not_to_say', label: 'Prefer not to say' },
 ];
 
 // Real backend EmploymentType enum (common.enum.ts) is lowercase snake_case.
@@ -114,8 +109,8 @@ export default function AddEmployee() {
   const [step, setStep] = useState(0);
 
   const [personal, setPersonal] = useState<PersonalForm>({
-    firstName: '', lastName: '', email: '', phone: '',
-    dateOfBirth: '', gender: '', nationalId: '', annualRent: '',
+    firstName: '', middleName: '', lastName: '', email: '', phone: '',
+    dateOfBirth: '', nationalId: '', annualRent: '',
   });
 
   const [employment, setEmployment] = useState<EmploymentForm>({
@@ -125,6 +120,7 @@ export default function AddEmployee() {
     legalEntityId: '',
     employmentType: 'full_time',
     hireDate: '',
+    managerId: '',
   });
 
   const [compensation, setCompensation] = useState<CompensationForm>({
@@ -159,6 +155,21 @@ export default function AddEmployee() {
     .map((le) => ({ value: le.id, label: le.name }));
   const hasNoLegalEntities = !loadingEntities && leOptions.length === 0;
 
+  // For the optional "Manager" picker - managerId is a real, accepted
+  // CreateWorkerDto field (worker.dto.ts) that the form previously never
+  // collected at all.
+  const { data: potentialManagers } = useQuery<BackendWorker[]>({
+    queryKey: ['workers-all-active'],
+    queryFn: () =>
+      fetchAllPages<BackendWorker>((page) =>
+        `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}&status=active`,
+      ),
+  });
+  const managerOptions = (potentialManagers ?? []).map((w) => ({
+    value: w.id,
+    label: `${w.firstName} ${w.lastName}${w.position ? ` — ${w.position}` : ''}`,
+  }));
+
   const createMutation = useMutation({
     mutationFn: async () => {
       // CreateWorkerDto now requires basicSalaryMinor/currency/payFrequency
@@ -168,6 +179,7 @@ export default function AddEmployee() {
       const payload = {
         employeeNumber: employment.employeeNumber,
         firstName: personal.firstName,
+        middleName: personal.middleName || undefined,
         lastName: personal.lastName,
         email: personal.email || undefined,
         phone: personal.phone || undefined,
@@ -178,6 +190,7 @@ export default function AddEmployee() {
         position: employment.position || undefined,
         department: employment.department || undefined,
         legalEntityId: employment.legalEntityId || undefined,
+        managerId: employment.managerId || undefined,
         employmentType: employment.employmentType,
         hireDate: employment.hireDate,
         bankName: bank.bankName || undefined,
@@ -303,6 +316,14 @@ export default function AddEmployee() {
               onChange={(e) => setPersonal((f) => ({ ...f, lastName: e.target.value }))}
               placeholder="e.g. Eze"
             />
+            <div className="col-span-2">
+              <Input
+                label="Middle Name (optional)"
+                value={personal.middleName}
+                onChange={(e) => setPersonal((f) => ({ ...f, middleName: e.target.value }))}
+                placeholder="e.g. Chidinma"
+              />
+            </div>
             <Input
               label="Email Address"
               value={personal.email}
@@ -324,13 +345,6 @@ export default function AddEmployee() {
                 onChange={(e) => setPersonal((f) => ({ ...f, dateOfBirth: e.target.value }))}
               />
             </div>
-            <Select
-              label="Gender"
-              value={personal.gender}
-              options={genderOptions}
-              onChange={(v) => setPersonal((f) => ({ ...f, gender: v }))}
-              placeholder="Select gender"
-            />
             <div className="col-span-2">
               <Input
                 label="National ID (NIN)"
@@ -404,6 +418,15 @@ export default function AddEmployee() {
               options={employmentTypeOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, employmentType: v }))}
             />
+            <div className="col-span-2">
+              <Select
+                label="Manager (optional)"
+                value={employment.managerId}
+                options={managerOptions}
+                onChange={(v) => setEmployment((f) => ({ ...f, managerId: v }))}
+                placeholder="Select this employee's manager"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -484,7 +507,9 @@ export default function AddEmployee() {
             <p className="text-xs font-semibold text-cash-green uppercase tracking-wide mb-3">Personal</p>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <dt className="text-cash-green/60">Name</dt>
-              <dd className="text-deep-cash font-medium">{personal.firstName} {personal.lastName}</dd>
+              <dd className="text-deep-cash font-medium">
+                {personal.firstName} {personal.middleName} {personal.lastName}
+              </dd>
               {personal.email && (
                 <>
                   <dt className="text-cash-green/60">Email</dt>
@@ -501,12 +526,6 @@ export default function AddEmployee() {
                 <>
                   <dt className="text-cash-green/60">Date of Birth</dt>
                   <dd className="text-deep-cash">{new Date(personal.dateOfBirth).toLocaleDateString()}</dd>
-                </>
-              )}
-              {personal.gender && (
-                <>
-                  <dt className="text-cash-green/60">Gender</dt>
-                  <dd className="text-deep-cash capitalize">{personal.gender.replace(/_/g, ' ')}</dd>
                 </>
               )}
               {personal.nationalId && (
@@ -552,6 +571,14 @@ export default function AddEmployee() {
               <dd className="text-deep-cash capitalize">{employment.employmentType.replace(/_/g, ' ')}</dd>
               <dt className="text-cash-green/60">Hire Date</dt>
               <dd className="text-deep-cash">{new Date(employment.hireDate).toLocaleDateString()}</dd>
+              {employment.managerId && (
+                <>
+                  <dt className="text-cash-green/60">Manager</dt>
+                  <dd className="text-deep-cash">
+                    {managerOptions.find((o) => o.value === employment.managerId)?.label || employment.managerId}
+                  </dd>
+                </>
+              )}
             </dl>
           </div>
           {compensation.basicSalary && (

@@ -3,13 +3,11 @@ export interface Employee {
   tenantId: string;
   employeeNumber: string;
   firstName: string;
+  middleName?: string | null;
   lastName: string;
   email: string;
   phone: string;
   dateOfBirth: string;
-  // The real backend Worker entity has no `gender` field at all - optional here,
-  // never sent to/received from the real API.
-  gender?: 'male' | 'female' | 'other' | 'prefer_not_to_say';
   nationalId: string;
   // Real backend Status enum (common.enum.ts): active | inactive | suspended | archived.
   // There is no dedicated "terminated" status - PATCH /workers/:id/terminate sets
@@ -23,7 +21,11 @@ export interface Employee {
   legalEntityId?: string | null;
   position?: string | null;
   department?: string | null;
+  managerId?: string | null;
   employmentType?: 'full_time' | 'part_time' | 'contract' | 'temporary' | 'intern';
+  // Bigint as string (kobo) - annual rent paid, feeds the Nigerian PAYE rent
+  // relief calc only. Not a payroll deduction; unrelated to salary.
+  annualRentMinor?: string | null;
   // Real Worker entity keeps bank fields flat (not a sub-array) - see BackendWorker
   // in lib/api/types.ts. `bankDetails` is kept only for pages not yet migrated off it.
   bankName?: string | null;

@@ -201,6 +201,7 @@ export default function SAWalletProviders() {
                 key={key}
                 label={`${label} (leave blank to keep current)`}
                 type="password"
+                showPasswordToggle
                 placeholder={placeholder}
                 hint={hint}
                 value={form.credentials[key] ?? ''}
@@ -210,6 +211,7 @@ export default function SAWalletProviders() {
           <Input
             label="Webhook Secret (leave blank to keep current)"
             type="password"
+            showPasswordToggle
             value={form.webhookSecret}
             onChange={(e) => setForm((f) => ({ ...f, webhookSecret: e.target.value }))}
             hint="Used to verify inbound wallet top-up webhooks from this provider."
