@@ -123,6 +123,7 @@ export default function Wallet() {
       setShowIdentityForm(false);
       setCopied(false);
     },
+    onError: (err) => toast.error('Failed to get top-up account', err instanceof Error ? err.message : undefined),
   });
 
   const topupMutation = useMutation({
@@ -285,10 +286,15 @@ export default function Wallet() {
           ) : (
             <div className="flex flex-col gap-3">
               <p className="text-xs text-cash-green/70">
-                See your dedicated account number - transfer into it anytime to top up this wallet automatically.
+                Get a dedicated account number - transfer into it anytime to top up this wallet automatically.
               </p>
-              <Button variant="secondary" size="sm" onClick={() => provisionMutation.mutate({})}>
-                View Top-up Account
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={provisionMutation.isPending}
+                onClick={() => provisionMutation.mutate({})}
+              >
+                Get Top-up Account
               </Button>
             </div>
           )}
