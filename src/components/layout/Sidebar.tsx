@@ -64,6 +64,9 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
       { label: 'Company Profile', path: '/settings/profile', icon: Building2 },
       { label: 'Users & Roles', path: '/settings/users', icon: Users },
       { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
+      // Same page as the settings icon on the Payments page - just a second,
+      // more discoverable entry point alongside the other settings screens.
+      { label: 'Disbursement Settings', path: '/payments/settings', icon: CreditCard },
     ],
   },
   { label: 'Audit Logs', path: '/audit', icon: History },

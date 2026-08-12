@@ -951,11 +951,34 @@ export interface BackendWalletTransaction {
   createdAt: string;
 }
 
-/** POST /wallet/virtual-account - dedicated top-up account. Idempotent. */
+/** POST /wallet/virtual-account - dedicated top-up account. Idempotent - only
+ * paystack/flutterwave/monnify support this (Remita has no DVA equivalent). */
 export interface BackendVirtualAccount {
+  provider: 'paystack' | 'flutterwave' | 'monnify';
   accountNumber: string;
   bankName: string;
   accountName: string;
+}
+
+/** Passed to POST /wallet/virtual-account - only required by Flutterwave (BVN or NIN, 11 digits each). */
+export interface ProvisionVirtualAccountRequest {
+  provider?: 'paystack' | 'flutterwave' | 'monnify';
+  identity?: { bvn?: string; nin?: string };
+}
+
+export interface InitiateTopupRequest {
+  amountMinor: number;
+  provider?: BackendProviderType;
+}
+
+export type BackendWalletTopupStatus = 'pending' | 'completed' | 'failed' | 'expired';
+
+/** POST /wallet/topup - one-off hosted checkout link for a specific amount. */
+export interface BackendWalletTopupRequest {
+  provider: BackendProviderType;
+  amountMinor: number;
+  checkoutUrl: string;
+  status: BackendWalletTopupStatus;
 }
 
 export interface BackendDisbursementBatch {

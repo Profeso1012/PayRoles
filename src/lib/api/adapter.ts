@@ -252,13 +252,17 @@ export const ENDPOINTS = {
 
   // ---------------------------------------------------------------------------
   // Wallet (New in backend) - tenant-scoped, funds disbursement as an
-  // alternative to a configured provider. Balance/ledger are tenant-facing;
-  // topping up happens out-of-band via the provisioned virtual account.
+  // alternative to a configured provider. Balance/ledger are tenant-facing.
+  // Two top-up paths: a standing dedicated virtual account (transfer in
+  // anytime) via PROVISION_VIRTUAL_ACCOUNT, or a one-off hosted checkout link
+  // for a specific amount via INITIATE_TOPUP - both credit the wallet via the
+  // same inbound webhook once payment clears.
   // ---------------------------------------------------------------------------
   WALLET: {
     GET: `${API_VERSION}/wallet`,
     TRANSACTIONS: `${API_VERSION}/wallet/transactions`,
     PROVISION_VIRTUAL_ACCOUNT: `${API_VERSION}/wallet/virtual-account`,
+    INITIATE_TOPUP: `${API_VERSION}/wallet/topup`,
   },
 
   // Platform-admin-only: the platform's own shared Paystack/Flutterwave

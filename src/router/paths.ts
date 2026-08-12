@@ -54,6 +54,10 @@ export const PATHS = {
   PAYMENTS_OVERVIEW: '/payments/overview',
   PAYMENTS_REPORTS: '/payments/reports',
   PAYMENTS_WALLET: '/payments/wallet',
+  // Matches the backend's hardcoded checkout redirect path exactly
+  // (WalletService#initiateCheckoutTopup builds `${appUrl}/wallet/topup/complete`) -
+  // must stay at the root, not nested under /payments.
+  WALLET_TOPUP_COMPLETE: '/wallet/topup/complete',
   REPORTS_REGISTER: '/reports/register',
   REPORTS_STATUTORY: '/reports/statutory',
   REPORTS_COST: '/reports/cost',

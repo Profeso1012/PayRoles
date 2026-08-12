@@ -89,6 +89,7 @@ const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 // Finance
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
 const Wallet = lazy(() => import('@/pages/payments/Wallet'));
+const WalletTopupComplete = lazy(() => import('@/pages/payments/WalletTopupComplete'));
 const DisbursementSettings = lazy(() => import('@/pages/payments/DisbursementSettings'));
 const DisbursementDashboard = lazy(() => import('@/pages/payments/DisbursementDashboard'));
 const DisbursementReports = lazy(() => import('@/pages/payments/DisbursementReports'));
@@ -267,6 +268,9 @@ export const router = createBrowserRouter([
       // but cannot configure providers or general settings.
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(PaymentFiles)}</RoleGuard> },
       { path: 'payments/wallet', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(Wallet)}</RoleGuard> },
+      // Fixed path, not under /payments - matches the backend's hardcoded
+      // checkout redirect exactly (see PATHS.WALLET_TOPUP_COMPLETE).
+      { path: 'wallet/topup/complete', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(WalletTopupComplete)}</RoleGuard> },
       { path: 'payments/settings', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin']}>{w(DisbursementSettings)}</RoleGuard> },
       { path: 'payments/overview', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementDashboard)}</RoleGuard> },
       { path: 'payments/reports', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementReports)}</RoleGuard> },
