@@ -188,7 +188,9 @@ export default function Login() {
   return (
     <div className="flex flex-col justify-center h-full">
       <div className="w-full max-w-sm mx-auto">
-        <img src="/assets/payrole-logo.png" alt="PayRole" className="h-8 mb-10" />
+        <Link to={PATHS.HOME}>
+          <img src="/assets/payrole-logo.png" alt="PayRole" className="h-8 mb-10" />
+        </Link>
 
         {step === 'slug' && (
           <>

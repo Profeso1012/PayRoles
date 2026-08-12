@@ -25,21 +25,22 @@ export default function Pagination({ page, pageSize, total, onChange }: Paginati
   };
 
   return (
-    <div className="flex items-center justify-between px-1 py-3">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-1 py-3">
       <p className="text-xs text-cash-green">
         Showing {from}–{to} of {total}
       </p>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-0.5 sm:gap-1">
         <button
           onClick={() => onChange(page - 1)}
           disabled={page === 1}
-          className="w-8 h-8 rounded text-sm flex items-center justify-center text-cash-green hover:bg-mint-light disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-7 h-7 sm:w-8 sm:h-8 rounded text-xs sm:text-sm flex items-center justify-center text-cash-green hover:bg-mint-light disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          <ChevronLeft size={16} />
+          <ChevronLeft size={14} className="sm:hidden" />
+          <ChevronLeft size={16} className="hidden sm:block" />
         </button>
         {getPages().map((p, i) =>
           p === '...' ? (
-            <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-cash-green text-sm">
+            <span key={`ellipsis-${i}`} className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-cash-green text-xs sm:text-sm">
               …
             </span>
           ) : (
@@ -47,7 +48,7 @@ export default function Pagination({ page, pageSize, total, onChange }: Paginati
               key={p}
               onClick={() => onChange(p as number)}
               className={cn(
-                'w-8 h-8 rounded text-sm flex items-center justify-center transition-colors',
+                'w-7 h-7 sm:w-8 sm:h-8 rounded text-xs sm:text-sm flex items-center justify-center transition-colors',
                 p === page
                   ? 'bg-fresh-cash text-white'
                   : 'text-cash-green hover:bg-mint-light',
@@ -60,9 +61,10 @@ export default function Pagination({ page, pageSize, total, onChange }: Paginati
         <button
           onClick={() => onChange(page + 1)}
           disabled={page === totalPages}
-          className="w-8 h-8 rounded text-sm flex items-center justify-center text-cash-green hover:bg-mint-light disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          className="w-7 h-7 sm:w-8 sm:h-8 rounded text-xs sm:text-sm flex items-center justify-center text-cash-green hover:bg-mint-light disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
-          <ChevronRight size={16} />
+          <ChevronRight size={14} className="sm:hidden" />
+          <ChevronRight size={16} className="hidden sm:block" />
         </button>
       </div>
     </div>

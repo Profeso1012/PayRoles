@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowRight, ChevronDown, Users, Calculator, Play, CreditCard } from 'lucide-react'
 import { PATHS } from '@/router/paths'
+import { useAuthStore } from '@/store/authStore'
 
 const FEATURE_LINKS = [
   {
@@ -37,6 +38,9 @@ export default function MarketingNav() {
   const [menuOpen, setMenuOpen] = useState(false)
   const [featuresOpen, setFeaturesOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
+  const role = useAuthStore((s) => s.user?.role)
+  const dashboardPath = role === 'employee_self_service' ? '/my-payslips' : '/dashboard'
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 80)
@@ -273,50 +277,77 @@ export default function MarketingNav() {
             Pricing
           </a>
 
-          <a
-            href={PATHS.REQUEST_ACCESS}
-            className="nav-links-desktop"
-            style={{
-              alignItems: 'center',
-              padding: '0 24px',
-              background: 'rgba(79,173,114,0.20)',
-              color: 'white',
-              fontSize: 14,
-              fontWeight: 500,
-              textDecoration: 'none',
-              transition: 'background 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(79,173,114,0.30)' }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(79,173,114,0.20)' }}
-          >
-            Get Started
-          </a>
+          {isAuthenticated ? (
+            <button
+              onClick={() => navigate(dashboardPath)}
+              className="nav-signin-btn"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '0 72px 0 24px',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.90)',
+                fontSize: 14,
+                transition: 'color 0.2s',
+                whiteSpace: 'nowrap',
+              }}
+              onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4FAD72' }}
+              onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.90)' }}
+            >
+              Go to Dashboard
+              <ArrowRight size={15} />
+            </button>
+          ) : (
+            <>
+              <a
+                href={PATHS.REQUEST_ACCESS}
+                className="nav-links-desktop"
+                style={{
+                  alignItems: 'center',
+                  padding: '0 24px',
+                  background: 'rgba(79,173,114,0.20)',
+                  color: 'white',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                  transition: 'background 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(79,173,114,0.30)' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = 'rgba(79,173,114,0.20)' }}
+              >
+                Get Started
+              </a>
 
-          <div className="nav-links-desktop" style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
+              <div className="nav-links-desktop" style={{ width: 1, background: 'rgba(255,255,255,0.20)', alignSelf: 'stretch' }} />
 
-          <button
-            onClick={() => navigate('/login')}
-            className="nav-signin-btn"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '0 72px 0 24px',
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              color: 'rgba(255,255,255,0.90)',
-              fontSize: 14,
-              transition: 'color 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4FAD72' }}
-            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.90)' }}
-          >
-            Sign in
-            <ArrowRight size={15} />
-          </button>
+              <button
+                onClick={() => navigate('/login')}
+                className="nav-signin-btn"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '0 72px 0 24px',
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: 'rgba(255,255,255,0.90)',
+                  fontSize: 14,
+                  transition: 'color 0.2s',
+                  whiteSpace: 'nowrap',
+                }}
+                onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.color = '#4FAD72' }}
+                onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.color = 'rgba(255,255,255,0.90)' }}
+              >
+                Sign in
+                <ArrowRight size={15} />
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -399,42 +430,67 @@ export default function MarketingNav() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 'auto' }}>
-            <button
-              onClick={() => { setMenuOpen(false); navigate(PATHS.REQUEST_ACCESS) }}
-              style={{
-                width: '100%',
-                padding: '15px 24px',
-                background: '#1F6F4E',
-                border: 'none',
-                borderRadius: 10,
-                color: 'white',
-                fontSize: 15,
-                fontWeight: 600,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 10,
-              }}
-            >
-              Get Started <ArrowRight size={16} />
-            </button>
-            <button
-              onClick={() => { setMenuOpen(false); navigate('/login') }}
-              style={{
-                width: '100%',
-                padding: '15px 24px',
-                background: 'rgba(255,255,255,0.07)',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: 10,
-                color: 'rgba(255,255,255,0.80)',
-                fontSize: 15,
-                fontWeight: 500,
-                cursor: 'pointer',
-              }}
-            >
-              Sign in
-            </button>
+            {isAuthenticated ? (
+              <button
+                onClick={() => { setMenuOpen(false); navigate(dashboardPath) }}
+                style={{
+                  width: '100%',
+                  padding: '15px 24px',
+                  background: '#1F6F4E',
+                  border: 'none',
+                  borderRadius: 10,
+                  color: 'white',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
+              >
+                Go to Dashboard <ArrowRight size={16} />
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => { setMenuOpen(false); navigate(PATHS.REQUEST_ACCESS) }}
+                  style={{
+                    width: '100%',
+                    padding: '15px 24px',
+                    background: '#1F6F4E',
+                    border: 'none',
+                    borderRadius: 10,
+                    color: 'white',
+                    fontSize: 15,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                >
+                  Get Started <ArrowRight size={16} />
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); navigate('/login') }}
+                  style={{
+                    width: '100%',
+                    padding: '15px 24px',
+                    background: 'rgba(255,255,255,0.07)',
+                    border: '1px solid rgba(255,255,255,0.15)',
+                    borderRadius: 10,
+                    color: 'rgba(255,255,255,0.80)',
+                    fontSize: 15,
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Sign in
+                </button>
+              </>
+            )}
           </div>
 
           <p style={{ marginTop: 32, fontSize: 12, color: 'rgba(255,255,255,0.25)', textAlign: 'center' }}>

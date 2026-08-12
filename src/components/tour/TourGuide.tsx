@@ -31,20 +31,27 @@ function measure(tourId: string): Rect | null {
 export default function TourGuide() {
   const { active, stepIndex, next, back, end } = useTourStore();
   const user = useAuthStore((s) => s.user);
+  const mustChangePassword = useAuthStore((s) => s.mustChangePassword);
   const [rect, setRect] = useState<Rect | null>(null);
   const step = TOUR_STEPS[stepIndex];
   const isLast = stepIndex === TOUR_STEPS.length - 1;
 
-  // Auto-start once per user, only for the roles this specific 3-step flow applies to.
+  // Auto-start once per user, only for the roles this specific 5-step flow
+  // applies to. Gated on mustChangePassword being false: the tour must only
+  // fire once the mandatory first-login password reset is done, not just
+  // after login - starting it while ForceChangePasswordModal is still up
+  // renders the tour's high-z-index tooltip on top of that modal instead of
+  // behind it. Depending on mustChangePassword (not just user.id) means the
+  // tour also starts right when the reset completes, without needing a reload.
   useEffect(() => {
-    if (!user || active) return;
+    if (!user || active || mustChangePassword) return;
     if (!TOUR_ROLES.includes(user.role)) return;
     const seenKey = `${SEEN_KEY_PREFIX}${user.id}`;
     if (localStorage.getItem(seenKey)) return;
     const timer = setTimeout(() => useTourStore.getState().start(), 500);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id]);
+  }, [user?.id, mustChangePassword]);
 
   // Sidebar is a hidden slide-out panel on mobile - force it open for the
   // duration of the tour so the same "arrow points at nav item" pattern works
@@ -96,6 +103,16 @@ export default function TourGuide() {
   const spaceRight = window.innerWidth - spot.right;
   const placeRight = spaceRight >= tooltipWidth + GAP;
 
+  // On narrow screens the tooltip is anchored above or below the spotlighted
+  // item depending on whichever side actually has room, and is always capped
+  // to the viewport with its own scroll - previously it was pinned to
+  // `spot.bottom + GAP` unconditionally, so an item near the bottom of the
+  // screen (e.g. the last sidebar entries) pushed the tooltip past the
+  // viewport edge with no way to reach its Next/Back buttons.
+  const spaceBelow = window.innerHeight - spot.bottom - GAP;
+  const spaceAbove = spot.top - GAP;
+  const placeBelow = placeRight ? true : spaceBelow >= 180 || spaceBelow >= spaceAbove;
+
   const tooltipStyle: React.CSSProperties = placeRight
     ? {
         top: Math.min(
@@ -104,13 +121,26 @@ export default function TourGuide() {
         ),
         left: spot.right + GAP,
         width: tooltipWidth,
+        maxHeight: window.innerHeight - 24,
+        overflowY: 'auto',
       }
-    : {
-        top: Math.min(spot.bottom + GAP, window.innerHeight - 220),
-        left: 16,
-        right: 16,
-        width: 'auto',
-      };
+    : placeBelow
+      ? {
+          top: Math.max(spot.bottom + GAP, 12),
+          left: 16,
+          right: 16,
+          width: 'auto',
+          maxHeight: Math.max(spaceBelow - 12, 140),
+          overflowY: 'auto',
+        }
+      : {
+          bottom: Math.max(window.innerHeight - spot.top + GAP, 12),
+          left: 16,
+          right: 16,
+          width: 'auto',
+          maxHeight: Math.max(spaceAbove - 12, 140),
+          overflowY: 'auto',
+        };
 
   const dimStyle: React.CSSProperties = {
     position: 'fixed',

@@ -1,6 +1,7 @@
 import { createBrowserRouter, Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthGuard } from './guards/AuthGuard';
+import { GuestGuard } from './guards/GuestGuard';
 import { RoleGuard } from './guards/RoleGuard';
 import { OrgGuard } from './guards/OrgGuard';
 import { useAuthStore } from '@/store/authStore';
@@ -156,9 +157,11 @@ export const router = createBrowserRouter([
   { path: PATHS.FEATURES_PAYMENTS, element: w(FeaturesPayments) },
   { path: PATHS.UNAUTHORIZED, element: <Unauthorized /> },
 
-  // Auth screens (AuthLayout wrapper)
+  // Auth screens (AuthLayout wrapper) - GuestGuard bounces an already
+  // logged-in user (typed URL, or browser back button after signing in)
+  // straight to their dashboard instead of showing them the login form again.
   {
-    element: <Suspense fallback={<Loading />}><AuthLayout /></Suspense>,
+    element: <GuestGuard><Suspense fallback={<Loading />}><AuthLayout /></Suspense></GuestGuard>,
     children: [
       { path: PATHS.LOGIN, element: w(Login) },
       { path: '/platform-login', element: w(PlatformLogin) },

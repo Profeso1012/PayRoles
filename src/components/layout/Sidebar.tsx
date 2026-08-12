@@ -49,13 +49,13 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
     ],
   },
   {
-    label: 'Payroll', path: '/payroll', icon: Calculator,
+    label: 'Payroll', path: '/payroll', icon: Calculator, tourId: 'tour-step-4',
     children: [
       { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
       { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
     ],
   },
-  { label: 'Payments', path: '/payments', icon: CreditCard },
+  { label: 'Payments', path: '/payments', icon: CreditCard, tourId: 'tour-step-5' },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   // Deprecated: Reports (no backend /reports module)
   {

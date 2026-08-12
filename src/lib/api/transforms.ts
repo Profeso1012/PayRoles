@@ -352,8 +352,8 @@ export function extractResponseData<T>(response: any): {
   const hasEnvelope = response && typeof response === 'object' && 'data' in response;
   return {
     data: hasEnvelope ? response.data : response,
-    meta: response.meta,
-    traceId: response.traceId,
-    correlationId: response.correlationId,
+    meta: response?.meta,
+    traceId: response?.traceId,
+    correlationId: response?.correlationId,
   };
 }

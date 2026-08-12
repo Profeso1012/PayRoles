@@ -1,4 +1,5 @@
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
+import { PATHS } from '@/router/paths';
 
 export default function AuthLayout() {
   return (
@@ -28,7 +29,9 @@ export default function AuthLayout() {
         />
         {/* Centered content */}
         <div className="relative z-10 flex flex-col items-center justify-center w-full p-12">
-          <img src="/assets/payrole-logo.png" alt="PayRole" className="h-10 mb-6" />
+          <Link to={PATHS.HOME}>
+            <img src="/assets/payrole-logo.png" alt="PayRole" className="h-10 mb-6" />
+          </Link>
           <p className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold text-white text-center leading-snug">
             Payroll. People. Possibilities.
           </p>

@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, Shield } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
+import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
 import type { LoginResponse } from '@/lib/api/types';
 import type { AuthUser } from '@contracts/types/auth';
@@ -102,10 +103,10 @@ export default function PlatformLogin() {
   return (
     <div className="flex flex-col justify-center h-full">
       <div className="w-full max-w-sm mx-auto">
-        <div className="flex items-center gap-3 mb-8">
+        <Link to={PATHS.HOME} className="flex items-center gap-3 mb-8">
           <Shield className="text-cash-green" size={32} />
           <img src="/assets/payrole-logo.png" alt="PayRole" className="h-8" />
-        </div>
+        </Link>
 
         <div className="bg-soft-white border border-cash-green/20 rounded-sm p-4 mb-6">
           <p className="text-sm text-deep-cash flex items-start gap-2">

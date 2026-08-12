@@ -25,4 +25,16 @@ export const TOUR_STEPS: TourStep[] = [
     description:
       'Under Employees, add your team one by one (or hand this off to whoever you just added as HR Manager). Each employee record can include their compensation and bank details.',
   },
+  {
+    tourId: 'tour-step-4',
+    title: '4. Set up pay elements',
+    description:
+      'Under Payroll → Pay Elements, define allowances, deductions, and bonuses, then assign them to employees individually or in bulk from the Employees page.',
+  },
+  {
+    tourId: 'tour-step-5',
+    title: '5. Run payroll and get paid',
+    description:
+      'Calculate and submit a pay run under Payroll → Pay Runs, then head to Payments to approve and disburse salaries once it\'s ready.',
+  },
 ];

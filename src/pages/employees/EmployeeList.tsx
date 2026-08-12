@@ -338,13 +338,22 @@ export default function EmployeeList() {
         action={
           <div className="flex items-center gap-2">
             {canWritePayElements && (
-              <Button variant="secondary" onClick={openBulkAssign}>
+              <Button
+                variant="secondary"
+                onClick={openBulkAssign}
+                className="!text-xs sm:!text-sm !px-2.5 sm:!px-4 !py-1.5 sm:!py-2 whitespace-nowrap"
+              >
                 <Layers size={16} />
-                Bulk Assign Pay Element
+                <span className="sm:hidden">Bulk Assign</span>
+                <span className="hidden sm:inline">Bulk Assign Pay Element</span>
               </Button>
             )}
             {canAdd && (
-              <Button variant="primary" onClick={() => navigate('/employees/new')}>
+              <Button
+                variant="primary"
+                onClick={() => navigate('/employees/new')}
+                className="!text-xs sm:!text-sm !px-2.5 sm:!px-4 !py-1.5 sm:!py-2 whitespace-nowrap"
+              >
                 <Plus size={16} />
                 Add Employee
               </Button>
