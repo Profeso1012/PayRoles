@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   ArrowLeft, WalletCards, Building2, Copy, Check, ArrowDownCircle, ArrowUpCircle, RotateCcw,
   Link2, ExternalLink,
@@ -67,7 +67,6 @@ function needsIdentity(err: unknown): boolean {
 export default function Wallet() {
   const navigate = useNavigate();
   const toast = useToast();
-  const qc = useQueryClient();
   const role = useAuthStore((s) => s.user?.role);
   // Same permission split as DisbursementSettings/PaymentFiles: DISBURSEMENT_READ
   // (viewing balance/ledger) is broader than DISBURSEMENT_CONFIGURE (provisioning
@@ -102,42 +101,28 @@ export default function Wallet() {
   });
 
   // getOrProvisionVirtualAccount on the backend is a true "get or create" -
-  // idempotent and safe to call the moment this page loads, so the account
-  // (once it exists) is always visible without an extra click. The one case
-  // it can't satisfy silently is a platform default provider that requires
-  // BVN/NIN (Flutterwave) - that surfaces as an error here and drops into the
-  // identity form below instead of failing invisibly.
-  const {
-    data: account,
-    isLoading: vaLoading,
-    isError: vaError,
-    error: vaErrorObj,
-  } = useQuery<BackendVirtualAccount>({
-    queryKey: ['wallet-virtual-account'],
-    queryFn: () => apiClient<BackendVirtualAccount>(ENDPOINTS.WALLET.PROVISION_VIRTUAL_ACCOUNT, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    }),
-    enabled: canFund,
-    retry: false,
-  });
-
+  // idempotent, so calling it again on a later visit just returns the same
+  // permanent account rather than making a new one. It's deliberately NOT
+  // fetched automatically on page load though: an unconditional call here
+  // raced against a user's own manual retry (or itself on window refocus)
+  // and could hit the backend's check-then-insert race on VirtualAccount's
+  // unique tenantId index, and it also meant silently hitting a live
+  // provider API - and showing a scary error - for every tenant whose
+  // default provider isn't usable yet, even ones who never asked. Only ever
+  // fires from an explicit click below.
   const provisionMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (vars?: { provider?: string; identity?: { bvn?: string; nin?: string } }) =>
       apiClient<BackendVirtualAccount>(ENDPOINTS.WALLET.PROVISION_VIRTUAL_ACCOUNT, {
         method: 'POST',
         body: JSON.stringify({
-          provider: vaProvider || undefined,
-          identity: bvn || nin ? { bvn: bvn || undefined, nin: nin || undefined } : undefined,
+          provider: vars?.provider || undefined,
+          identity: vars?.identity?.bvn || vars?.identity?.nin ? vars.identity : undefined,
         }),
       }),
-    onSuccess: (data) => {
-      qc.setQueryData(['wallet-virtual-account'], data);
+    onSuccess: () => {
       setShowIdentityForm(false);
       setCopied(false);
-      toast.success('Top-up account ready');
     },
-    onError: (err) => toast.error('Failed to provision top-up account', err instanceof Error ? err.message : undefined),
   });
 
   const topupMutation = useMutation({
@@ -226,17 +211,15 @@ export default function Wallet() {
             <p className="text-xs text-cash-green/60">
               Ask a Tenant Admin to set up a top-up account for this company.
             </p>
-          ) : vaLoading ? (
-            <div className="flex justify-center py-4"><Spinner /></div>
-          ) : account ? (
+          ) : provisionMutation.data ? (
             <div className="flex flex-col gap-1.5">
-              <p className="text-xs text-cash-green/60">{account.bankName} · {account.accountName}</p>
+              <p className="text-xs text-cash-green/60">{provisionMutation.data.bankName} · {provisionMutation.data.accountName}</p>
               <div className="flex items-center gap-2 flex-wrap">
-                <code className="text-sm font-mono text-deep-cash bg-soft-white px-2 py-1 rounded">{account.accountNumber}</code>
+                <code className="text-sm font-mono text-deep-cash bg-soft-white px-2 py-1 rounded">{provisionMutation.data.accountNumber}</code>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={async () => { await navigator.clipboard.writeText(account.accountNumber); setCopied(true); }}
+                  onClick={async () => { await navigator.clipboard.writeText(provisionMutation.data!.accountNumber); setCopied(true); }}
                 >
                   {copied ? <Check size={13} /> : <Copy size={13} />}
                 </Button>
@@ -246,27 +229,19 @@ export default function Wallet() {
                 usually within a few minutes.
               </p>
             </div>
-          ) : (
+          ) : provisionMutation.isPending ? (
+            <div className="flex justify-center py-4"><Spinner /></div>
+          ) : provisionMutation.isError ? (
             <div className="flex flex-col gap-3">
-              {vaError && !showIdentityForm && (
+              {!showIdentityForm && (
                 <>
                   <p className="text-xs text-amber-600">
-                    {needsIdentity(vaErrorObj)
+                    {needsIdentity(provisionMutation.error)
                       ? "The platform's default provider needs a BVN or NIN to verify a dedicated account for you."
-                      : (vaErrorObj instanceof Error ? vaErrorObj.message : 'Could not set up a top-up account automatically.')}
+                      : (provisionMutation.error instanceof Error ? provisionMutation.error.message : 'Could not set up a top-up account.')}
                   </p>
                   <Button variant="secondary" size="sm" onClick={() => setShowIdentityForm(true)}>
                     Set Up Manually
-                  </Button>
-                </>
-              )}
-              {!vaError && (
-                <>
-                  <p className="text-xs text-cash-green/70">
-                    Get a dedicated account number - any transfer into it tops up this wallet automatically.
-                  </p>
-                  <Button variant="secondary" size="sm" onClick={() => setShowIdentityForm(true)}>
-                    Choose a Provider
                   </Button>
                 </>
               )}
@@ -300,12 +275,21 @@ export default function Wallet() {
                     size="sm"
                     loading={provisionMutation.isPending}
                     disabled={vaProvider === 'flutterwave' && bvn.length !== 11 && nin.length !== 11}
-                    onClick={() => provisionMutation.mutate()}
+                    onClick={() => provisionMutation.mutate({ provider: vaProvider, identity: { bvn, nin } })}
                   >
                     Get Top-up Account
                   </Button>
                 </div>
               )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs text-cash-green/70">
+                See your dedicated account number - transfer into it anytime to top up this wallet automatically.
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => provisionMutation.mutate({})}>
+                View Top-up Account
+              </Button>
             </div>
           )}
         </div>
