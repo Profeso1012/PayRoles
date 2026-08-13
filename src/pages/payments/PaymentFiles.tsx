@@ -441,7 +441,12 @@ export default function PaymentFiles() {
       render: (row: DisbursementRow) => (
         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
           {!row.batch && canManage && (
-            <Button variant="secondary" size="sm" loading={initiateMutation.isPending} onClick={() => handleInitiateClick(row.run.id)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={initiateMutation.isPending && initiateMutation.variables?.runId === row.run.id}
+              onClick={() => handleInitiateClick(row.run.id)}
+            >
               <Play size={13} />
               Initiate
             </Button>
@@ -464,7 +469,12 @@ export default function PaymentFiles() {
             </Button>
           )}
           {(row.batch?.status === 'failed' || row.batch?.status === 'partially_paid') && canManage && (
-            <Button variant="secondary" size="sm" loading={retryMutation.isPending} onClick={() => retryMutation.mutate(row)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={retryMutation.isPending && retryMutation.variables?.run.id === row.run.id}
+              onClick={() => retryMutation.mutate(row)}
+            >
               <RotateCcw size={13} />
               Retry
             </Button>

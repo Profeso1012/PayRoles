@@ -514,7 +514,7 @@ export default function PayRunDetail() {
               <p className="text-sm text-cash-green/70 mb-4">
                 Check the employee register below, then submit to Finance for approval.
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <Button
                   variant="primary"
                   loading={submitMutation.isPending}
@@ -550,7 +550,7 @@ export default function PayRunDetail() {
               <p className="text-sm text-cash-green/70 mb-4">
                 Review the payroll register, then approve or reject this pay run.
               </p>
-              <div className="flex gap-3">
+              <div className="flex gap-3 flex-wrap">
                 <Button
                   variant="primary"
                   onClick={() => setApproveModalOpen(true)}

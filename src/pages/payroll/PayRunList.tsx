@@ -121,12 +121,13 @@ export default function PayRunList() {
       // ValidationPipe's forbidNonWhitelisted rejects the WHOLE request if an
       // unknown query key like "status" or "legalEntityId" is present. So they
       // can't be sent to the server at all - filtered client-side below instead.
-      // Fetch the max page size (100) when a filter is active to make that
-      // client-side filter useful, since without it we'd only ever be
-      // filtering within one 20-row page.
+      // Always fetch the max page size (100) - previously "All statuses" used
+      // a real 20-row server page while a status filter fetched 100 rows to
+      // filter within, so e.g. draft runs older than the 20 most-recent-created
+      // runs were invisible under "All" but reappeared under "Draft".
       const params = buildPaginationParams({
-        page: (status || legalEntityId) ? 1 : page,
-        limit: (status || legalEntityId) ? 100 : 20,
+        page: 1,
+        limit: 100,
         sortBy: 'createdAt',
         sortDir: 'desc',
       });
@@ -168,9 +169,7 @@ export default function PayRunList() {
 
       return {
         data: transformedRuns,
-        meta: (status || legalEntityId)
-          ? { page: 1, pageSize: transformedRuns.length, total: transformedRuns.length }
-          : paginatedData,
+        meta: { page: 1, pageSize: transformedRuns.length, total: transformedRuns.length },
       };
     },
   });
