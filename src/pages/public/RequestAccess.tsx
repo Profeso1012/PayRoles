@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CheckCircle } from 'lucide-react';
+import { CheckCircle, MailWarning } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import { apiClient, ApiError } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { PATHS } from '@/router/paths';
-import type { SignupRequest } from '@/lib/api/types';
+import type { SignupRequest, SignupResponse } from '@/lib/api/types';
 
 function slugify(name: string): string {
   return name
@@ -48,6 +48,12 @@ export default function RequestAccess() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [serverError, setServerError] = useState('');
+  // False only when the backend's welcome/verification emails failed to send
+  // (e.g. an SMTP outage) - the tenant/user are still created either way, so
+  // this never blocks `submitted`, it just swaps in a recovery affordance
+  // instead of "check your email" (which would otherwise never arrive).
+  const [emailDelivered, setEmailDelivered] = useState(true);
+  const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
 
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -73,7 +79,7 @@ export default function RequestAccess() {
     setSubmitting(true);
     setServerError('');
     try {
-      await apiClient(ENDPOINTS.AUTH.SIGNUP, {
+      const result = await apiClient<SignupResponse>(ENDPOINTS.AUTH.SIGNUP, {
         method: 'POST',
         body: JSON.stringify({
           tenantName: form.tenantName.trim(),
@@ -85,6 +91,7 @@ export default function RequestAccess() {
         } satisfies SignupRequest),
         skipAuthRedirect: true,
       });
+      setEmailDelivered(result.emailDelivered);
       setSubmitted(true);
     } catch (err) {
       if (errorCode(err) === 'TENANT_ALREADY_EXISTS') {
@@ -95,6 +102,57 @@ export default function RequestAccess() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Recovery path for emailDelivered: false - the tenant/user already exist at
+  // this point (signup succeeded), only the email failed, so this just retries
+  // delivery rather than resubmitting the whole form.
+  async function handleResendVerification() {
+    setResendState('sending');
+    try {
+      await apiClient(ENDPOINTS.AUTH.RESEND_VERIFICATION, {
+        method: 'POST',
+        body: JSON.stringify({ email: form.adminEmail.trim(), tenantSlug: form.tenantSlug.trim() }),
+        skipAuthRedirect: true,
+      });
+    } finally {
+      // Always resolves as "sent" - the backend responds the same regardless
+      // of whether the account exists or is already verified (enumeration-safe).
+      setResendState('sent');
+    }
+  }
+
+  if (submitted && !emailDelivered && resendState !== 'sent') {
+    return (
+      <div className="min-h-screen bg-soft-white flex items-center justify-center p-[clamp(1rem,4vw,2rem)]">
+        <div className="bg-white rounded-2xl shadow-sm border border-mint-light p-[clamp(1.5rem,5vw,2.5rem)] max-w-md w-full text-center">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-cash-gold/10 mb-6">
+            <MailWarning className="text-cash-gold" size={32} />
+          </div>
+          <h1 className="text-2xl font-bold text-deep-cash mb-3">Account created — email didn't send</h1>
+          <p className="text-gray-600 mb-2">
+            Your company account was created, but we couldn't deliver the verification email to{' '}
+            <span className="font-medium text-deep-cash break-all">{form.adminEmail}</span> just now
+            (a temporary delivery issue). Your account isn't lost — just resend it below.
+          </p>
+          <p className="text-sm text-gray-500 mb-6">
+            You'll need the verification link and a separate temporary-password email to sign in for
+            the first time.
+          </p>
+          <Button
+            variant="primary"
+            className="w-full mb-3"
+            loading={resendState === 'sending'}
+            onClick={handleResendVerification}
+          >
+            Resend verification email
+          </Button>
+          <Link to={PATHS.HOME}>
+            <Button variant="secondary" className="w-full">Back to home</Button>
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   if (submitted) {

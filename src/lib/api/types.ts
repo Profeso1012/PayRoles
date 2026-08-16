@@ -39,6 +39,9 @@ export interface SignupRequest {
 export interface SignupResponse {
   tenantId: string;
   userId: string;
+  /** False if the verification/credentials email failed to send (e.g. SMTP outage) -
+   * the tenant/user are still created, but the admin has no way to log in yet. */
+  emailDelivered: boolean;
 }
 
 export interface VerifyEmailRequest {
