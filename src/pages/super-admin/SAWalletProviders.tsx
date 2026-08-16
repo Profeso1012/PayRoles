@@ -14,18 +14,24 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import type { BackendDisbursementProviderConfig, ConfigureProviderRequest } from '@/lib/api/types';
 
-// Only Paystack/Flutterwave are collection-capable (createDedicatedAccount) -
-// this is the platform's own shared config, used to fund wallet-based
-// disbursement and provision tenant top-up virtual accounts. Not tenant-scoped.
-type WalletProviderType = 'paystack' | 'flutterwave';
-const PROVIDER_TYPES: WalletProviderType[] = ['paystack', 'flutterwave'];
+// All four are collection-capable at the backend (MonnifyProvider and
+// RemitaProvider both implement ICollectionProvider - see
+// collection-provider.interface.ts - Remita just has no dedicated-account
+// equivalent, checkout only). This is the platform's own shared config, used
+// to fund wallet-based disbursement and provision tenant top-up virtual
+// accounts. Not tenant-scoped. Field shapes mirror the tenant-facing
+// PROVIDER_CREDENTIAL_FIELDS in DisbursementSettings.tsx.
+type WalletProviderType = 'paystack' | 'flutterwave' | 'monnify' | 'remita';
+const PROVIDER_TYPES: WalletProviderType[] = ['paystack', 'flutterwave', 'monnify', 'remita'];
 
 const PROVIDER_LABELS: Record<WalletProviderType, string> = {
   paystack: 'Paystack',
   flutterwave: 'Flutterwave',
+  monnify: 'Monnify',
+  remita: 'Remita',
 };
 
-const CREDENTIAL_FIELDS: Record<WalletProviderType, { key: string; label: string; placeholder: string; hint: string }[]> = {
+const CREDENTIAL_FIELDS: Record<WalletProviderType, { key: string; label: string; placeholder?: string; hint?: string }[]> = {
   paystack: [
     {
       key: 'secretKey',
@@ -41,6 +47,23 @@ const CREDENTIAL_FIELDS: Record<WalletProviderType, { key: string; label: string
       placeholder: 'FLWSECK_TEST-xxxxxxxxxxxx or FLWSECK-xxxxxxxxxxxx',
       hint: 'From the platform\'s own Flutterwave account (Settings → API) - not any tenant\'s.',
     },
+  ],
+  monnify: [
+    {
+      key: 'apiKey',
+      label: 'API Key',
+      placeholder: 'MK_TEST_XXXXXXXXXX or MK_PROD_XXXXXXXXXX',
+      hint: 'From the platform\'s own Monnify account (Settings → API Keys) - not any tenant\'s.',
+    },
+    { key: 'secretKey', label: 'Secret Key', placeholder: 'Paired with the API Key above, same screen' },
+    { key: 'contractCode', label: 'Contract Code', placeholder: 'e.g. 1234567890', hint: 'Monnify dashboard → Settings → Contract Details' },
+    { key: 'walletAccountNumber', label: 'Wallet Account Number', placeholder: '10-digit NUBAN, e.g. 3012345678' },
+  ],
+  remita: [
+    { key: 'merchantId', label: 'Merchant ID' },
+    { key: 'serviceTypeId', label: 'Service Type ID', hint: 'The service type configured for salary/bulk payments on the platform\'s Remita account' },
+    { key: 'apiKey', label: 'API Key' },
+    { key: 'apiToken', label: 'API Token (optional)' },
   ],
 };
 
@@ -70,9 +93,19 @@ export default function SAWalletProviders() {
     queryKey: ['platform-wallet-provider', 'flutterwave'],
     queryFn: () => apiClient(ENDPOINTS.PLATFORM_DISBURSEMENT.PROVIDER_CONFIG('flutterwave')),
   });
+  const monnifyQuery = useQuery<BackendDisbursementProviderConfig | null>({
+    queryKey: ['platform-wallet-provider', 'monnify'],
+    queryFn: () => apiClient(ENDPOINTS.PLATFORM_DISBURSEMENT.PROVIDER_CONFIG('monnify')),
+  });
+  const remitaQuery = useQuery<BackendDisbursementProviderConfig | null>({
+    queryKey: ['platform-wallet-provider', 'remita'],
+    queryFn: () => apiClient(ENDPOINTS.PLATFORM_DISBURSEMENT.PROVIDER_CONFIG('remita')),
+  });
   const configs: Record<WalletProviderType, BackendDisbursementProviderConfig | null | undefined> = {
     paystack: paystackQuery.data,
     flutterwave: flutterwaveQuery.data,
+    monnify: monnifyQuery.data,
+    remita: remitaQuery.data,
   };
 
   const saveMutation = useMutation({
@@ -121,9 +154,9 @@ export default function SAWalletProviders() {
         breadcrumbs={[{ label: 'Wallet Payout Providers' }]}
       />
       <p className="text-sm text-cash-green/70 mb-6">
-        Platform-wide Paystack/Flutterwave credentials used to fund wallet-based disbursement and
-        provision tenant top-up virtual accounts. These are separate from any individual tenant's own
-        provider credentials configured under their Disbursement Settings.
+        Platform-wide provider credentials used to fund wallet-based disbursement and provision
+        tenant top-up virtual accounts. These are separate from any individual tenant's own provider
+        credentials configured under their Disbursement Settings.
       </p>
 
       {!canWrite && (
