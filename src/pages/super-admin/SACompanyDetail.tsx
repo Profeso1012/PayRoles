@@ -11,6 +11,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Modal from '@/components/ui/Modal';
 import { useToast } from '@/hooks/useToast';
+import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import type { BackendTenant } from '@/lib/api/types';
@@ -22,11 +23,17 @@ export default function SACompanyDetail() {
   const navigate = useNavigate();
   const toast = useToast();
   const qc = useQueryClient();
+  const platformRole = useAuthStore((s) => s.user?.platformRole);
+  // Backend requires PlatformPermission.TENANT_WRITE for suspend/activate/
+  // create-user on a tenant, held only by super_admin/platform_admin - see
+  // platform-tenants.controller.ts. support_engineer/auditor/devops can view
+  // this page but must not see write actions they'd just get a 403 clicking.
+  const canWrite = platformRole === 'super_admin' || platformRole === 'platform_admin';
   const [showConfirm, setShowConfirm] = useState(false);
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [userForm, setUserForm] = useState(blankUserForm);
 
-  const { data: tenant, isLoading, isError, refetch } = useQuery<BackendTenant>({
+  const { data: tenant, isLoading, isError, error, refetch } = useQuery<BackendTenant>({
     queryKey: ['platform-tenant', id],
     queryFn: () => apiClient<BackendTenant>(ENDPOINTS.PLATFORM_TENANTS.DETAIL(id!)),
     enabled: !!id,
@@ -65,7 +72,7 @@ export default function SACompanyDetail() {
   });
 
   if (isLoading) return <div className="flex items-center justify-center h-64"><Spinner size="lg" /></div>;
-  if (isError || !tenant) return <ErrorState message="Company not found." onRetry={() => refetch()} />;
+  if (isError || !tenant) return <ErrorState message="Company not found." error={error} onRetry={() => refetch()} />;
 
   const isSuspended = tenant.status === 'suspended';
 
@@ -94,25 +101,30 @@ export default function SACompanyDetail() {
             <h1 className="text-[clamp(1.25rem,2.5vw,1.6rem)] font-semibold text-deep-cash">{tenant.name}</h1>
             <p className="text-sm text-cash-green/70 mt-1">{tenant.slug}</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Badge
               variant={isSuspended ? 'danger' : 'success'}
               label={tenant.status}
             />
-            <Button variant="secondary" onClick={() => setAddUserOpen(true)}>
-              <UserPlus size={15} className="mr-2" />
-              Add User
-            </Button>
-            <Button
-              variant={isSuspended ? 'secondary' : 'danger'}
-              onClick={() => setShowConfirm(true)}
-            >
-              {isSuspended ? (
-                <><BadgeCheck size={15} className="mr-2" />Reactivate</>
-              ) : (
-                <><PauseCircle size={15} className="mr-2" />Suspend</>
-              )}
-            </Button>
+            {canWrite && (
+              <Button variant="secondary" className="whitespace-nowrap shrink-0" onClick={() => setAddUserOpen(true)}>
+                <UserPlus size={15} className="mr-2" />
+                Add User
+              </Button>
+            )}
+            {canWrite && (
+              <Button
+                variant={isSuspended ? 'secondary' : 'danger'}
+                className="whitespace-nowrap shrink-0"
+                onClick={() => setShowConfirm(true)}
+              >
+                {isSuspended ? (
+                  <><BadgeCheck size={15} className="mr-2" />Reactivate</>
+                ) : (
+                  <><PauseCircle size={15} className="mr-2" />Suspend</>
+                )}
+              </Button>
+            )}
           </div>
         </div>
       </div>

@@ -118,7 +118,7 @@ export default function HRDashboard() {
   const navigate = useNavigate();
   const fullName = useAuthStore((s) => s.user?.fullName);
 
-  const { data, isLoading, isError, refetch } = useQuery<HRDashboardData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<HRDashboardData>({
     queryKey: ['dashboard-hr'],
     queryFn: buildHRDashboard,
   });
@@ -132,7 +132,7 @@ export default function HRDashboard() {
   }
 
   if (isError || !data) {
-    return <ErrorState message="Could not load HR dashboard." onRetry={() => refetch()} />;
+    return <ErrorState message="Could not load HR dashboard." error={error} onRetry={() => refetch()} />;
   }
 
   const statCards = [

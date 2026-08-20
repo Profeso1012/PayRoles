@@ -117,7 +117,7 @@ export default function EditEmployee() {
     .filter((w) => w.id !== id)
     .map((w) => ({ value: w.id, label: `${w.firstName} ${w.lastName}${w.position ? ` — ${w.position}` : ''}` }));
 
-  const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
+  const { data: employee, isLoading, isError, error, refetch } = useQuery<Employee>({
     queryKey: ['worker', id],
     queryFn: async () => {
       const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
@@ -206,7 +206,7 @@ export default function EditEmployee() {
   }
 
   if (isError || !employee) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   return (

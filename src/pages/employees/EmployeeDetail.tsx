@@ -136,7 +136,7 @@ export default function EmployeeDetail() {
   const [editingWpeId, setEditingWpeId] = useState<string | null>(null);
   const [unassignTarget, setUnassignTarget] = useState<BackendWorkerPayElement | null>(null);
 
-  const { data: employee, isLoading, isError, refetch } = useQuery<Employee>({
+  const { data: employee, isLoading, isError, error, refetch } = useQuery<Employee>({
     queryKey: ['worker', id],
     queryFn: async () => {
       const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(id!));
@@ -528,7 +528,7 @@ export default function EmployeeDetail() {
   }
 
   if (isError || !employee) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   const fullName = `${employee.firstName} ${employee.lastName}`;
@@ -570,11 +570,12 @@ export default function EmployeeDetail() {
       <div className="bg-white rounded-xl border border-mint-light p-6 mb-6 flex flex-wrap items-center gap-5">
         <Avatar name={fullName} size="lg" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-bold text-deep-cash">{fullName}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-deep-cash truncate min-w-0" title={fullName}>{fullName}</h2>
             <Badge
               variant={statusVariant[employee.status] ?? 'info'}
               label={statusLabel[employee.status] ?? employee.status}
+              className="shrink-0"
             />
           </div>
           <p className="text-sm text-cash-green mt-0.5">{employee.email}</p>

@@ -135,7 +135,7 @@ const statusLabelMap: Record<string, string> = {
 export default function PayrollDashboard() {
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, refetch } = useQuery<PayrollDashboardData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<PayrollDashboardData>({
     queryKey: ['dashboard-payroll'],
     queryFn: buildPayrollDashboard,
   });
@@ -150,7 +150,7 @@ export default function PayrollDashboard() {
 
   if (isError || !data) {
     return (
-      <ErrorState message="Could not load payroll dashboard." onRetry={() => refetch()} />
+      <ErrorState message="Could not load payroll dashboard." error={error} onRetry={() => refetch()} />
     );
   }
 

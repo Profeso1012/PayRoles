@@ -28,7 +28,7 @@ export default function MyPayslips() {
   const navigate = useNavigate();
   const workerId = useAuthStore((s) => s.user?.workerId);
 
-  const { data: payslips, isLoading, isError, refetch } = useQuery<MyPayslip[]>({
+  const { data: payslips, isLoading, isError, error, refetch } = useQuery<MyPayslip[]>({
     queryKey: ['my-payslips', workerId],
     queryFn: async () => {
       if (!workerId) throw new Error('No worker record linked to this account');
@@ -58,7 +58,7 @@ export default function MyPayslips() {
   }
 
   if (isError || !payslips) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   const latest = payslips[0];

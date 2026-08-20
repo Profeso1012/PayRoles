@@ -43,7 +43,7 @@ export default function PayslipViewer() {
     onError: (err) => toast.error('Failed to generate PDF', err instanceof Error ? err.message : undefined),
   });
 
-  const { data: payslip, isLoading, isError, refetch } = useQuery<Payslip>({
+  const { data: payslip, isLoading, isError, error, refetch } = useQuery<Payslip>({
     queryKey: ['payslip', runId, payslipId],
     queryFn: async (): Promise<Payslip> => {
       if (!runId || !payslipId) throw new Error('Missing IDs');
@@ -121,7 +121,7 @@ export default function PayslipViewer() {
   }
 
   if (isError || !payslip) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   const earnings = payslip.elements.filter((e: PayElement) => e.type === 'earning');

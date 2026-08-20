@@ -906,17 +906,21 @@ export interface UpdateDisbursementSettingsRequest {
  * credentialsEncrypted is never decrypted for display - treat as write-only. */
 export interface BackendDisbursementProviderConfig {
   id: string;
-  tenantId: string;
   providerType: BackendProviderType;
-  credentialsEncrypted: string | null;
+  isPlatformManaged: boolean;
   environment: 'sandbox' | 'production';
   isDefault: boolean;
   enabled: boolean;
-  webhookSecret: string | null;
   metadata: Record<string, unknown> | null;
   lastValidatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Never the raw secret - the backend excludes credentialsEncrypted/webhookSecret
+   * from every response entirely. Use these instead to tell "configured" from "blank". */
+  hasCredentials: boolean;
+  /** Masked last-4-chars of the provider's primary credential field, e.g. "••••••••4242" - null if never set. */
+  credentialsPreview: string | null;
+  hasWebhookSecret: boolean;
 }
 
 export interface ConfigureProviderRequest {

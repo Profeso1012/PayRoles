@@ -102,7 +102,7 @@ export default function PayRunDetail() {
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
 
-  const { data: run, isLoading, isError, refetch } = useQuery<PayRun>({
+  const { data: run, isLoading, isError, error, refetch } = useQuery<PayRun>({
     queryKey: ['pay-run', id],
     queryFn: async () => {
       const response = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(id!));
@@ -324,7 +324,7 @@ export default function PayRunDetail() {
   }
 
   if (isError || !run) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   const currentStep = displayStepIndex(run.status);

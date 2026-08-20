@@ -85,7 +85,7 @@ export default function Wallet() {
   const [topupAmount, setTopupAmount] = useState('');
   const [topupProvider, setTopupProvider] = useState('');
 
-  const { data: wallet, isLoading, isError, refetch } = useQuery<BackendWallet>({
+  const { data: wallet, isLoading, isError, error, refetch } = useQuery<BackendWallet>({
     queryKey: ['wallet'],
     queryFn: () => apiClient<BackendWallet>(ENDPOINTS.WALLET.GET),
     enabled: canView,
@@ -163,7 +163,7 @@ export default function Wallet() {
   }
 
   if (isError || !wallet) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   const transactions = txPage?.data ?? [];

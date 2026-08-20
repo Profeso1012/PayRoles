@@ -107,7 +107,7 @@ async function buildFinanceDashboard(): Promise<FinanceDashboardData> {
 export default function FinanceDashboard() {
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, refetch } = useQuery<FinanceDashboardData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<FinanceDashboardData>({
     queryKey: ['dashboard-finance'],
     queryFn: buildFinanceDashboard,
   });
@@ -122,7 +122,7 @@ export default function FinanceDashboard() {
 
   if (isError || !data) {
     return (
-      <ErrorState message="Could not load finance dashboard." onRetry={() => refetch()} />
+      <ErrorState message="Could not load finance dashboard." error={error} onRetry={() => refetch()} />
     );
   }
 

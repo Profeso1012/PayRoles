@@ -9,7 +9,7 @@ interface PaginationProps {
 }
 
 export default function Pagination({ page, pageSize, total, onChange }: PaginationProps) {
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const totalPages = total === 0 || pageSize === 0 ? 1 : Math.max(1, Math.ceil(total / pageSize));
   const from = Math.min((page - 1) * pageSize + 1, total);
   const to = Math.min(page * pageSize, total);
 

@@ -11,6 +11,7 @@ import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
 import { useToast } from '@/hooks/useToast';
+import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
 import type { BackendTenant, CreateTenantRequest } from '@/lib/api/types';
 
@@ -57,6 +58,10 @@ export default function SACompanies() {
   const navigate = useNavigate();
   const toast = useToast();
   const qc = useQueryClient();
+  const platformRole = useAuthStore((s) => s.user?.platformRole);
+  // Backend requires PlatformPermission.TENANT_WRITE to onboard a company,
+  // held only by super_admin/platform_admin - see platform-tenants.controller.ts.
+  const canWrite = platformRole === 'super_admin' || platformRole === 'platform_admin';
 
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -68,7 +73,7 @@ export default function SACompanies() {
   // which previously made `f.slug || slugify(...)` freeze after one keystroke.
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
 
-  const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
+  const { data: tenants, isLoading, isError, error, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
     queryFn: async () => {
       const params = buildPaginationParams({ page: 1, limit: 100 });
@@ -146,10 +151,12 @@ export default function SACompanies() {
           <h1 className="text-[clamp(1.25rem,2.5vw,1.75rem)] font-semibold text-deep-cash">Companies</h1>
           <p className="text-sm text-cash-green/70 mt-0.5">Manage tenants on the platform</p>
         </div>
-        <Button variant="primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} className="mr-2" />
-          Onboard New Company
-        </Button>
+        {canWrite && (
+          <Button variant="primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} className="mr-2" />
+            Onboard New Company
+          </Button>
+        )}
       </div>
 
       {isLoading && (
@@ -157,7 +164,7 @@ export default function SACompanies() {
           <Spinner size="lg" />
         </div>
       )}
-      {isError && <ErrorState message="Failed to load companies." onRetry={() => refetch()} />}
+      {isError && <ErrorState message="Failed to load companies." error={error} onRetry={() => refetch()} />}
       {!isLoading && !isError && (
         <>
           <div className="relative mb-6 w-full max-w-sm">

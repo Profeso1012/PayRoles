@@ -31,6 +31,22 @@ const PLATFORM_ADMIN_NAV: NavItem[] = [
   { label: 'Platform Users', path: '/admin/users', icon: Users },
 ];
 
+// Unlike every tenant-side nav above, platform-admin roles vary widely in
+// what they can even READ (see PLATFORM_ROLE_PERMISSIONS in the backend's
+// platform-roles.enum.ts) - devops holds none of TENANT_READ/TAX_RULE_READ/
+// DISBURSEMENT_CONFIGURE, auditor lacks PLATFORM_USER_READ, and only
+// super_admin/platform_admin hold DISBURSEMENT_CONFIGURE at all. Showing a
+// nav link to a page that will 100% Access-Denied on load is worse than
+// just hiding it, so - unlike the tenant nav's "show it, let a 403 toast
+// explain" approach - this list is filtered per platformRole below.
+const PLATFORM_NAV_VISIBLE_TO: Record<string, string[]> = {
+  '/admin': ['super_admin', 'platform_admin', 'support_engineer', 'auditor'],
+  '/admin/companies': ['super_admin', 'platform_admin', 'support_engineer', 'auditor'],
+  '/admin/tax': ['super_admin', 'platform_admin', 'support_engineer', 'auditor'],
+  '/admin/wallet-providers': ['super_admin', 'platform_admin'],
+  '/admin/users': ['super_admin', 'platform_admin', 'support_engineer'],
+};
+
 const COMPANY_ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   {
@@ -253,7 +269,13 @@ export default function Sidebar() {
   const sidebarOpen = useUiStore((s) => s.sidebarOpen);
   const location = useLocation();
 
-  const navItems = user ? NAV_MAP[user.role] ?? [] : [];
+  const navItems = user
+    ? user.role === 'PLATFORM_ADMIN'
+      ? PLATFORM_ADMIN_NAV.filter(
+          (item) => (PLATFORM_NAV_VISIBLE_TO[item.path] ?? []).includes(user.platformRole ?? ''),
+        )
+      : NAV_MAP[user.role] ?? []
+    : [];
   const activePath = findActivePath(location.pathname, flattenPaths(navItems));
 
   return (

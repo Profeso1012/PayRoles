@@ -59,6 +59,7 @@ export default function LegalEntities() {
     data: legalEntities,
     isLoading,
     isError,
+    error,
     refetch,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
@@ -132,7 +133,7 @@ export default function LegalEntities() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   return (

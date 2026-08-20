@@ -53,7 +53,7 @@ export default function Jurisdictions() {
   // capability (see PlatformTaxController, /api/platform/tax). The tenant
   // Permission.TAX_RULE_WRITE this page used to gate on no longer exists at
   // all - every tenant role, including tenant_admin, is read-only here now.
-  const { data: rows, isLoading, isError, refetch } = useQuery<JurisdictionRow[]>({
+  const { data: rows, isLoading, isError, error, refetch } = useQuery<JurisdictionRow[]>({
     queryKey: ['tax-jurisdictions-with-rules'],
     queryFn: async () => {
       const [jurisdictions, rules] = await Promise.all([
@@ -96,7 +96,7 @@ export default function Jurisdictions() {
   }
 
   if (isError || !rows) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   return (

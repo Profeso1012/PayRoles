@@ -112,7 +112,7 @@ export default function AuditLogs() {
   const [actionFilter, setActionFilter] = useState('');
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery<{
+  const { data, isLoading, isError, error, refetch } = useQuery<{
     data: AuditLog[];
     total: number;
     page: number;
@@ -192,7 +192,7 @@ export default function AuditLogs() {
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load audit logs." onRetry={refetch} />;
+    return <ErrorState message="Failed to load audit logs." error={error} onRetry={refetch} />;
   }
 
   // Client-side only, over this fetched page - the backend has no free-text

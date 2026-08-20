@@ -131,6 +131,15 @@ const PROVIDER_CREDENTIAL_FIELDS: Record<BackendProviderType, CredentialField[]>
   ],
 };
 
+// Matches PRIMARY_CREDENTIAL_FIELD on the backend - the one field the API
+// computes a masked preview for.
+const PRIMARY_CREDENTIAL_KEY: Partial<Record<BackendProviderType, string>> = {
+  monnify: 'secretKey',
+  paystack: 'secretKey',
+  flutterwave: 'secretKey',
+  remita: 'apiKey',
+};
+
 // Manual Bank File has no external API to call, so "sandbox vs production"
 // and a webhook secret are meaningless for it - both are hidden for that
 // provider only.
@@ -185,7 +194,7 @@ export default function DisbursementSettings() {
   // provider credentials or general settings here.
   const canManage = role === 'tenant_admin' || role === 'super_admin';
 
-  const { data: settings, isLoading, isError, refetch } = useQuery<BackendDisbursementSettings>({
+  const { data: settings, isLoading, isError, error, refetch } = useQuery<BackendDisbursementSettings>({
     queryKey: ['disbursement-settings'],
     queryFn: () => apiClient<BackendDisbursementSettings>(ENDPOINTS.DISBURSEMENT.SETTINGS),
   });
@@ -294,7 +303,7 @@ export default function DisbursementSettings() {
   }
 
   if (isError || !settings) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   if (!canManage) {
@@ -484,8 +493,8 @@ export default function DisbursementSettings() {
                         {PROVIDER_HAS_ENVIRONMENT[type] && <>{config.environment} · </>}
                         {PROVIDER_CREDENTIAL_FIELDS[type].length === 0
                           ? 'No credentials needed'
-                          : config.credentialsEncrypted
-                            ? 'Credentials configured'
+                          : config.hasCredentials
+                            ? `Key set (${config.credentialsPreview ?? '••••'})`
                             : 'No credentials set'}
                         {config.lastValidatedAt && <> · validated {formatDate(config.lastValidatedAt)}</>}
                       </>
@@ -500,7 +509,7 @@ export default function DisbursementSettings() {
                 <div className="flex items-center gap-2">
                   {config?.isDefault && <Badge variant="success" label="Default" />}
                   {config && <Badge variant={config.enabled ? 'info' : 'error'} label={config.enabled ? 'Enabled' : 'Disabled'} />}
-                  {config?.credentialsEncrypted && (
+                  {config?.hasCredentials && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -562,26 +571,34 @@ export default function DisbursementSettings() {
             Set as default provider
           </label>
           {providerTarget &&
-            PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label, placeholder, hint }) => (
-              <Input
-                key={key}
-                label={`${label} (leave blank to keep current)`}
-                type="password"
-                showPasswordToggle
-                placeholder={placeholder}
-                hint={hint}
-                value={providerForm.credentials[key] ?? ''}
-                onChange={(e) =>
-                  setProviderForm((f) => ({
-                    ...f,
-                    credentials: { ...f.credentials, [key]: e.target.value },
-                  }))
-                }
-              />
-            ))}
+            PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label, placeholder, hint }) => {
+              const currentConfig = providers?.find((p) => p.providerType === providerTarget);
+              const preview = key === PRIMARY_CREDENTIAL_KEY[providerTarget] ? currentConfig?.credentialsPreview : null;
+              return (
+                <Input
+                  key={key}
+                  label={preview ? `${label} (currently ${preview})` : `${label} (leave blank to keep current)`}
+                  type="password"
+                  showPasswordToggle
+                  placeholder={placeholder}
+                  hint={hint}
+                  value={providerForm.credentials[key] ?? ''}
+                  onChange={(e) =>
+                    setProviderForm((f) => ({
+                      ...f,
+                      credentials: { ...f.credentials, [key]: e.target.value },
+                    }))
+                  }
+                />
+              );
+            })}
           {providerTarget && PROVIDER_HAS_WEBHOOK[providerTarget] && (
             <Input
-              label="Webhook Secret (leave blank to keep current)"
+              label={
+                providers?.find((p) => p.providerType === providerTarget)?.hasWebhookSecret
+                  ? 'Webhook Secret (already set - leave blank to keep it)'
+                  : 'Webhook Secret (not yet set)'
+              }
               type="password"
               showPasswordToggle
               value={providerForm.webhookSecret}

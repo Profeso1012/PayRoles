@@ -37,7 +37,7 @@ export default function CompanyProfile() {
   const [country, setCountry] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
-  const { data: profile, isLoading, isError, refetch } = useQuery<BackendTenant>({
+  const { data: profile, isLoading, isError, error, refetch } = useQuery<BackendTenant>({
     queryKey: ['tenant-profile', user?.tenantId],
     queryFn: () => apiClient<BackendTenant>(ENDPOINTS.TENANTS.DETAIL(user!.tenantId!)),
     enabled: !!user?.tenantId,
@@ -78,7 +78,7 @@ export default function CompanyProfile() {
   }
 
   if (isError || !profile) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   const isDirty = name !== profile.name || country !== (profile.country || '');

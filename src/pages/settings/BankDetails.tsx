@@ -32,7 +32,7 @@ export default function BankDetails() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
-  const { data, isLoading, isError, refetch } = useQuery<BankDetailsData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<BankDetailsData>({
     queryKey: ['settings-bank'],
     queryFn: () => apiClient('/settings/bank'),
   });
@@ -72,7 +72,7 @@ export default function BankDetails() {
   }
 
   if (isError || !data) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   const isDirty =

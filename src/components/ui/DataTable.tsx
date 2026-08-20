@@ -24,6 +24,9 @@ interface DataTableProps<T> {
   data: T[];
   isLoading?: boolean;
   isError?: boolean;
+  /** The raw query error, if any - passed through to ErrorState so it can
+   * tell an access-denied (401/403) response apart from a real failure. */
+  error?: unknown;
   pagination?: PaginationMeta;
   onPageChange?: (page: number) => void;
   onSort?: (key: string, direction: 'asc' | 'desc') => void;
@@ -38,6 +41,7 @@ export default function DataTable<T>({
   data,
   isLoading,
   isError,
+  error,
   pagination,
   onPageChange,
   onSort,
@@ -97,7 +101,7 @@ export default function DataTable<T>({
             ) : isError ? (
               <tr>
                 <td colSpan={columns.length}>
-                  <ErrorState />
+                  <ErrorState error={error} />
                 </td>
               </tr>
             ) : data.length === 0 ? (
@@ -130,7 +134,7 @@ export default function DataTable<T>({
           </tbody>
         </table>
       </div>
-      {pagination && onPageChange && (
+      {pagination && pagination.total > 0 && onPageChange && (
         <Pagination
           page={pagination.page}
           pageSize={pagination.pageSize}

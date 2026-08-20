@@ -254,7 +254,7 @@ export default function EmployeeList() {
   if (status) params.set('status', status);  // Backend Status enum is lowercase - send as-is
   if (legalEntityId) params.set('legalEntityId', legalEntityId);
 
-  const { data, isLoading, isError } = useQuery<PaginatedResult<Employee>>({
+  const { data, isLoading, isError, error } = useQuery<PaginatedResult<Employee>>({
     queryKey: ['workers-list', page, search, status, legalEntityId],
     queryFn: async () => {
       try {
@@ -407,6 +407,7 @@ export default function EmployeeList() {
         data={data?.data ?? []}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         pagination={data}
         onPageChange={setPage}
         onRowClick={(row) => navigate(`/employees/${row.id}`)}

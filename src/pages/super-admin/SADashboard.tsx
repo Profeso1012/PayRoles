@@ -18,7 +18,7 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 };
 
 export default function SADashboard() {
-  const { data: tenants, isLoading, isError, refetch } = useQuery<BackendTenant[]>({
+  const { data: tenants, isLoading, isError, error, refetch } = useQuery<BackendTenant[]>({
     queryKey: ['platform-tenants'],
     queryFn: async () => {
       const params = buildPaginationParams({ page: 1, limit: 100 });
@@ -36,7 +36,7 @@ export default function SADashboard() {
   }
 
   if (isError || !tenants) {
-    return <ErrorState message="Failed to load tenants." onRetry={() => refetch()} />;
+    return <ErrorState message="Failed to load tenants." error={error} onRetry={() => refetch()} />;
   }
 
   const active = tenants.filter((t) => t.status === 'active').length;

@@ -36,7 +36,7 @@ export default function Notifications() {
   const qc = useQueryClient();
   const [activeTab, setActiveTab] = useState('all');
 
-  const { data: notifications, isLoading, isError, refetch } = useQuery({
+  const { data: notifications, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['notifications'],
     queryFn: async () => {
       const response = await apiClient<any>(ENDPOINTS.NOTIFICATIONS.LIST);
@@ -63,7 +63,7 @@ export default function Notifications() {
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load notifications." onRetry={refetch} />;
+    return <ErrorState message="Failed to load notifications." error={error} onRetry={refetch} />;
   }
 
   const allNotifications = notifications || [];

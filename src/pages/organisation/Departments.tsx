@@ -43,6 +43,7 @@ export default function Departments() {
     data: departments,
     isLoading: depsLoading,
     isError: depsError,
+    error: depsErrorObj,
     refetch: refetchDeps,
   } = useQuery<Department[]>({
     queryKey: ['departments'],
@@ -53,6 +54,7 @@ export default function Departments() {
     data: legalEntities,
     isLoading: leLoading,
     isError: leError,
+    error: leErrorObj,
     refetch: refetchLe,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
@@ -110,6 +112,7 @@ export default function Departments() {
   if (depsError || leError) {
     return (
       <ErrorState
+        error={depsErrorObj ?? leErrorObj}
         onRetry={() => {
           refetchDeps();
           refetchLe();

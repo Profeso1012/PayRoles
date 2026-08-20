@@ -63,7 +63,7 @@ export default function SAUsers() {
   const [editForm, setEditForm] = useState<UpdatePlatformUserRequest>({});
   const [revealedPassword, setRevealedPassword] = useState<{ subject: string; password: string } | null>(null);
 
-  const { data: users, isLoading, isError, refetch } = useQuery<BackendPlatformUser[]>({
+  const { data: users, isLoading, isError, error, refetch } = useQuery<BackendPlatformUser[]>({
     queryKey: ['platform-users'],
     queryFn: async () => {
       const params = buildPaginationParams({ page: 1, limit: 100 });
@@ -154,7 +154,7 @@ export default function SAUsers() {
   }
 
   if (isError) {
-    return <ErrorState message="Failed to load platform users." onRetry={() => refetch()} />;
+    return <ErrorState message="Failed to load platform users." error={error} onRetry={() => refetch()} />;
   }
 
   return (

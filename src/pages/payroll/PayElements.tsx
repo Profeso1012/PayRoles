@@ -73,7 +73,7 @@ export default function PayElements() {
   const [form, setForm] = useState(blank);
   const [deleteTarget, setDeleteTarget] = useState<PayElementDefinition | null>(null);
 
-  const { data: elements, isLoading, isError, refetch } = useQuery<PayElementDefinition[]>({
+  const { data: elements, isLoading, isError, error, refetch } = useQuery<PayElementDefinition[]>({
     queryKey: ['pay-elements'],
     queryFn: async () => {
       // No params here defaults to PaginationDto's limit: 20, silently
@@ -213,7 +213,7 @@ export default function PayElements() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   const earnings = (elements ?? []).filter((e) => e.type === 'earning');

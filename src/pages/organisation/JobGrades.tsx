@@ -43,6 +43,7 @@ export default function JobGrades() {
     data: jobGrades,
     isLoading,
     isError,
+    error,
     refetch,
   } = useQuery<JobGrade[]>({
     queryKey: ['job-grades'],
@@ -84,7 +85,7 @@ export default function JobGrades() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   return (

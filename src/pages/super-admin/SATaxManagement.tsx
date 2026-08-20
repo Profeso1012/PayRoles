@@ -102,7 +102,7 @@ export default function SATaxManagement() {
     enabled: !!viewCode,
   });
 
-  const { data: rows, isLoading, isError, refetch } = useQuery<JurisdictionRow[]>({
+  const { data: rows, isLoading, isError, error, refetch } = useQuery<JurisdictionRow[]>({
     queryKey: ['platform-tax-tree'],
     queryFn: async () => {
       const [jurisdictions, rules] = await Promise.all([
@@ -266,7 +266,7 @@ export default function SATaxManagement() {
   }
 
   if (isError || !rows) {
-    return <ErrorState message="Failed to load tax rules." onRetry={() => refetch()} />;
+    return <ErrorState message="Failed to load tax rules." error={error} onRetry={() => refetch()} />;
   }
 
   return (
@@ -349,14 +349,14 @@ export default function SATaxManagement() {
                               return (
                                 <li
                                   key={v.id}
-                                  className={`flex items-center justify-between gap-2 text-sm text-cash-green pl-2 ${isToggling ? 'opacity-60' : ''}`}
+                                  className={`flex items-center justify-between gap-x-2 gap-y-1.5 flex-wrap text-sm text-cash-green pl-2 ${isToggling ? 'opacity-60' : ''}`}
                                 >
-                                  <span>
+                                  <span className="flex-1 min-w-[160px]">
                                     {v.name} <span className="text-fresh-cash">· effective {v.effectiveDate}</span>
                                   </span>
-                                  <div className="flex items-center gap-2 shrink-0">
+                                  <div className="flex items-center gap-2 flex-wrap shrink-0">
                                     <Badge variant={v.isActive ? 'success' : 'info'} label={v.isActive ? 'Active' : 'Inactive'} />
-                                    <Button variant="ghost" size="sm" onClick={() => setViewCode(v.code)}>
+                                    <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => setViewCode(v.code)}>
                                       <Eye size={13} />
                                       View
                                     </Button>
@@ -364,6 +364,7 @@ export default function SATaxManagement() {
                                       <Button
                                         variant="secondary"
                                         size="sm"
+                                        className="whitespace-nowrap"
                                         disabled={isToggling}
                                         onClick={() => activateMutation.mutate({ code: v.code, activate: !v.isActive })}
                                       >
@@ -629,7 +630,7 @@ export default function SATaxManagement() {
           <p className="text-sm text-red-500">Failed to load this version's details.</p>
         ) : (
           <div className="flex flex-col gap-5">
-            <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+            <dl className="grid grid-cols-[1fr_3fr] gap-x-6 gap-y-2 text-sm">
               <dt className="text-cash-green/60">Effective</dt>
               <dd className="text-deep-cash">
                 {viewDetail.version.effectiveDate}

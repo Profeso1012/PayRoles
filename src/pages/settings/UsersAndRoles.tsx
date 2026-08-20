@@ -84,6 +84,7 @@ export default function UsersAndRoles() {
     data: users = [],
     isLoading,
     isError,
+    error,
     refetch,
   } = useQuery<BackendUser[]>({
     queryKey: ['settings-users'],
@@ -224,7 +225,7 @@ export default function UsersAndRoles() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   return (

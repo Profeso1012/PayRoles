@@ -48,6 +48,7 @@ export default function Locations() {
     data: locations,
     isLoading: locLoading,
     isError: locError,
+    error: locErrorObj,
     refetch: refetchLoc,
   } = useQuery<Location[]>({
     queryKey: ['locations'],
@@ -58,6 +59,7 @@ export default function Locations() {
     data: legalEntities,
     isLoading: leLoading,
     isError: leError,
+    error: leErrorObj,
     refetch: refetchLe,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
@@ -103,6 +105,7 @@ export default function Locations() {
   if (locError || leError) {
     return (
       <ErrorState
+        error={locErrorObj ?? leErrorObj}
         onRetry={() => {
           refetchLoc();
           refetchLe();

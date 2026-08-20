@@ -73,7 +73,7 @@ async function buildEmployeeDashboard(): Promise<EmployeeDashboardData> {
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
 
-  const { data, isLoading, isError, refetch } = useQuery<EmployeeDashboardData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<EmployeeDashboardData>({
     queryKey: ['dashboard-employee'],
     queryFn: buildEmployeeDashboard,
   });
@@ -88,7 +88,7 @@ export default function EmployeeDashboard() {
 
   if (isError || !data) {
     return (
-      <ErrorState message="Could not load your dashboard." onRetry={() => refetch()} />
+      <ErrorState message="Could not load your dashboard." error={error} onRetry={() => refetch()} />
     );
   }
 

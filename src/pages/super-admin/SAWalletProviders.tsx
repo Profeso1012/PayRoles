@@ -74,6 +74,16 @@ const blankForm = {
   webhookSecret: '',
 };
 
+// Matches PRIMARY_CREDENTIAL_FIELD on the backend - the one field the API
+// computes a masked preview for, so the "leave blank to keep current" field
+// can actually show what's currently saved instead of just claiming something is.
+const PRIMARY_CREDENTIAL_KEY: Record<WalletProviderType, string> = {
+  paystack: 'secretKey',
+  flutterwave: 'secretKey',
+  monnify: 'secretKey',
+  remita: 'apiKey',
+};
+
 export default function SAWalletProviders() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -183,7 +193,9 @@ export default function SAWalletProviders() {
                         <>
                           {config.environment}
                           {' · '}
-                          {config.credentialsEncrypted ? 'Credentials configured' : 'No credentials set'}
+                          {config.hasCredentials
+                            ? `Key set (${config.credentialsPreview ?? '••••'})`
+                            : 'No credentials set'}
                           {config.lastValidatedAt && <> · validated {formatDate(config.lastValidatedAt)}</>}
                         </>
                       )
@@ -229,20 +241,28 @@ export default function SAWalletProviders() {
             Enabled
           </label>
           {target &&
-            CREDENTIAL_FIELDS[target].map(({ key, label, placeholder, hint }) => (
-              <Input
-                key={key}
-                label={`${label} (leave blank to keep current)`}
-                type="password"
-                showPasswordToggle
-                placeholder={placeholder}
-                hint={hint}
-                value={form.credentials[key] ?? ''}
-                onChange={(e) => setForm((f) => ({ ...f, credentials: { ...f.credentials, [key]: e.target.value } }))}
-              />
-            ))}
+            CREDENTIAL_FIELDS[target].map(({ key, label, placeholder, hint }) => {
+              const preview =
+                key === PRIMARY_CREDENTIAL_KEY[target] ? configs[target]?.credentialsPreview : null;
+              return (
+                <Input
+                  key={key}
+                  label={preview ? `${label} (currently ${preview})` : `${label} (leave blank to keep current)`}
+                  type="password"
+                  showPasswordToggle
+                  placeholder={placeholder}
+                  hint={hint}
+                  value={form.credentials[key] ?? ''}
+                  onChange={(e) => setForm((f) => ({ ...f, credentials: { ...f.credentials, [key]: e.target.value } }))}
+                />
+              );
+            })}
           <Input
-            label="Webhook Secret (leave blank to keep current)"
+            label={
+              target && configs[target]?.hasWebhookSecret
+                ? 'Webhook Secret (already set - leave blank to keep it)'
+                : 'Webhook Secret (not yet set)'
+            }
             type="password"
             showPasswordToggle
             value={form.webhookSecret}

@@ -64,6 +64,7 @@ export default function PayGroups() {
     data: payGroups,
     isLoading: pgLoading,
     isError: pgError,
+    error: pgErrorObj,
     refetch: refetchPg,
   } = useQuery<PayGroup[]>({
     queryKey: ['pay-groups'],
@@ -74,6 +75,7 @@ export default function PayGroups() {
     data: legalEntities,
     isLoading: leLoading,
     isError: leError,
+    error: leErrorObj,
     refetch: refetchLe,
   } = useQuery<LegalEntity[]>({
     queryKey: ['legal-entities'],
@@ -84,6 +86,7 @@ export default function PayGroups() {
     data: locations,
     isLoading: locLoading,
     isError: locError,
+    error: locErrorObj,
     refetch: refetchLoc,
   } = useQuery<Location[]>({
     queryKey: ['locations'],
@@ -181,6 +184,7 @@ export default function PayGroups() {
   if (pgError || leError || locError) {
     return (
       <ErrorState
+        error={pgErrorObj ?? leErrorObj ?? locErrorObj}
         onRetry={() => {
           refetchPg();
           refetchLe();

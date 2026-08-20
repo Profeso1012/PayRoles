@@ -168,7 +168,7 @@ export default function PaymentFiles() {
   });
   const walletBalanceMinor = wallet ? Number(wallet.balanceMinor) : 0;
 
-  const { data: rows = [], isLoading, isError, refetch } = useQuery<DisbursementRow[]>({
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery<DisbursementRow[]>({
     queryKey: ['disbursement-batches'],
     queryFn: async () => {
       const params = buildPaginationParams({ page: 1, limit: 50, sortBy: 'createdAt', sortDir: 'desc' });
@@ -603,6 +603,7 @@ export default function PaymentFiles() {
           data={rows}
           isLoading={isLoading}
           isError={isError}
+          error={error}
           rowKey={(row) => row.run.id}
           emptyMessage="No approved pay runs found"
         />

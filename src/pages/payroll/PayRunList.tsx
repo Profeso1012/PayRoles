@@ -113,7 +113,7 @@ export default function PayRunList() {
     })),
   ];
 
-  const { data, isLoading, isError } = useQuery<PaginatedResult<PayRun>>({
+  const { data, isLoading, isError, error } = useQuery<PaginatedResult<PayRun>>({
     queryKey: ['pay-runs-list', page, status, legalEntityId],
     queryFn: async () => {
       // GET /payroll/runs binds @Query() to plain PaginationDto (page/limit/
@@ -281,6 +281,7 @@ export default function PayRunList() {
         data={data?.data ?? []}
         isLoading={isLoading}
         isError={isError}
+        error={error}
         pagination={data?.meta}
         onPageChange={setPage}
         onRowClick={(row) => navigate(`/payroll/runs/${row.id}`)}

@@ -33,7 +33,7 @@ export default function MyBankDetails() {
     bankCode: '',
   });
 
-  const { data: bankDetails, isLoading, isError, refetch } = useQuery<MyBankDetails>({
+  const { data: bankDetails, isLoading, isError, error, refetch } = useQuery<MyBankDetails>({
     queryKey: ['my-bank-details', userId],
     queryFn: async () => {
       // Local mock — GET /api/employees/me/bank-details in production
@@ -79,7 +79,7 @@ export default function MyBankDetails() {
   }
 
   if (isError) {
-    return <ErrorState onRetry={refetch} />;
+    return <ErrorState error={error} onRetry={refetch} />;
   }
 
   return (

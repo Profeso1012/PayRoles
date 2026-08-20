@@ -59,7 +59,7 @@ export default function MyProfile() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordChanged, setPasswordChanged] = useState(false);
 
-  const { data: profile, isLoading, isError, refetch } = useQuery<ProfileView>({
+  const { data: profile, isLoading, isError, error, refetch } = useQuery<ProfileView>({
     queryKey: ['my-profile', isPlatformAdmin],
     queryFn: async (): Promise<ProfileView> => {
       if (isPlatformAdmin) {
@@ -112,7 +112,7 @@ export default function MyProfile() {
   }
 
   if (isError || !profile) {
-    return <ErrorState onRetry={() => refetch()} />;
+    return <ErrorState error={error} onRetry={() => refetch()} />;
   }
 
   const fullName = `${profile.firstName} ${profile.lastName}`;
