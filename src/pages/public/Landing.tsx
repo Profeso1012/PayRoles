@@ -100,9 +100,20 @@ export default function Landing() {
           .hero-card { right: 32px !important; bottom: 70px !important; max-width: calc(100% - 64px) !important; }
           .hero-content { padding: 0 32px !important; }
           .art-grid { grid-template-columns: 1fr !important; }
-          .purp-inner { flex-direction: column !important; }
+          /* align-items stays 'flex-start' (a cross-axis value) even after
+             flex-direction flips to column, so children only take their
+             content width instead of the full row width - the scrollable
+             card-track wrapper below (no className, plain flex:1 div) never
+             gets a definite width to size its cards against, so .trust-card's
+             flex-basis:100% has nothing to resolve against and the cards fall
+             back to natural (too-wide) content sizing, overflowing past the
+             section's right padding. */
+          .purp-inner { flex-direction: column !important; align-items: stretch !important; }
           .purp-sidebar { flex: unset !important; width: 100% !important; padding-right: 0 !important; padding-bottom: 32px !important; }
-          .trust-card { flex-basis: 100% !important; }
+          /* One full-width card at a time on mobile, no peek of the next
+             one - scroll-snap centers whichever card is swiped to. */
+          .trust-card { flex-basis: 100% !important; width: 100% !important; scroll-snap-align: center !important; }
+          .trust-track { scroll-snap-type: x mandatory !important; }
         }
         @media (max-width: 640px) {
           .stat-divider { border-right: none !important; }
@@ -510,6 +521,7 @@ export default function Landing() {
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             <div
               ref={cardTrackRef}
+              className="trust-track"
               style={{
                 display: 'flex',
                 gap: 16,

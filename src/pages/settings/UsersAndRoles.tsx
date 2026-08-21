@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil, Copy, Check, AlertTriangle } from 'lucide-react';
+import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil } from 'lucide-react';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -77,8 +77,6 @@ export default function UsersAndRoles() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState<BackendUser | null>(null);
   const [editTarget, setEditTarget] = useState<BackendUser | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserRequest>({});
-  const [revealedPassword, setRevealedPassword] = useState<{ email: string; password: string } | null>(null);
-  const [passwordCopied, setPasswordCopied] = useState(false);
 
   const {
     data: users = [],
@@ -181,12 +179,11 @@ export default function UsersAndRoles() {
   const resetPasswordMutation = useMutation({
     mutationFn: (id: string) =>
       apiClient<{ temporaryPassword: string }>(ENDPOINTS.USERS.RESET_PASSWORD(id), { method: 'PATCH' }),
-    onSuccess: (result) => {
-      // Shown once, in a modal that blocks dismissal until copied - a toast
-      // that auto-dismisses risks losing the only copy of this password,
-      // since it's never emailed/stored and can't be retrieved again.
-      setRevealedPassword({ email: resetPasswordTarget?.email ?? 'this user', password: result.temporaryPassword });
-      setPasswordCopied(false);
+    // The backend emails the new temporary password directly to the user -
+    // it also returns it in the response as a fallback for if email delivery
+    // is unavailable, but there's no need to surface/copy it here too.
+    onSuccess: () => {
+      toast.success('Password reset', `A new temporary password was emailed to ${resetPasswordTarget?.email ?? 'the user'}.`);
       setResetPasswordTarget(null);
     },
     onError: (err) => toast.error('Failed to reset password', err instanceof Error ? err.message : undefined),
@@ -530,70 +527,6 @@ export default function UsersAndRoles() {
         variant="danger"
         isLoading={resetPasswordMutation.isPending}
       />
-
-      {/* Deliberately not the shared Modal component - backdrop click, the X
-          button, and Escape all close it immediately, which risks losing the
-          only copy of a password that can never be shown again. This one
-          only closes once the user has actually copied it. */}
-      {revealedPassword && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 60,
-            background: 'rgba(15, 46, 35, 0.6)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 'clamp(1rem, 3vw, 2rem)',
-          }}
-        >
-          <div
-            style={{
-              background: '#fff', borderRadius: '0.75rem',
-              maxWidth: 'min(420px, 92vw)', width: '100%',
-              padding: 'clamp(1.25rem, 3vw, 1.75rem)',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-3">
-              <KeyRound size={18} className="text-cash-green" />
-              <h3 className="text-base font-semibold text-deep-cash">Temporary Password</h3>
-            </div>
-            <p className="text-sm text-cash-green/80 mb-4">
-              New temporary password for <span className="font-medium text-deep-cash">{revealedPassword.email}</span>.
-            </p>
-
-            <div className="flex items-center gap-2 p-3 rounded-lg border border-mint-light bg-soft-white mb-3">
-              <code className="flex-1 text-sm font-mono text-deep-cash break-all">{revealedPassword.password}</code>
-              <Button
-                variant={passwordCopied ? 'secondary' : 'primary'}
-                size="sm"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(revealedPassword.password);
-                  setPasswordCopied(true);
-                }}
-              >
-                {passwordCopied ? <Check size={14} /> : <Copy size={14} />}
-                {passwordCopied ? 'Copied' : 'Copy'}
-              </Button>
-            </div>
-
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-cash-gold/10 border border-cash-gold/30 mb-4">
-              <AlertTriangle size={15} className="text-cash-gold shrink-0 mt-0.5" />
-              <p className="text-xs text-deep-cash">
-                You can only see this password right now — it cannot be shown again. Copy and save it
-                somewhere safe, then share it with the user directly, before closing this dialog.
-              </p>
-            </div>
-
-            <div className="flex justify-end">
-              <Button
-                variant="primary"
-                disabled={!passwordCopied}
-                onClick={() => setRevealedPassword(null)}
-              >
-                Done, I've saved it
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

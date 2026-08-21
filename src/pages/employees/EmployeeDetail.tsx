@@ -567,21 +567,27 @@ export default function EmployeeDetail() {
       />
 
       {/* Employee card */}
-      <div className="bg-white rounded-xl border border-mint-light p-6 mb-6 flex flex-wrap items-center gap-5">
-        <Avatar name={fullName} size="lg" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-deep-cash truncate min-w-0" title={fullName}>{fullName}</h2>
-            <Badge
-              variant={statusVariant[employee.status] ?? 'info'}
-              label={statusLabel[employee.status] ?? employee.status}
-              className="shrink-0"
-            />
+      <div className="bg-white rounded-xl border border-mint-light p-6 mb-6 flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-5">
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <Avatar name={fullName} size="lg" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold text-deep-cash truncate min-w-0" title={fullName}>{fullName}</h2>
+              <Badge
+                variant={statusVariant[employee.status] ?? 'info'}
+                label={statusLabel[employee.status] ?? employee.status}
+                className="shrink-0"
+              />
+            </div>
+            <p className="text-sm text-cash-green mt-0.5 truncate" title={employee.email}>{employee.email}</p>
+            <p className="text-xs text-cash-green/60 mt-1 font-mono">{employee.employeeNumber}</p>
           </div>
-          <p className="text-sm text-cash-green mt-0.5">{employee.email}</p>
-          <p className="text-xs text-cash-green/60 mt-1 font-mono">{employee.employeeNumber}</p>
         </div>
-        <div className="text-right">
+        {/* Its own row on mobile (flex-col above) so it can never overlap the
+            email/name column - previously a same-row sibling that only had
+            room to shrink, not wrap, once the name+badge+email column ran out
+            of space on narrow screens. */}
+        <div className="text-left sm:text-right shrink-0">
           <p className="text-xs text-cash-green/60">Joined</p>
           <p className="text-sm font-medium text-deep-cash">{formatDate(employee.createdAt)}</p>
         </div>
