@@ -74,16 +74,6 @@ const blankForm = {
   webhookSecret: '',
 };
 
-// Matches PRIMARY_CREDENTIAL_FIELD on the backend - the one field the API
-// computes a masked preview for, so the "leave blank to keep current" field
-// can actually show what's currently saved instead of just claiming something is.
-const PRIMARY_CREDENTIAL_KEY: Record<WalletProviderType, string> = {
-  paystack: 'secretKey',
-  flutterwave: 'secretKey',
-  monnify: 'secretKey',
-  remita: 'apiKey',
-};
-
 export default function SAWalletProviders() {
   const qc = useQueryClient();
   const toast = useToast();
@@ -146,6 +136,27 @@ export default function SAWalletProviders() {
     onError: (err) => toast.error('Failed to save configuration', err instanceof Error ? err.message : undefined),
   });
 
+  // The config response never says whether credentials are actually saved
+  // (see BackendDisbursementProviderConfig's doc comment) - this is the only
+  // real signal available: a live call against the provider's own API using
+  // whatever's currently saved, which fails immediately with a clear error
+  // if the credentials are missing/wrong instead of only surfacing that the
+  // first time a tenant tries to top up their wallet.
+  const [validatingType, setValidatingType] = useState<WalletProviderType | null>(null);
+  const validateMutation = useMutation({
+    mutationFn: (type: WalletProviderType) => {
+      setValidatingType(type);
+      return apiClient(ENDPOINTS.PLATFORM_DISBURSEMENT.PROVIDER_VALIDATE(type), { method: 'POST' });
+    },
+    onSuccess: (_data, type) => {
+      qc.invalidateQueries({ queryKey: ['platform-wallet-provider', type] });
+      toast.success(`${PROVIDER_LABELS[type]} credentials are valid`);
+    },
+    onError: (err, type) =>
+      toast.error(`${PROVIDER_LABELS[type]} validation failed`, err instanceof Error ? err.message : undefined),
+    onSettled: () => setValidatingType(null),
+  });
+
   function openConfigure(type: WalletProviderType) {
     const existing = configs[type];
     setTarget(type);
@@ -190,20 +201,35 @@ export default function SAWalletProviders() {
                   <p className="text-xs text-cash-green/60 mt-0.5">
                     {config
                       ? (
+                        // The API never exposes whether credentials/webhook secret are
+                        // actually saved (both fields are excluded from the response
+                        // entirely, with no substitute flag) - a config row can exist
+                        // just from toggling environment/enabled, so "configured" here
+                        // means "this row exists", not "credentials are set". Use
+                        // "Validate" after saving to actually confirm the credentials work.
                         <>
                           {config.environment}
-                          {' · '}
-                          {config.hasCredentials
-                            ? `Key set (${config.credentialsPreview ?? '••••'})`
-                            : 'No credentials set'}
-                          {config.lastValidatedAt && <> · validated {formatDate(config.lastValidatedAt)}</>}
+                          {' · configured'}
+                          {config.lastValidatedAt
+                            ? <> · validated {formatDate(config.lastValidatedAt)}</>
+                            : ' · not yet validated'}
                         </>
                       )
                       : 'Not configured'}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {config && <Badge variant={config.enabled ? 'info' : 'error'} label={config.enabled ? 'Enabled' : 'Disabled'} />}
+                  {canWrite && config && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      loading={validatingType === type && validateMutation.isPending}
+                      onClick={() => validateMutation.mutate(type)}
+                    >
+                      Validate
+                    </Button>
+                  )}
                   {canWrite && (
                     <Button variant="secondary" size="sm" onClick={() => openConfigure(type)}>
                       Configure
@@ -241,28 +267,20 @@ export default function SAWalletProviders() {
             Enabled
           </label>
           {target &&
-            CREDENTIAL_FIELDS[target].map(({ key, label, placeholder, hint }) => {
-              const preview =
-                key === PRIMARY_CREDENTIAL_KEY[target] ? configs[target]?.credentialsPreview : null;
-              return (
-                <Input
-                  key={key}
-                  label={preview ? `${label} (currently ${preview})` : `${label} (leave blank to keep current)`}
-                  type="password"
-                  showPasswordToggle
-                  placeholder={placeholder}
-                  hint={hint}
-                  value={form.credentials[key] ?? ''}
-                  onChange={(e) => setForm((f) => ({ ...f, credentials: { ...f.credentials, [key]: e.target.value } }))}
-                />
-              );
-            })}
+            CREDENTIAL_FIELDS[target].map(({ key, label, placeholder, hint }) => (
+              <Input
+                key={key}
+                label={`${label} (leave blank to keep the existing value, if any is saved)`}
+                type="password"
+                showPasswordToggle
+                placeholder={placeholder}
+                hint={hint}
+                value={form.credentials[key] ?? ''}
+                onChange={(e) => setForm((f) => ({ ...f, credentials: { ...f.credentials, [key]: e.target.value } }))}
+              />
+            ))}
           <Input
-            label={
-              target && configs[target]?.hasWebhookSecret
-                ? 'Webhook Secret (already set - leave blank to keep it)'
-                : 'Webhook Secret (not yet set)'
-            }
+            label="Webhook Secret (leave blank to keep the existing value, if any is saved)"
             type="password"
             showPasswordToggle
             value={form.webhookSecret}

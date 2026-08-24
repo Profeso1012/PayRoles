@@ -904,6 +904,18 @@ export interface UpdateDisbursementSettingsRequest {
 
 /** GET /disbursement/settings/providers - disbursement-provider-config.entity.ts.
  * credentialsEncrypted is never decrypted for display - treat as write-only. */
+/**
+ * Matches disbursement-provider-config.entity.ts exactly. Both
+ * credentialsEncrypted and webhookSecret are @Exclude()d on that entity with
+ * no substitute field added (no hasCredentials/credentialsPreview/
+ * hasWebhookSecret getter exists on the backend) - so there is currently NO
+ * way to tell from this response whether credentials or a webhook secret
+ * have actually been saved, only that a config row exists at all (which can
+ * happen from just toggling environment/enabled, without ever saving a
+ * credential). Do not add those fields back here without confirming the
+ * backend actually returns them - a prior version of this type assumed they
+ * existed and the resulting UI silently lied about credential state.
+ */
 export interface BackendDisbursementProviderConfig {
   id: string;
   providerType: BackendProviderType;
@@ -915,12 +927,6 @@ export interface BackendDisbursementProviderConfig {
   lastValidatedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  /** Never the raw secret - the backend excludes credentialsEncrypted/webhookSecret
-   * from every response entirely. Use these instead to tell "configured" from "blank". */
-  hasCredentials: boolean;
-  /** Masked last-4-chars of the provider's primary credential field, e.g. "••••••••4242" - null if never set. */
-  credentialsPreview: string | null;
-  hasWebhookSecret: boolean;
 }
 
 export interface ConfigureProviderRequest {

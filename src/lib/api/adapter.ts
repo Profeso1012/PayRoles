@@ -270,6 +270,7 @@ export const ENDPOINTS = {
   // top-up virtual accounts. Not tenant-scoped - VERSION_NEUTRAL, no /v1.
   PLATFORM_DISBURSEMENT: {
     PROVIDER_CONFIG: (providerType: string) => `${PLATFORM_PREFIX}/disbursement/providers/${providerType}`,
+    PROVIDER_VALIDATE: (providerType: string) => `${PLATFORM_PREFIX}/disbursement/providers/${providerType}/validate`,
   },
 
   // ---------------------------------------------------------------------------

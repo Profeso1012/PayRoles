@@ -46,6 +46,7 @@ const PLATFORM_NAV_VISIBLE_TO: Record<string, string[]> = {
   '/admin/wallet-providers': ['super_admin', 'platform_admin'],
   '/admin/users': ['super_admin', 'platform_admin', 'support_engineer'],
 };
+const KNOWN_PLATFORM_ROLES = new Set(['super_admin', 'platform_admin', 'support_engineer', 'auditor', 'devops']);
 
 const COMPANY_ADMIN_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -271,9 +272,14 @@ export default function Sidebar() {
 
   const navItems = user
     ? user.role === 'PLATFORM_ADMIN'
-      ? PLATFORM_ADMIN_NAV.filter(
-          (item) => (PLATFORM_NAV_VISIBLE_TO[item.path] ?? []).includes(user.platformRole ?? ''),
-        )
+      ? // A platformRole that's missing or doesn't match any known value (e.g.
+        // GET /platform/users/me failed during login and PlatformLogin.tsx's
+        // catch left it null - see that file's comment) means "unknown", not
+        // "no permissions" - showing zero nav in that case is strictly worse
+        // than showing everything and letting a real 403 explain a denial.
+        KNOWN_PLATFORM_ROLES.has(user.platformRole ?? '')
+        ? PLATFORM_ADMIN_NAV.filter((item) => (PLATFORM_NAV_VISIBLE_TO[item.path] ?? []).includes(user.platformRole!))
+        : PLATFORM_ADMIN_NAV
       : NAV_MAP[user.role] ?? []
     : [];
   const activePath = findActivePath(location.pathname, flattenPaths(navItems));

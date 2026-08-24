@@ -187,9 +187,14 @@ export default function PayRunList() {
     {
       key: 'payGroupName',
       header: 'Name',
-      render: (row: PayRun) => (
-        <span className="text-sm text-cash-green">{row.payGroupName || row.name || '—'}</span>
-      ),
+      render: (row: PayRun) => {
+        const name = row.payGroupName || row.name || '—';
+        return (
+          <span className="text-sm text-cash-green line-clamp-3" title={name}>
+            {name}
+          </span>
+        );
+      },
     },
     {
       key: 'status',
