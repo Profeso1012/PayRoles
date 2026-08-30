@@ -289,6 +289,8 @@ export const ENDPOINTS = {
     LIST: `${API_VERSION}/imports`,
     WORKERS_UPLOAD: `${API_VERSION}/imports/workers/upload`,
     STATUS: (id: string) => `${API_VERSION}/imports/${id}`,
+    ERRORS: (id: string) => `${API_VERSION}/imports/${id}/errors`,
+    CANCEL: (id: string) => `${API_VERSION}/imports/${id}/cancel`,
   },
 
   EXPORTS: {

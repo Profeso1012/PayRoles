@@ -131,9 +131,12 @@ async function request<T>(
   // screen a session-expiry redirect should land on.
   const loginPath = user?.role === 'PLATFORM_ADMIN' ? '/platform-login' : '/login';
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  // A FormData body (file upload) must NOT get an explicit Content-Type -
+  // the browser sets it itself, including the multipart boundary token,
+  // which forcing 'application/json' here would silently overwrite and
+  // break the upload entirely.
+  const isFormData = options?.body instanceof FormData;
+  const headers: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
 
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;

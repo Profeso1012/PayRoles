@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { read as readWorkbook, utils as xlsxUtils } from 'xlsx';
-import { UploadCloud, KeyRound, Check, AlertCircle, RefreshCw, Download } from 'lucide-react';
+import { UploadCloud, KeyRound, Check, AlertCircle, RefreshCw, Download, XCircle } from 'lucide-react';
 import { apiClient, fetchAllPages } from '@/lib/api';
 import { NIGERIAN_BANKS } from '@/lib/data/nigerianBanks';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
@@ -12,45 +12,18 @@ import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import Modal from '@/components/ui/Modal';
 import Select from '@/components/ui/Select';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type {
-  BackendWorker,
-  BackendUser,
-  CreateUserRequest,
-  CreateWorkerRequest,
-  UpdateWorkerRequest,
-  BackendEmploymentType,
-} from '@/lib/api/types';
+import { useQuery } from '@tanstack/react-query';
+import type { BackendWorker, BackendUser, CreateUserRequest, BackendImportJob } from '@/lib/api/types';
 
 const EXCEL_EXTENSIONS = ['.xlsx', '.xls'];
-const REQUIRED_FIELDS = ['employeeNumber', 'firstName', 'lastName', 'hireDate'] as const;
-const OPTIONAL_TEXT_FIELDS = ['middleName', 'email', 'phone', 'dateOfBirth', 'position', 'department', 'nationalId', 'bankName', 'bankAccount', 'bankRoutingCode'] as const;
-const VALID_EMPLOYMENT_TYPES: BackendEmploymentType[] = ['full_time', 'part_time', 'contract', 'temporary', 'intern'];
-const CONCURRENCY = 6;
+const TERMINAL_IMPORT_STATUSES = new Set(['completed', 'failed', 'partially_completed', 'cancelled']);
+const POLL_INTERVAL_MS = 2000;
 
 function isExcelFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return EXCEL_EXTENSIONS.some((ext) => name.endsWith(ext));
 }
 
-/**
- * This bypasses the backend's batch CSV importer (/imports/workers/upload)
- * and drives one independent POST/PATCH /workers request per row instead -
- * originally because that endpoint had two bugs (blank cells stored as ''
- * instead of NULL, colliding with Worker.email's partial unique index; and
- * one row's DB error poisoning the whole batch transaction, silently
- * rolling back rows that had already succeeded). Both are now fixed on the
- * backend (per-row SAVEPOINTs; `|| null` instead of `?? null` for email) -
- * this bypass is being kept anyway for now (simpler to reason about, no
- * async job/polling to build), not because the real endpoint is broken.
- * Revisit if the per-row-request approach becomes a real bottleneck for
- * large files. Also a deliberate choice over the real importer for a second
- * reason: that endpoint's CSV schema has no salary column at all and never
- * creates a Compensation record, leaving every imported worker unpayable
- * until a separate POST /compensation call per worker - this bypass instead
- * collects basicSalary/currency per row so CreateWorkerDto's atomic
- * worker+compensation creation can run the same way AddEmployee.tsx does.
- */
 async function parseRows(file: File): Promise<Record<string, string>[]> {
   // For CSV, `raw: true` here is load-bearing: without it, SheetJS infers a
   // cell type from the text (e.g. "2024-01-08" looks like a date) and
@@ -71,10 +44,22 @@ function stripBom(text: string): string {
   return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-// Column order matches REQUIRED_FIELDS + employmentType + OPTIONAL_TEXT_FIELDS
-// exactly, so a template downloaded here uploads back through buildPayload()
-// without any column-name mismatch. Dates are YYYY-MM-DD - the exact format
-// hireDate/dateOfBirth are sent to the backend in (see buildPayload above).
+function csvEscape(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+function rowsToCsv(rows: Record<string, string>[], columns: string[]): string {
+  const lines = [
+    columns.join(','),
+    ...rows.map((row) => columns.map((col) => csvEscape(row[col] ?? '')).join(',')),
+  ];
+  return lines.join('\n');
+}
+
+// Column order matches the real backend's WorkerCsvRow field order
+// (import-processor.service.ts) - legalEntityId is now a required column
+// there, filled in below from the page-level "Select Legal Entity" picker
+// for any row that doesn't already specify its own.
 const SAMPLE_TEMPLATE_COLUMNS = [
   'employeeNumber',
   'firstName',
@@ -82,6 +67,7 @@ const SAMPLE_TEMPLATE_COLUMNS = [
   'middleName',
   'hireDate',
   'employmentType',
+  'legalEntityId',
   'basicSalary',
   'currency',
   'email',
@@ -104,6 +90,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: '',
     hireDate: '2023-01-10',
     employmentType: 'full_time',
+    legalEntityId: '',
     basicSalary: '500000',
     currency: 'NGN',
     email: 'employee.one@example.com',
@@ -124,6 +111,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: 'A',
     hireDate: '2022-03-01',
     employmentType: 'part_time',
+    legalEntityId: '',
     basicSalary: '250000',
     currency: 'NGN',
     email: '',
@@ -144,6 +132,7 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
     middleName: '',
     hireDate: '2024-07-01',
     employmentType: 'contract',
+    legalEntityId: '',
     basicSalary: '300000',
     currency: 'NGN',
     email: 'employee.three@example.com',
@@ -159,16 +148,9 @@ const SAMPLE_TEMPLATE_ROWS: Record<(typeof SAMPLE_TEMPLATE_COLUMNS)[number], str
   },
 ];
 
-function csvEscape(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
 function downloadSampleTemplate() {
-  const lines = [
-    SAMPLE_TEMPLATE_COLUMNS.join(','),
-    ...SAMPLE_TEMPLATE_ROWS.map((row) => SAMPLE_TEMPLATE_COLUMNS.map((col) => csvEscape(row[col])).join(',')),
-  ];
-  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const csv = rowsToCsv(SAMPLE_TEMPLATE_ROWS, [...SAMPLE_TEMPLATE_COLUMNS]);
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -177,105 +159,6 @@ function downloadSampleTemplate() {
   link.click();
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
-}
-
-interface RowOutcome {
-  rowNumber: number;
-  employeeNumber: string;
-  name: string;
-  status: 'created' | 'updated' | 'error';
-  error?: string;
-}
-
-function buildPayload(
-  row: Record<string, string>,
-  legalEntityId: string,
-  isExistingWorker: boolean,
-): { payload: CreateWorkerRequest | UpdateWorkerRequest | null; error?: string } {
-  const missing = REQUIRED_FIELDS.filter((f) => !(row[f] ?? '').trim());
-  if (missing.length > 0) {
-    return { payload: null, error: `Missing ${missing.join(', ')}` };
-  }
-
-  const base: Omit<CreateWorkerRequest, 'basicSalaryMinor' | 'currency'> = {
-    employeeNumber: row.employeeNumber.trim(),
-    firstName: row.firstName.trim(),
-    lastName: row.lastName.trim(),
-    hireDate: row.hireDate.trim(),
-    employmentType: 'full_time',
-    legalEntityId, // Set the selected legal entity
-  };
-
-  const rawEmploymentType = (row.employmentType ?? '').trim().toLowerCase();
-  if (VALID_EMPLOYMENT_TYPES.includes(rawEmploymentType as BackendEmploymentType)) {
-    base.employmentType = rawEmploymentType as BackendEmploymentType;
-  }
-
-  // Only ever set a key when the cell actually has a value - omitting it
-  // entirely (rather than sending '') is what makes blank cells land as a
-  // real SQL NULL instead of an empty string. See parseRows() doc comment.
-  for (const field of OPTIONAL_TEXT_FIELDS) {
-    const value = (row[field] ?? '').trim();
-    if (value) (base as unknown as Record<string, string>)[field] = value;
-  }
-
-  // annualRentMinor is a number field - parse it separately. Empty = NULL.
-  const rawAnnualRent = (row.annualRentMinor ?? '').trim();
-  if (rawAnnualRent) {
-    const parsed = Number(rawAnnualRent);
-    if (!isNaN(parsed) && parsed >= 0) {
-      base.annualRentMinor = parsed;
-    }
-  }
-
-  // Same "never type a code" rule as the Add/Edit Employee forms - if the
-  // sheet gives a bank name but no explicit code, resolve it from the same
-  // NIGERIAN_BANKS list rather than requiring the filler-out to know it.
-  // An explicit bankRoutingCode cell (e.g. for a bank not in the list) wins.
-  if (base.bankName && !base.bankRoutingCode) {
-    const match = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === base.bankName!.trim().toLowerCase());
-    if (match) base.bankRoutingCode = match.code;
-  }
-
-  // basicSalaryMinor/currency are required by CreateWorkerDto on new-worker
-  // creation only - the backend atomically provisions the worker's first
-  // Compensation record from them, same as AddEmployee.tsx. They must NOT be
-  // sent on update (UpdateWorkerDto omits them entirely; forbidNonWhitelisted
-  // would 400 the whole request) - a salary change goes through
-  // POST /compensation instead, which this bulk-import flow doesn't attempt.
-  if (isExistingWorker) {
-    return { payload: base };
-  }
-
-  const rawSalary = (row.basicSalary ?? '').trim();
-  if (!rawSalary) {
-    return { payload: null, error: 'Missing basicSalary' };
-  }
-  const salaryMajor = Number(rawSalary);
-  if (isNaN(salaryMajor) || salaryMajor <= 0) {
-    return { payload: null, error: 'Invalid basicSalary' };
-  }
-
-  const payload: CreateWorkerRequest = {
-    ...base,
-    basicSalaryMinor: Math.round(salaryMajor * 100),
-    currency: (row.currency ?? '').trim().toUpperCase() || 'NGN',
-  };
-
-  return { payload };
-}
-
-async function runWithConcurrency<T, R>(items: T[], limit: number, worker: (item: T, index: number) => Promise<R>): Promise<R[]> {
-  const results: R[] = new Array(items.length);
-  let next = 0;
-  async function runNext(): Promise<void> {
-    const i = next++;
-    if (i >= items.length) return;
-    results[i] = await worker(items[i], i);
-    return runNext();
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runNext));
-  return results;
 }
 
 interface LoginResult {
@@ -295,9 +178,10 @@ export default function ImportEmployees() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedLegalEntityId, setSelectedLegalEntityId] = useState<string>('');
-  const [processing, setProcessing] = useState(false);
-  const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [results, setResults] = useState<RowOutcome[] | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [job, setJob] = useState<BackendImportJob | null>(null);
+  const [errorReportUrl, setErrorReportUrl] = useState<string | null>(null);
+  const pollTokenRef = useRef(0);
 
   const [bulkLoginOpen, setBulkLoginOpen] = useState(false);
   const [loadingUnprovisioned, setLoadingUnprovisioned] = useState(false);
@@ -315,16 +199,56 @@ export default function ImportEmployees() {
     },
   });
 
-  const successCount = results?.filter((r) => r.status !== 'error').length ?? 0;
-  const showLoginFollowUp = canManageLogins && results !== null && successCount > 0;
+  const showLoginFollowUp = canManageLogins && job?.status === 'completed' && job.successfulRows > 0;
+
+  async function pollJob(jobId: string, token: number) {
+    for (;;) {
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+      if (pollTokenRef.current !== token) return; // A newer upload superseded this poll loop.
+      let latest: BackendImportJob;
+      try {
+        latest = await apiClient<BackendImportJob>(ENDPOINTS.IMPORTS.STATUS(jobId));
+      } catch (err) {
+        toast.error('Lost track of the import job', err instanceof Error ? err.message : undefined);
+        return;
+      }
+      if (pollTokenRef.current !== token) return;
+      setJob(latest);
+      if (TERMINAL_IMPORT_STATUSES.has(latest.status)) {
+        if (latest.status === 'completed') {
+          toast.success(`${latest.createdRows} added, ${latest.updatedRows} updated${latest.skippedRows > 0 ? `, ${latest.skippedRows} skipped` : ''}`);
+        } else if (latest.status === 'partially_completed') {
+          toast.warning(
+            `${latest.createdRows} added, ${latest.updatedRows} updated, ${latest.failedRows} failed`,
+            'See the row-level errors below for exactly what went wrong.',
+          );
+        } else if (latest.status === 'failed') {
+          toast.error('Import failed', latest.errorSummary?.reason);
+        } else if (latest.status === 'cancelled') {
+          toast.info('Import cancelled');
+        }
+        if (latest.errorReportKey) {
+          try {
+            const { downloadUrl } = await apiClient<{ downloadUrl: string }>(ENDPOINTS.IMPORTS.ERRORS(jobId));
+            if (pollTokenRef.current === token) setErrorReportUrl(downloadUrl);
+          } catch {
+            // The inline errorSummary below already shows the first 20 - the full report is a nice-to-have.
+          }
+        }
+        return;
+      }
+    }
+  }
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedLegalEntityId) {
       toast.error('Please select both a file and a legal entity');
       return;
     }
-    setProcessing(true);
-    setResults(null);
+    setUploading(true);
+    setJob(null);
+    setErrorReportUrl(null);
+    const token = ++pollTokenRef.current;
     try {
       const rows = await parseRows(selectedFile);
       if (rows.length === 0) {
@@ -332,62 +256,52 @@ export default function ImportEmployees() {
         return;
       }
 
-      setProgress({ done: 0, total: rows.length });
-
-      // Existing employee numbers resolve to an update (PATCH); everything
-      // else is a create (POST) - matches the backend importer's upsert
-      // semantics, just driven per-row instead of one shared DB transaction.
-      // PaginationDto caps limit at 100, so the full tenant roster is paged
-      // through via fetchAllPages rather than requested in one oversized call.
-      const existingWorkers = await fetchAllPages<BackendWorker>(
-        (page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
-      );
-      const byEmployeeNumber = new Map(existingWorkers.map((w) => [w.employeeNumber, w.id]));
-
-      let done = 0;
-      const outcomes = await runWithConcurrency(rows, CONCURRENCY, async (row, index): Promise<RowOutcome> => {
-        const rowNumber = index + 2; // header is row 1
-        const name = `${row.firstName ?? ''} ${row.lastName ?? ''}`.trim() || '—';
-        const employeeNumber = (row.employeeNumber ?? '').trim();
-        const existingId = byEmployeeNumber.get(employeeNumber);
-        const { payload, error } = buildPayload(row, selectedLegalEntityId, !!existingId);
-
-        let outcome: RowOutcome;
-        if (!payload) {
-          outcome = { rowNumber, employeeNumber, name, status: 'error', error };
-        } else {
-          try {
-            if (existingId) {
-              await apiClient(ENDPOINTS.WORKERS.UPDATE(existingId), { method: 'PATCH', body: JSON.stringify(payload) });
-              outcome = { rowNumber, employeeNumber, name, status: 'updated' };
-            } else {
-              await apiClient(ENDPOINTS.WORKERS.CREATE, { method: 'POST', body: JSON.stringify(payload) });
-              outcome = { rowNumber, employeeNumber, name, status: 'created' };
-            }
-          } catch (err) {
-            outcome = { rowNumber, employeeNumber, name, status: 'error', error: err instanceof Error ? err.message : 'Failed' };
-          }
+      // Same "never type a code" convenience the Add/Edit Employee forms
+      // give - the real backend just stores bankRoutingCode verbatim, it
+      // doesn't resolve a bank name to a code itself.
+      const columns = new Set(Object.keys(rows[0]));
+      columns.add('legalEntityId');
+      const prepared = rows.map((row) => {
+        const next = { ...row };
+        if (!next.legalEntityId?.trim()) next.legalEntityId = selectedLegalEntityId;
+        if (next.bankName?.trim() && !next.bankRoutingCode?.trim()) {
+          const match = NIGERIAN_BANKS.find((b) => b.name.toLowerCase() === next.bankName!.trim().toLowerCase());
+          if (match) next.bankRoutingCode = match.code;
         }
-        done += 1;
-        setProgress({ done, total: rows.length });
-        return outcome;
+        return next;
       });
 
-      setResults(outcomes);
+      const csv = rowsToCsv(prepared, [...columns]);
+      const csvFile = new File([csv], selectedFile.name.replace(/\.(xlsx|xls)$/i, '.csv'), { type: 'text/csv' });
+      const formData = new FormData();
+      formData.append('file', csvFile);
+
+      const createdJob = await apiClient<BackendImportJob>(ENDPOINTS.IMPORTS.WORKERS_UPLOAD, {
+        method: 'POST',
+        body: formData,
+      });
+      setJob(createdJob);
       setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
-      const created = outcomes.filter((o) => o.status === 'created').length;
-      const updated = outcomes.filter((o) => o.status === 'updated').length;
-      const failed = outcomes.filter((o) => o.status === 'error').length;
-      if (created + updated > 0) {
-        toast.success(`${created} added, ${updated} updated${failed > 0 ? `, ${failed} failed` : ''}`);
-      } else {
-        toast.error('No rows could be imported');
-      }
+      toast.info('Import started', `Processing ${createdJob.totalRows || rows.length} rows in the background…`);
+      await pollJob(createdJob.id, token);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to read the file');
+      // ApiError.message is the backend's exact error.message (e.g. a CSV
+      // schema/validation failure) - never paraphrased into something generic.
+      toast.error('Failed to start import', err instanceof Error ? err.message : undefined);
     } finally {
-      setProcessing(false);
+      if (pollTokenRef.current === token) setUploading(false);
+    }
+  };
+
+  const handleCancelJob = async () => {
+    if (!job) return;
+    try {
+      const cancelled = await apiClient<BackendImportJob>(ENDPOINTS.IMPORTS.CANCEL(job.id), { method: 'POST' });
+      setJob(cancelled);
+      toast.success('Import cancelled');
+    } catch (err) {
+      toast.error('Failed to cancel import', err instanceof Error ? err.message : undefined);
     }
   };
 
@@ -406,8 +320,8 @@ export default function ImportEmployees() {
       ]);
       const linkedWorkerIds = new Set(users.filter((u) => u.workerId).map((u) => u.workerId));
       setUnprovisioned(workers.filter((w) => !linkedWorkerIds.has(w.id)));
-    } catch {
-      toast.error('Failed to load employees');
+    } catch (err) {
+      toast.error('Failed to load employees', err instanceof Error ? err.message : undefined);
       setUnprovisioned([]);
     } finally {
       setLoadingUnprovisioned(false);
@@ -457,6 +371,16 @@ export default function ImportEmployees() {
     }
   };
 
+  const jobInFlight = !!job && !TERMINAL_IMPORT_STATUSES.has(job.status);
+  const statusBadgeVariant =
+    job?.status === 'completed'
+      ? 'success'
+      : job?.status === 'failed' || job?.status === 'cancelled'
+        ? 'error'
+        : job?.status === 'partially_completed'
+          ? 'warning'
+          : 'info';
+
   return (
     <div style={{ width: '100%', maxWidth: '900px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
       <PageHeader
@@ -477,7 +401,8 @@ export default function ImportEmployees() {
           <div className="flex-1">
             <p className="font-semibold text-deep-cash mb-1">Legal Entity Required</p>
             <p className="text-sm text-cash-green/80">
-              All imported employees must be assigned to a legal entity. Select which legal entity these employees belong to before uploading.
+              Every imported employee must belong to a legal entity. Pick the default below - it's used for any
+              row that doesn't already have its own <code className="text-xs bg-white px-1 py-0.5 rounded">legalEntityId</code> column filled in.
             </p>
           </div>
         </div>
@@ -499,7 +424,7 @@ export default function ImportEmployees() {
           </div>
         ) : (
           <Select
-            label="Select Legal Entity"
+            label="Default Legal Entity"
             value={selectedLegalEntityId}
             options={legalEntities.map((entity: any) => ({
               value: entity.id,
@@ -530,13 +455,14 @@ export default function ImportEmployees() {
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">hireDate</code>, and{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">basicSalary</code> (in naira, e.g. 500000) — the last one
           only for brand-new employee numbers, since it provisions their starting pay; rows updating an existing employee number
-          can leave it blank. Optional columns include{' '}
+          can leave it blank. <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">legalEntityId</code> is filled in
+          automatically from the picker above for any row that leaves it blank. Optional columns include{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">currency</code> (defaults to NGN),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">email</code> (needed for portal login),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">nationalId</code> (NIN),{' '}
           <code className="text-xs bg-soft-white px-1.5 py-0.5 rounded">annualRentMinor</code> (annual rent in kobo for PAYE tax relief),
           and bank details. Rows matching an existing employee number update that employee; new employee numbers are created.
-          Excel files use their first sheet. Each row is processed independently, so one bad row never blocks the rest of the file.
+          Excel files use their first sheet and are converted to CSV before upload. One bad row never blocks the rest of the file.
           Not sure where to start? Download the sample template above, edit it with your own data, then upload it below.
         </p>
         <div className="flex items-center gap-3 flex-wrap">
@@ -544,20 +470,71 @@ export default function ImportEmployees() {
             ref={fileInputRef}
             type="file"
             accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setResults(null); }}
+            onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setJob(null); setErrorReportUrl(null); }}
             className="text-sm text-deep-cash file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-mint-light file:text-cash-green file:text-sm file:font-medium file:cursor-pointer cursor-pointer"
           />
-          <Button variant="primary" size="sm" disabled={!selectedFile || !selectedLegalEntityId || !legalEntities || legalEntities.length === 0} loading={processing} onClick={handleUpload}>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={!selectedFile || !selectedLegalEntityId || !legalEntities || legalEntities.length === 0}
+            loading={uploading}
+            onClick={handleUpload}
+          >
             Upload &amp; Process
           </Button>
         </div>
-        {processing && (
-          <div className="flex items-center gap-2 mt-4 text-xs text-cash-green/70">
-            <RefreshCw size={13} className="animate-spin" />
-            Processing {progress.done} / {progress.total}…
-          </div>
-        )}
       </div>
+
+      {job && (
+        <div className="bg-white rounded-xl border border-mint-light overflow-hidden mb-6">
+          <div className="px-6 py-4 border-b border-mint-light flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-deep-cash">Import Progress</h3>
+              <Badge variant={statusBadgeVariant} label={job.status.replace(/_/g, ' ')} />
+            </div>
+            {jobInFlight && (
+              <Button variant="ghost" size="sm" onClick={handleCancelJob}>
+                <XCircle size={13} />
+                Cancel
+              </Button>
+            )}
+          </div>
+          <div className="px-6 py-4">
+            <p className="text-xs text-cash-green/70 tabular-nums mb-1">
+              {job.processedRows} / {job.totalRows} processed · {job.createdRows} added · {job.updatedRows} updated ·{' '}
+              {job.skippedRows} skipped · {job.failedRows} failed
+            </p>
+            {jobInFlight && (
+              <div className="flex items-center gap-2 mt-3 text-xs text-cash-green/70">
+                <RefreshCw size={13} className="animate-spin" />
+                Processing in the background…
+              </div>
+            )}
+            {job.errorSummary?.reason && (
+              <p className="text-sm text-red-500 mt-3">{job.errorSummary.reason}</p>
+            )}
+            {job.errorSummary?.errors && job.errorSummary.errors.length > 0 && (
+              <div className="mt-3 flex flex-col gap-1 max-h-80 overflow-y-auto">
+                {job.errorSummary.errors.map((e, i) => (
+                  <p key={i} className="text-xs text-red-500">
+                    Row {e.row} [{e.code}]: {e.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            {errorReportUrl && (
+              <a
+                href={errorReportUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs font-medium text-fresh-cash hover:text-cash-green mt-3 inline-block"
+              >
+                Download full error report
+              </a>
+            )}
+          </div>
+        </div>
+      )}
 
       {showLoginFollowUp && (
         <div className="flex items-center justify-between gap-3 flex-wrap bg-mint-light/30 border border-fresh-cash/40 rounded-xl p-4 mb-6">
@@ -570,39 +547,6 @@ export default function ImportEmployees() {
           <Button variant="secondary" size="sm" onClick={openBulkLogin}>
             Set up login access
           </Button>
-        </div>
-      )}
-
-      {results && (
-        <div className="bg-white rounded-xl border border-mint-light overflow-hidden">
-          <div className="px-6 py-4 border-b border-mint-light flex items-center justify-between gap-3 flex-wrap">
-            <h3 className="text-sm font-semibold text-deep-cash">Import Results</h3>
-            <span className="text-xs text-cash-green/70 tabular-nums">
-              {results.filter((r) => r.status === 'created').length} added ·{' '}
-              {results.filter((r) => r.status === 'updated').length} updated ·{' '}
-              {results.filter((r) => r.status === 'error').length} failed
-            </span>
-          </div>
-          <div className="divide-y divide-mint-light max-h-[32rem] overflow-y-auto">
-            {results.map((r) => (
-              <div key={r.rowNumber} className="flex items-center justify-between gap-3 px-6 py-3 flex-wrap">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-deep-cash truncate">{r.name}</p>
-                  <p className="text-xs text-cash-green/70 truncate">
-                    Row {r.rowNumber}{r.employeeNumber ? ` · ${r.employeeNumber}` : ''}
-                  </p>
-                </div>
-                {r.status === 'error' ? (
-                  <div className="flex items-center gap-1.5 shrink-0 text-red-500">
-                    <AlertCircle size={13} />
-                    <span className="text-xs">{r.error}</span>
-                  </div>
-                ) : (
-                  <Badge variant="success" label={r.status === 'created' ? 'Added' : 'Updated'} />
-                )}
-              </div>
-            ))}
-          </div>
         </div>
       )}
 

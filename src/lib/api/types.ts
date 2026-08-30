@@ -513,13 +513,11 @@ export interface UpdateWorkerPayElementRequest extends Partial<CreateWorkerPayEl
 /** Real backend ImportStatus enum (common.enum.ts). */
 export type BackendImportStatus =
   | 'pending'
-  | 'validating'
-  | 'preview'
-  | 'awaiting_approval'
   | 'processing'
   | 'completed'
   | 'failed'
-  | 'partially_completed';
+  | 'partially_completed'
+  | 'cancelled';
 
 /** Real backend ImportEntityType enum (common.enum.ts). */
 export type BackendImportEntityType =
@@ -529,6 +527,7 @@ export type BackendImportEntityType =
   | 'pay_elements'
   | 'legal_entities';
 
+/** Matches import-job.entity.ts exactly. */
 export interface BackendImportJob {
   id: string;
   tenantId: string;
@@ -539,11 +538,22 @@ export interface BackendImportJob {
   totalRows: number;
   successfulRows: number;
   failedRows: number;
+  fileSize: number;
+  /** Checkpoint: rows whose fate is finalized and committed, from the top of the file. */
+  processedRows: number;
+  createdRows: number;
+  updatedRows: number;
+  /** Rows skipped as a same-file duplicate employeeNumber. */
+  skippedRows: number;
+  sourceFileKey: string | null;
+  errorReportKey: string | null;
+  pgBossJobId: string | null;
   startedAt: string | null;
   completedAt: string | null;
   duration: number | null;
-  // { reason: string } on failure, or { errors: [{row, error}] } (max 50) on partial completion, else null
-  errorSummary: { reason?: string; errors?: Array<{ row: number; error: string }> } | null;
+  // { reason: string } if dispatch/parsing failed outright, or
+  // { errors: [{row, code, message}] } (first 20) once any rows fail, else null.
+  errorSummary: { reason?: string; errors?: Array<{ row: number; code: string; message: string }> } | null;
   createdAt: string;
   updatedAt: string;
 }

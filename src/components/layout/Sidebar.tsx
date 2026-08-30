@@ -249,6 +249,12 @@ function NavEntry({ item, activePath, depth = 0 }: NavItemProps) {
       <Link
         to={item.path}
         data-tour-id={item.tourId}
+        // On mobile/tablet the sidebar is an overlay (see the backdrop below,
+        // which already closes it on an outside click) - navigating via a
+        // nav link changes the page underneath just like clicking through to
+        // it, so it should close the same way instead of staying open on top
+        // of the new page.
+        onClick={() => useUiStore.getState().setSidebarOpen(false)}
         className={cn(
           'flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm transition-all duration-150',
           'border-l-[3px]',
