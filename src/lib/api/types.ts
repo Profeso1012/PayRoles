@@ -676,6 +676,8 @@ export interface CreateUserRequest {
   phone?: string;
   workerId?: string;
   targetTenantId?: string; // SUPER_ADMIN only - create a user in another tenant
+  /** Legal entities this user may access. Omit or leave empty for unrestricted access to every legal entity in the tenant. */
+  legalEntityIds?: string[];
 }
 
 export interface UpdateUserRequest {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil } from 'lucide-react';
+import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil, Building2 } from 'lucide-react';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
@@ -15,7 +15,7 @@ import Modal from '@/components/ui/Modal';
 import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
-import type { BackendUser, BackendRole, BackendWorker, CreateUserRequest, UpdateUserRequest } from '@/lib/api/types';
+import type { BackendUser, BackendRole, BackendWorker, BackendLegalEntity, CreateUserRequest, UpdateUserRequest } from '@/lib/api/types';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -57,6 +57,7 @@ const blankAddUserForm = {
   email: '',
   role: 'read_only' as BackendRole,
   workerId: '',
+  legalEntityIds: [] as string[],
 };
 
 export default function UsersAndRoles() {
@@ -77,6 +78,7 @@ export default function UsersAndRoles() {
   const [resetPasswordTarget, setResetPasswordTarget] = useState<BackendUser | null>(null);
   const [editTarget, setEditTarget] = useState<BackendUser | null>(null);
   const [editForm, setEditForm] = useState<UpdateUserRequest>({});
+  const [legalEntityTarget, setLegalEntityTarget] = useState<BackendUser | null>(null);
 
   const {
     data: users = [],
@@ -109,6 +111,56 @@ export default function UsersAndRoles() {
       );
     },
     enabled: addUserOpen && form.role === 'employee_self_service',
+  });
+
+  // Shared between the Add User form's legal-entity checklist and the
+  // per-user "Manage Legal Entities" modal. GET /legal-entities is scoped to
+  // the caller's own restriction, but only a tenant_admin/super_admin can
+  // reach this page at all (isSuperAdmin gate above), and those two roles
+  // are unrestricted by default - so this is the tenant's full roster.
+  const { data: legalEntities = [] } = useQuery<BackendLegalEntity[]>({
+    queryKey: ['legal-entities-full'],
+    queryFn: () => fetchAllPages<BackendLegalEntity>(
+      (page) => `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+    ),
+    enabled: addUserOpen || !!legalEntityTarget,
+  });
+
+  // Current live assignment for whichever user's access is being managed -
+  // GET /auth/me only ever reflects the CALLER's own restriction, this is
+  // the only way to see another user's actual current set.
+  const { data: assignedLegalEntityIds = [], isLoading: loadingAssignedEntities } = useQuery<string[]>({
+    queryKey: ['user-legal-entities', legalEntityTarget?.id],
+    queryFn: async () => {
+      const { legalEntityIds } = await apiClient<{ legalEntityIds: string[] }>(
+        ENDPOINTS.USERS.LEGAL_ENTITIES(legalEntityTarget!.id),
+      );
+      return legalEntityIds;
+    },
+    enabled: !!legalEntityTarget,
+  });
+
+  const [pendingLegalEntityId, setPendingLegalEntityId] = useState<string | null>(null);
+  const addLegalEntityMutation = useMutation({
+    mutationFn: (legalEntityId: string) => {
+      setPendingLegalEntityId(legalEntityId);
+      return apiClient(ENDPOINTS.USERS.LEGAL_ENTITIES(legalEntityTarget!.id), {
+        method: 'POST',
+        body: JSON.stringify({ legalEntityId }),
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user-legal-entities', legalEntityTarget?.id] }),
+    onError: (err) => toast.error('Failed to add legal entity', err instanceof Error ? err.message : undefined),
+    onSettled: () => setPendingLegalEntityId(null),
+  });
+  const removeLegalEntityMutation = useMutation({
+    mutationFn: (legalEntityId: string) => {
+      setPendingLegalEntityId(legalEntityId);
+      return apiClient(ENDPOINTS.USERS.LEGAL_ENTITY(legalEntityTarget!.id, legalEntityId), { method: 'DELETE' });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['user-legal-entities', legalEntityTarget?.id] }),
+    onError: (err) => toast.error('Failed to remove legal entity', err instanceof Error ? err.message : undefined),
+    onSettled: () => setPendingLegalEntityId(null),
   });
 
   const createUserMutation = useMutation({
@@ -314,6 +366,12 @@ export default function UsersAndRoles() {
                           <Pencil size={13} />
                           Edit
                         </Button>
+                        {u.role !== 'employee_self_service' && (
+                          <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => setLegalEntityTarget(u)}>
+                            <Building2 size={13} />
+                            Legal Entities
+                          </Button>
+                        )}
                         {isActive && (
                           <Button variant="ghost" size="sm" className="whitespace-nowrap" onClick={() => setResetPasswordTarget(u)}>
                             <KeyRound size={13} />
@@ -413,6 +471,35 @@ export default function UsersAndRoles() {
               </p>
             </div>
           )}
+          {form.role !== 'employee_self_service' && legalEntities.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-cash-green mb-1.5">
+                Legal entity access (optional)
+              </p>
+              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto border border-mint-light rounded-lg p-2.5">
+                {legalEntities.map((le) => (
+                  <label key={le.id} className="flex items-center gap-2 text-sm text-deep-cash cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.legalEntityIds.includes(le.id)}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          legalEntityIds: e.target.checked
+                            ? [...f.legalEntityIds, le.id]
+                            : f.legalEntityIds.filter((id) => id !== le.id),
+                        }))
+                      }
+                    />
+                    {le.name}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-cash-green/60 mt-1">
+                Leave everything unchecked for unrestricted access to every legal entity in the tenant.
+              </p>
+            </div>
+          )}
           <p className="text-xs text-cash-green/60">
             A temporary password will be generated and emailed to them, along with a link to
             verify and set a permanent password on first login.
@@ -444,6 +531,7 @@ export default function UsersAndRoles() {
                   email: form.email,
                   role: form.role,
                   workerId: form.role === 'employee_self_service' ? form.workerId : undefined,
+                  legalEntityIds: form.legalEntityIds.length > 0 ? form.legalEntityIds : undefined,
                 })
               }
             >
@@ -527,6 +615,66 @@ export default function UsersAndRoles() {
         variant="danger"
         isLoading={resetPasswordMutation.isPending}
       />
+
+      <Modal
+        isOpen={!!legalEntityTarget}
+        onClose={() => setLegalEntityTarget(null)}
+        title="Manage Legal Entity Access"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-cash-green/70">
+            Legal entities{' '}
+            <span className="font-medium text-deep-cash">
+              {legalEntityTarget ? `${legalEntityTarget.firstName} ${legalEntityTarget.lastName}` : 'this user'}
+            </span>{' '}
+            may access. Checking/unchecking takes effect immediately - no need to save.
+          </p>
+          {loadingAssignedEntities ? (
+            <div className="flex justify-center py-8"><Spinner /></div>
+          ) : legalEntities.length === 0 ? (
+            <p className="text-sm text-cash-green/60 py-4 text-center">No legal entities exist yet.</p>
+          ) : (
+            <>
+              {assignedLegalEntityIds.length === 0 && (
+                <p className="text-xs text-cash-gold bg-cash-gold/10 border border-cash-gold/30 rounded-lg px-3 py-2">
+                  Currently unrestricted — sees every legal entity in the tenant. Check one below to start restricting access.
+                </p>
+              )}
+              <div className="flex flex-col gap-1.5 max-h-72 overflow-y-auto">
+                {legalEntities.map((le) => {
+                  const isAssigned = assignedLegalEntityIds.includes(le.id);
+                  const isPending = pendingLegalEntityId === le.id && (addLegalEntityMutation.isPending || removeLegalEntityMutation.isPending);
+                  return (
+                    <label
+                      key={le.id}
+                      className={`flex items-center gap-2.5 text-sm text-deep-cash px-2.5 py-2 rounded-lg border cursor-pointer ${
+                        isAssigned ? 'border-fresh-cash/40 bg-mint-light/30' : 'border-mint-light'
+                      } ${isPending ? 'opacity-60 pointer-events-none' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isAssigned}
+                        disabled={isPending}
+                        onChange={() =>
+                          isAssigned
+                            ? removeLegalEntityMutation.mutate(le.id)
+                            : addLegalEntityMutation.mutate(le.id)
+                        }
+                      />
+                      <span className="flex-1">{le.name}</span>
+                      {isPending && <Spinner size="sm" />}
+                    </label>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          <div className="flex justify-end pt-2">
+            <Button variant="ghost" onClick={() => setLegalEntityTarget(null)}>Done</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

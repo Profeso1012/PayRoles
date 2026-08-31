@@ -157,6 +157,13 @@ export const ENDPOINTS = {
     RESET_PASSWORD: (id: string) => `${API_VERSION}/users/${id}/reset-password`,
     DISABLE: (id: string) => `${API_VERSION}/users/${id}/disable`,
     ENABLE: (id: string) => `${API_VERSION}/users/${id}/enable`,
+    // Legal-entity access restriction - empty/absent means unrestricted.
+    // GET returns this user's current live assignment (unlike GET /auth/me,
+    // which only ever reflects the CALLER's own JWT-embedded restriction).
+    // Add/remove are incremental (one id at a time) - no need to resend the
+    // user's whole current set the way PATCH /users/:id's legalEntityIds does.
+    LEGAL_ENTITIES: (id: string) => `${API_VERSION}/users/${id}/legal-entities`,
+    LEGAL_ENTITY: (id: string, legalEntityId: string) => `${API_VERSION}/users/${id}/legal-entities/${legalEntityId}`,
   },
 
   // ---------------------------------------------------------------------------
