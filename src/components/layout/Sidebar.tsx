@@ -111,18 +111,24 @@ const HR_NAV: NavItem[] = [
   // Deprecated: Reports (no backend /reports module)
 ];
 
-const PAYROLL_NAV: NavItem[] = [
+// Shared base for both payroll roles - Jurisdictions is added only for
+// payroll_officer below. Real backend only grants tax_rule:read to
+// payroll_officer, not payroll_manager, and unlike every other officer/
+// manager pair in this file, /settings/jurisdictions has its own route guard
+// that actually enforces that split (router/index.tsx) rather than letting
+// the page load and 403 gracefully - so showing this link to payroll_manager
+// was a dead link straight to Unauthorized, not a graceful in-page 403.
+const PAYROLL_OFFICER_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
   { label: 'Exports', path: '/exports', icon: FileOutput },
-  // Real backend only grants tax_rule:read to payroll_officer, not
-  // payroll_manager - shown to both like every other officer/manager pair
-  // here, the backend 403s payroll_manager same as any other write attempt.
   { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
   // Deprecated: Reports (no backend /reports module)
 ];
+
+const PAYROLL_MANAGER_NAV: NavItem[] = PAYROLL_OFFICER_NAV.filter((item) => item.label !== 'Jurisdictions');
 
 const FINANCE_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -160,8 +166,8 @@ const NAV_MAP: Record<UserRole, NavItem[]> = {
   tenant_admin: COMPANY_ADMIN_NAV,
   hr_manager: HR_NAV,
   hr_officer: HR_NAV,
-  payroll_manager: PAYROLL_NAV,
-  payroll_officer: PAYROLL_NAV,
+  payroll_manager: PAYROLL_MANAGER_NAV,
+  payroll_officer: PAYROLL_OFFICER_NAV,
   finance_manager: FINANCE_NAV,
   auditor: AUDITOR_NAV,
   read_only: READ_ONLY_NAV,

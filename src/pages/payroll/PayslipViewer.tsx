@@ -28,10 +28,11 @@ export default function PayslipViewer() {
   const navigate = useNavigate();
   const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
-  // finance_manager holds PAYSLIP_READ but not WORKER_READ - skip the
-  // employeeNumber lookup entirely for it rather than firing a call
-  // guaranteed to 403.
-  const canReadWorkers = role !== 'finance_manager';
+  // finance_manager and employee_self_service both hold PAYSLIP_READ but not
+  // WORKER_READ - skip the employeeNumber lookup entirely for them rather
+  // than firing a call guaranteed to 403 (the .catch(() => null) below would
+  // absorb it either way, this just avoids the wasted round-trip).
+  const canReadWorkers = role !== 'finance_manager' && role !== 'employee_self_service';
 
   // Generates (or returns the cached) server-rendered PDF, distinct from the
   // Print button below (which is just the browser's own print-to-PDF of this
@@ -48,11 +49,15 @@ export default function PayslipViewer() {
     queryFn: async (): Promise<Payslip> => {
       if (!runId || !payslipId) throw new Error('Missing IDs');
 
-      // payslip.entity.ts denormalizes workerName onto the payslip itself
-      // (populated at calculation time) specifically so PAYSLIP_READ-only
-      // roles like finance_manager never need a separate WORKER_READ-gated
-      // lookup just to see whose payslip this is. Run period still needs its
-      // own fetch (payElements is also shaped differently: {code,name,type,amountMinor}).
+      // payslip.entity.ts denormalizes workerName and periodStart/periodEnd
+      // onto the payslip itself (populated at calculation time) specifically
+      // so PAYSLIP_READ-only roles (finance_manager, HR roles,
+      // employee_self_service) never need a second, PAYROLL_READ-gated
+      // lookup of the run just to see whose payslip this is or which period
+      // it covers. The run fetch below is now only for the run's own name
+      // (pay group label) - best-effort, since that's genuinely not on the
+      // payslip and payElements is also shaped differently there
+      // ({code,name,type,amountMinor}).
       const [backendPayslip, run] = await Promise.all([
         apiClient<BackendPayslip>(ENDPOINTS.PAYROLL.PAYSLIPS.DETAIL(runId, payslipId)),
         apiClient<BackendPayrollRun>(ENDPOINTS.PAYROLL.RUNS.DETAIL(runId)).catch(() => null as BackendPayrollRun | null),
@@ -80,7 +85,14 @@ export default function PayslipViewer() {
         employeeId: backendPayslip.workerId,
         employeeName: backendPayslip.workerName || backendPayslip.workerId,
         employeeNumber: resolvedWorker?.employeeNumber || '—',
-        period: formatPeriod(run?.periodStart, run?.periodEnd),
+        // Straight off the payslip now (see BackendPayslip.periodStart/periodEnd
+        // doc comment) - no PAYROLL_READ-gated run fetch required. Falls back to
+        // the run's dates (pre-backfill payslips only) or createdAt as a last resort.
+        period: backendPayslip.periodStart
+          ? formatPeriod(backendPayslip.periodStart, backendPayslip.periodEnd ?? undefined)
+          : run
+            ? formatPeriod(run.periodStart, run.periodEnd)
+            : formatDate(backendPayslip.createdAt),
         name: run?.name,
         payGroupName: run?.name,
         elements,

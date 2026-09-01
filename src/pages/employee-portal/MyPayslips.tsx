@@ -22,6 +22,16 @@ interface MyPayslip {
   netPay: number;
   currency: string;
   createdAt: string;
+  /** e.g. "Jan 2026" - from the payslip's own denormalized periodStart/periodEnd
+   * (payslip.entity.ts), not a second PAYROLL_READ-gated run lookup this role
+   * (employee_self_service) doesn't hold. Falls back to createdAt for any
+   * payslip generated before that field existed. */
+  period: string;
+}
+
+function formatPeriod(periodStart: string | null, createdAt: string): string {
+  if (!periodStart) return formatDate(createdAt);
+  return new Date(periodStart).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
 export default function MyPayslips() {
@@ -44,6 +54,7 @@ export default function MyPayslips() {
         netPay: minorToMajor(p.netPayMinor),
         currency: p.currency,
         createdAt: p.createdAt,
+        period: formatPeriod(p.periodStart, p.createdAt),
       }));
     },
     enabled: !!workerId,
@@ -92,7 +103,7 @@ export default function MyPayslips() {
               <span className="text-white text-lg font-bold">—</span>
             )}
             {latest && (
-              <p className="text-mint-light/50 text-xs mt-0.5">{formatDate(latest.createdAt)}</p>
+              <p className="text-mint-light/50 text-xs mt-0.5">{latest.period}</p>
             )}
           </div>
         </div>
@@ -127,7 +138,7 @@ export default function MyPayslips() {
               <thead>
                 <tr className="border-b border-mint-light">
                   <th className="text-left px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
-                    Date
+                    Period
                   </th>
                   <th className="text-right px-5 py-3 text-xs font-semibold text-cash-green uppercase tracking-wide">
                     Gross Pay
@@ -150,7 +161,7 @@ export default function MyPayslips() {
                     }`}
                   >
                     <td className="px-5 py-3.5 font-medium text-deep-cash">
-                      {formatDate(slip.createdAt)}
+                      {slip.period}
                       {idx === 0 && (
                         <span className="ml-2 text-[10px] bg-fresh-cash/20 text-cash-green px-1.5 py-0.5 rounded-full font-medium">
                           Latest

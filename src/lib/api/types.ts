@@ -305,6 +305,12 @@ export interface BackendPayslip {
    * separate GET /workers/:id lookup just to identify whose payslip this is. */
   workerName: string;
   payrollWorkerId: string | null;
+  /** Denormalized from the parent PayrollRun at generation time, same reasoning as workerName
+   * above - lets a PAYSLIP_READ-only consumer (HR roles, employee_self_service) show the real
+   * period without a second, PAYROLL_READ-gated lookup of the run itself. Null on payslips
+   * generated before this field existed and not yet backfilled. */
+  periodStart: string | null;
+  periodEnd: string | null;
   grossPayMinor: string; // Bigint as string
   deductionsMinor: string; // Bigint as string
   netPayMinor: string; // Bigint as string

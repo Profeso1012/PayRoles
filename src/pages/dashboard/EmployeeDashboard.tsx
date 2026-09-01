@@ -21,6 +21,15 @@ interface LatestPayslip {
   netPay: number;
   currency: string;
   createdAt: string;
+  /** e.g. "Jan 2026" - from the payslip's own denormalized periodStart (payslip.entity.ts),
+   * not a second PAYROLL_READ-gated run lookup this role doesn't hold. Falls back to
+   * createdAt for any payslip generated before that field existed. */
+  period: string;
+}
+
+function formatPeriod(periodStart: string | null, createdAt: string): string {
+  if (!periodStart) return formatDate(createdAt);
+  return new Date(periodStart).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 }
 
 interface EmployeeDashboardData {
@@ -59,6 +68,7 @@ async function buildEmployeeDashboard(): Promise<EmployeeDashboardData> {
           netPay: minorToMajor(p.netPayMinor),
           currency: p.currency,
           createdAt: p.createdAt,
+          period: formatPeriod(p.periodStart, p.createdAt),
         }
       : null;
   }
@@ -113,7 +123,7 @@ export default function EmployeeDashboard() {
           <div className="px-5 py-4 border-b border-mint-light bg-soft-white flex items-center justify-between">
             <h2 className="text-sm font-semibold text-deep-cash">Latest Payslip</h2>
             <span className="text-xs text-cash-green/60 font-medium">
-              {formatDate(data.latestPayslip.createdAt)}
+              {data.latestPayslip.period}
             </span>
           </div>
 

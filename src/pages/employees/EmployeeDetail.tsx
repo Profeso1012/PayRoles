@@ -233,48 +233,36 @@ export default function EmployeeDetail() {
     queryKey: ['worker-payslips', id],
     queryFn: async () => {
       const backendPayslips = await apiClient<any[]>(ENDPOINTS.WORKERS.PAYSLIPS(id!));
-      
-      // Fetch pay run data for each payslip to get period and pay group name
-      const payslipsWithRunData = await Promise.all(
-        backendPayslips.map(async (slip): Promise<Payslip> => {
-          let period: string | undefined = undefined;
-          let payGroupName = '—';
-          
-          // Fetch the payroll run to get period and name
-          try {
-            const run = await apiClient<any>(ENDPOINTS.PAYROLL.RUNS.DETAIL(slip.payrollRunId));
-            period = formatPeriod(run.periodStart, run.periodEnd);
-            payGroupName = run.name || '—';
-          } catch {
-            // If run fetch fails, continue with defaults
-          }
-          
-          return {
-            id: slip.id,
-            payRunId: slip.payrollRunId, // Backend uses payrollRunId
-            employeeId: slip.workerId,
-            employeeName: employee ? `${employee.firstName} ${employee.lastName}` : '',
-            employeeNumber: employee?.employeeNumber || '',
-            period,
-            name: slip.name || undefined,
-            payGroupName,
-            elements: slip.payElements?.map((el: any) => ({
-              ...el,
-              amount: minorToMajor(el.amountMinor),
-            })) || [],
-            grossPay: minorToMajor(slip.grossPayMinor),
-            totalDeductions: minorToMajor(slip.deductionsMinor),
-            netPay: minorToMajor(slip.netPayMinor),
-            currency: slip.currency,
-            createdAt: slip.createdAt,
-            generatedAt: slip.generatedAt,
-            issuedAt: slip.issuedAt,
-            payrollWorkerId: slip.payrollWorkerId,
-          };
-        }),
-      );
-      
-      return payslipsWithRunData;
+
+      // periodStart/periodEnd are denormalized onto the payslip itself
+      // (payslip.entity.ts) - previously this fired one GET /payroll/runs/:id
+      // per payslip just for the period, which was both an N+1 (one extra
+      // call per row) and silently 403ing for HR viewers (PAYSLIP_READ only,
+      // no PAYROLL_READ), leaving every row blank for them. payGroupName
+      // still isn't denormalized, so it's left as "—" rather than re-adding
+      // that same per-row run fetch just for a label.
+      return backendPayslips.map((slip): Payslip => ({
+        id: slip.id,
+        payRunId: slip.payrollRunId, // Backend uses payrollRunId
+        employeeId: slip.workerId,
+        employeeName: employee ? `${employee.firstName} ${employee.lastName}` : '',
+        employeeNumber: employee?.employeeNumber || '',
+        period: formatPeriod(slip.periodStart, slip.periodEnd),
+        name: slip.name || undefined,
+        payGroupName: '—',
+        elements: slip.payElements?.map((el: any) => ({
+          ...el,
+          amount: minorToMajor(el.amountMinor),
+        })) || [],
+        grossPay: minorToMajor(slip.grossPayMinor),
+        totalDeductions: minorToMajor(slip.deductionsMinor),
+        netPay: minorToMajor(slip.netPayMinor),
+        currency: slip.currency,
+        createdAt: slip.createdAt,
+        generatedAt: slip.generatedAt,
+        issuedAt: slip.issuedAt,
+        payrollWorkerId: slip.payrollWorkerId,
+      }));
     },
     enabled: !!id && tab === 'payslips' && !!employee,
   });

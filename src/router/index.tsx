@@ -223,7 +223,10 @@ export const router = createBrowserRouter([
       // Employees
       {
         path: 'employees',
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'finance_manager']}><Outlet /></RoleGuard>,
+        // read_only holds WORKER_READ on the real backend (roles.enum.ts) but
+        // was missing here - its own sidebar nav (Sidebar.tsx READ_ONLY_NAV)
+        // links to this exact path, so it was a dead link to Unauthorized.
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'finance_manager', 'read_only']}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(EmployeeList) },
           { path: 'new', element: <OrgGuard>{w(AddEmployee)}</OrgGuard> },
@@ -246,14 +249,32 @@ export const router = createBrowserRouter([
       // Payroll
       {
         path: 'payroll',
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager']}><Outlet /></RoleGuard>,
+        // read_only holds PAYROLL_READ on the real backend (roles.enum.ts) but
+        // was missing here - its own sidebar nav (Sidebar.tsx READ_ONLY_NAV)
+        // links to /payroll/runs, so it was a dead link to Unauthorized.
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'read_only']}><Outlet /></RoleGuard>,
         children: [
           { path: 'pay-elements', element: w(PayElements) },
           { path: 'runs', element: w(PayRunList) },
           { path: 'runs/new', element: w(PayRunCreate) },
           { path: 'runs/:id', element: w(PayRunDetail) },
-          { path: 'runs/:runId/payslips/:payslipId', element: w(PayslipViewer) },
         ],
+      },
+      // Payslip viewer needs its own broader role set (hr_manager/hr_officer
+      // hold PAYSLIP_READ on the real backend but not PAYROLL_READ) - standalone
+      // route outside the /payroll guard above, same pattern as employees/import.
+      // employee_self_service reaches this from My Payslips/dashboard "View" -
+      // note the backend's getPayslip()/generatePayslipPdf() (payroll.service.ts)
+      // don't yet verify the payslip belongs to the caller the way
+      // getWorkerPayslips() already does, so this is open ahead of that
+      // backend fix landing (tracked separately, not blocking this route).
+      {
+        path: 'payroll/runs/:runId/payslips/:payslipId',
+        element: (
+          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'hr_manager', 'hr_officer', 'employee_self_service']}>
+            {w(PayslipViewer)}
+          </RoleGuard>
+        ),
       },
       // Formula guide - public to all authenticated users (no role guard)
       { path: 'formula-guide', element: w(FormulaGuide) },
