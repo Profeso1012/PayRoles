@@ -516,8 +516,11 @@ export default function ImportEmployees() {
             {job.errorSummary?.errors && job.errorSummary.errors.length > 0 && (
               <div className="mt-3 flex flex-col gap-1 max-h-80 overflow-y-auto">
                 {job.errorSummary.errors.map((e, i) => (
-                  <p key={i} className="text-xs text-red-500">
-                    Row {e.row} [{e.code}]: {e.message}
+                  // e.code (e.g. INVALID_EMPLOYMENT_TYPE) is a machine-readable
+                  // classification, not something a user needs to read - kept
+                  // as a title tooltip for support/debugging, not in the visible text.
+                  <p key={i} className="text-xs text-red-500" title={e.code}>
+                    Row {e.row} failed because {e.message}
                   </p>
                 ))}
               </div>

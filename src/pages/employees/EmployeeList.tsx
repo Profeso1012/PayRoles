@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Layers, Check, AlertCircle } from 'lucide-react';
+import { Plus, Search, Layers, Check, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
@@ -160,6 +160,10 @@ export default function EmployeeList() {
     },
     enabled: bulkAssignOpen,
   });
+  // Cached for 2 minutes (queryClient.ts default) and never invalidated when
+  // someone edits a pay element's autoApply flag elsewhere (PayElements.tsx)
+  // - a manual refresh lets an admin pull the latest state on demand.
+  const isRefreshingCatalog = useIsFetching({ queryKey: ['pay-elements-assignable'] }) > 0;
 
   function openBulkAssign() {
     setBulkAssignForm(blankBulkAssignForm);
@@ -450,14 +454,27 @@ export default function EmployeeList() {
           </div>
         ) : (
           <div className="flex flex-col gap-4">
-            <Select
-              label="Pay Element"
-              value={bulkAssignForm.payElementId}
-              options={(bulkPayElementCatalog ?? []).map((pe) => ({ value: pe.id, label: `${pe.code} — ${pe.name}` }))}
-              onChange={(v) => setBulkAssignForm((f) => ({ ...f, payElementId: v }))}
-              placeholder={bulkPayElementCatalog ? 'Select a pay element' : 'Loading...'}
-              hint="BASIC_SALARY and auto-apply tax elements aren't listed — they apply to everyone automatically and can't be usefully assigned manually."
-            />
+            <div>
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="text-sm text-cash-green font-medium">Pay Element</span>
+                <button
+                  type="button"
+                  onClick={() => qc.invalidateQueries({ queryKey: ['pay-elements-assignable'] })}
+                  disabled={isRefreshingCatalog}
+                  title="Refresh pay element list"
+                  className="text-fresh-cash hover:text-cash-green disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RefreshCw size={14} className={isRefreshingCatalog ? 'animate-spin' : ''} />
+                </button>
+              </div>
+              <Select
+                value={bulkAssignForm.payElementId}
+                options={(bulkPayElementCatalog ?? []).map((pe) => ({ value: pe.id, label: `${pe.code} — ${pe.name}` }))}
+                onChange={(v) => setBulkAssignForm((f) => ({ ...f, payElementId: v }))}
+                placeholder={bulkPayElementCatalog ? 'Select a pay element' : 'Loading...'}
+                hint="BASIC_SALARY and auto-apply tax elements aren't listed — they apply to everyone automatically and can't be usefully assigned manually."
+              />
+            </div>
             <Select
               label="Calculation Method"
               value={bulkAssignForm.calculationMethod}

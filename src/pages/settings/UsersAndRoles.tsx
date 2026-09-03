@@ -96,11 +96,12 @@ export default function UsersAndRoles() {
     enabled: isSuperAdmin,
   });
 
-  // Only needed to populate the "Link to Employee" picker, which only
-  // applies to the employee_self_service role - an employee_self_service
-  // account with no workerId can never resolve its own payslips (My
-  // Payslips/Dashboard both key off it), so linking a worker here is
-  // mandatory for that role, not optional.
+  // Populates the "Link to Employee" picker on Add User (mandatory for
+  // employee_self_service - an account with no workerId can never resolve
+  // its own payslips), and also used to show which employee an existing
+  // employee_self_service account is already linked to on Edit User (that
+  // link is create-only, can't be changed here, but the admin should still
+  // be able to see it rather than it being invisible).
   const { data: workerCatalog } = useQuery<BackendWorker[]>({
     queryKey: ['workers-catalog'],
     queryFn: async () => {
@@ -110,7 +111,7 @@ export default function UsersAndRoles() {
         (page) => `${ENDPOINTS.WORKERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
       );
     },
-    enabled: addUserOpen && form.role === 'employee_self_service',
+    enabled: (addUserOpen && form.role === 'employee_self_service') || editTarget?.role === 'employee_self_service',
   });
 
   // Shared between the Add User form's legal-entity checklist and the
@@ -569,6 +570,22 @@ export default function UsersAndRoles() {
             hint={editTarget?.role === 'tenant_admin' && !canReassignToTenantAdmin ? 'Only a Super Admin can change a Tenant Admin\'s role.' : undefined}
             onChange={(v) => setEditForm((f) => ({ ...f, role: v as BackendRole }))}
           />
+          {editTarget?.role === 'employee_self_service' && (
+            <div>
+              <p className="text-xs font-medium text-cash-green mb-1">Linked Employee</p>
+              <p className="text-sm text-deep-cash bg-soft-white border border-mint-light rounded-md px-3 py-2.5">
+                {(() => {
+                  const worker = workerCatalog?.find((w) => w.id === editTarget.workerId);
+                  return worker
+                    ? `${worker.firstName} ${worker.lastName}${worker.employeeNumber ? ` (${worker.employeeNumber})` : ''}`
+                    : editTarget.workerId ?? 'None';
+                })()}
+              </p>
+              <p className="text-xs text-cash-green/60 mt-1">
+                Set when this account was created — can't be changed here.
+              </p>
+            </div>
+          )}
           {editForm.role === 'employee_self_service' && editTarget?.role !== 'employee_self_service' && (
             <p className="text-xs text-red-500">
               Can't switch to Employee here — this role needs a linked employee record, and there's no way to

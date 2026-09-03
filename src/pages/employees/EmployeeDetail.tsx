@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers, X } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
+import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers, X, RefreshCw } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields, minorToMajor } from '@/lib/api/transforms';
@@ -293,6 +293,11 @@ export default function EmployeeDetail() {
     enabled: tab === 'payElements',
   });
   const hasNoPayElements = !!payElementCatalog && payElementCatalog.length === 0;
+  // Catalog is cached for 2 minutes (queryClient.ts default) and this page
+  // never invalidates it when someone edits a pay element's autoApply flag
+  // elsewhere (PayElements.tsx) - a manual refresh next to the Assign button
+  // lets an admin pull the latest state on demand instead of waiting it out.
+  const isRefreshingCatalog = useIsFetching({ queryKey: ['pay-elements'] }) > 0;
 
   // WorkerPayElement carries no currency field of its own - a fixed-amount
   // allowance is denominated in whatever currency the worker's active
@@ -787,6 +792,15 @@ export default function EmployeeDetail() {
             <div className="flex items-center gap-2">
               <Layers size={16} className="text-cash-green" />
               <h3 className="text-sm font-semibold text-deep-cash">Assigned Pay Elements</h3>
+              <button
+                type="button"
+                onClick={() => qc.invalidateQueries({ queryKey: ['pay-elements'] })}
+                disabled={isRefreshingCatalog}
+                title="Refresh pay element list"
+                className="text-fresh-cash hover:text-cash-green disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <RefreshCw size={14} className={isRefreshingCatalog ? 'animate-spin' : ''} />
+              </button>
             </div>
             {canWritePayElements && (
               <Button variant="secondary" size="sm" disabled={hasNoPayElements} onClick={() => setAssignWpeOpen(true)}>
