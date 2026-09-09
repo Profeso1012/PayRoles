@@ -11,63 +11,14 @@ import Tabs from '@/components/ui/Tabs';
 import Badge from '@/components/ui/Badge';
 import Spinner from '@/components/ui/Spinner';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
+import { batchStatusVariant, batchStatusLabel, PROVIDER_LABELS } from './disbursementConstants';
 import type {
   BackendDisbursementSummary,
   BackendDisbursementBatch,
   BackendWebhookEvent,
   BackendReconciliationRecord,
   BackendProviderHealth,
-  BackendBatchStatus,
-  BackendProviderType,
 } from '@/lib/api/types';
-
-const PROVIDER_LABELS: Record<BackendProviderType, string> = {
-  manual_bank_file: 'Manual Bank File',
-  monnify: 'Monnify',
-  paystack: 'Paystack',
-  flutterwave: 'Flutterwave',
-  remita: 'Remita',
-};
-
-const batchStatusVariant: Record<BackendBatchStatus, 'draft' | 'info' | 'warning' | 'success' | 'error'> = {
-  draft: 'draft',
-  pending_approval: 'warning',
-  approved: 'info',
-  awaiting_schedule: 'info',
-  queued: 'info',
-  processing: 'warning',
-  partially_paid: 'warning',
-  paid: 'success',
-  reconciling: 'warning',
-  reconciled: 'success',
-  completed: 'success',
-  cancelled: 'error',
-  failed: 'error',
-  expired: 'error',
-  retrying: 'warning',
-  reversed: 'error',
-  awaiting_confirmation: 'warning',
-};
-
-const batchStatusLabel: Record<BackendBatchStatus, string> = {
-  draft: 'Draft',
-  pending_approval: 'Awaiting Approval',
-  approved: 'Approved',
-  awaiting_schedule: 'Scheduled',
-  queued: 'Queued',
-  processing: 'Processing',
-  partially_paid: 'Partially Paid',
-  paid: 'Paid',
-  reconciling: 'Reconciling',
-  reconciled: 'Reconciled',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  failed: 'Failed',
-  expired: 'Expired',
-  retrying: 'Retrying',
-  reversed: 'Reversed',
-  awaiting_confirmation: 'Awaiting Confirmation',
-};
 
 function StatCard({ icon: Icon, label, value, tone }: { icon: React.ElementType; label: string; value: React.ReactNode; tone?: string }) {
   return (
@@ -84,8 +35,12 @@ function StatCard({ icon: Icon, label, value, tone }: { icon: React.ElementType;
 }
 
 function BatchRow({ batch }: { batch: BackendDisbursementBatch }) {
+  const navigate = useNavigate();
   return (
-    <tr className="border-b border-mint-light/50">
+    <tr
+      className="border-b border-mint-light/50 cursor-pointer hover:bg-mint-light/10"
+      onClick={() => navigate(`/payments/disbursements/${batch.payrollRunId}`)}
+    >
       <td className="px-4 py-2.5 font-mono text-xs text-cash-green/70">{batch.reference}</td>
       <td className="px-4 py-2.5">{PROVIDER_LABELS[batch.providerType] ?? batch.providerType}</td>
       <td className="px-4 py-2.5">

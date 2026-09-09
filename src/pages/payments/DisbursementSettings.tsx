@@ -15,6 +15,7 @@ import Badge from '@/components/ui/Badge';
 import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { PROVIDER_TYPES, PROVIDER_LABELS, INCOMPLETE_PROVIDERS } from './disbursementConstants';
 import type {
   BackendDisbursementSettings,
   BackendDisbursementProviderConfig,
@@ -22,24 +23,6 @@ import type {
   UpdateDisbursementSettingsRequest,
   ConfigureProviderRequest,
 } from '@/lib/api/types';
-
-const PROVIDER_TYPES: BackendProviderType[] = ['manual_bank_file', 'monnify', 'paystack', 'flutterwave', 'remita'];
-
-const PROVIDER_LABELS: Record<BackendProviderType, string> = {
-  manual_bank_file: 'Manual Bank File',
-  monnify: 'Monnify',
-  paystack: 'Paystack',
-  flutterwave: 'Flutterwave',
-  remita: 'Remita',
-};
-
-// manual_bank_file, monnify, paystack, and flutterwave all have real
-// createBatch/executeBatch implementations now. remita's executeBatch still
-// calls placeholder endpoints (see remita.provider.ts TODOs) and can
-// misreport success - that one alone stays flagged.
-const INCOMPLETE_PROVIDERS: Partial<Record<BackendProviderType, string>> = {
-  remita: 'Experimental — integration is unverified, use with caution',
-};
 
 const PROVIDER_OPTIONS = PROVIDER_TYPES.map((value) => ({
   value,

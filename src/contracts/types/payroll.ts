@@ -44,6 +44,11 @@ export interface PayRun {
   notes?: string | null;
   failureReason?: string | null;
   metadata?: Record<string, any> | null;
+  // Whether money has actually moved for this run - completely separate from
+  // `status`. `status` flips to 'paid' (backend 'completed') the instant the
+  // run is approved, before disbursement even starts. This is the real
+  // payment-progress signal, set by the disbursement engine as batches move.
+  disbursementStatus?: 'not_started' | 'in_progress' | 'completed' | 'partially_completed' | 'failed';
 }
 
 export interface PayRunEmployee {
@@ -68,6 +73,8 @@ export interface PayElement {
   currency: string;
   isStatutory: boolean;
   formula: string | null;
+  /** Tax-type elements only (e.g. PAYE, WHT) - what reduced this period's tax, e.g. rent relief. */
+  reliefs?: Array<{ code: string; name: string; amountMinor: number }>;
 }
 
 // A configured pay element template (GET/POST /pay-elements) - matches the

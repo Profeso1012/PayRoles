@@ -21,13 +21,13 @@ import ErrorState from '@/components/ui/ErrorState';
 import Modal from '@/components/ui/Modal';
 import Input from '@/components/ui/Input';
 import type { PayRun, PayRunStatus } from '@contracts/types/payroll';
-import type { BackendPayslip, BackendWorker } from '@/lib/api/types';
+import type { BackendPayslip } from '@/lib/api/types';
 
-// The real backend register (GET /payroll/runs/:id/payslips) carries
-// workerName directly on each row (denormalized on Payslip), but has no
-// employeeNumber - that's still joined client-side against a fetched worker
-// list. There is also no "flagged/error" calculation-status concept on
-// Payslip; disbursementStatus reflects payment state, not calculation.
+// The real backend register (GET /payroll/runs/:id/payslips) carries both
+// workerName and employeeNumber directly on each row (denormalized onto
+// Payslip at generation time) - no separate WORKER_READ-gated lookup needed.
+// There is also no "flagged/error" calculation-status concept on Payslip;
+// disbursementStatus reflects payment state, not calculation.
 interface RegisterRow {
   payslipId: string;
   employeeId: string;
@@ -136,11 +136,6 @@ export default function PayRunDetail() {
     },
   });
 
-  // finance_manager holds PAYSLIP_READ but not WORKER_READ - skip the
-  // per-worker lookup entirely for it rather than firing N calls that will
-  // all 403 (matches the same permission gate used elsewhere on this page).
-  const canReadWorkers = role !== 'finance_manager';
-
   const { data: register } = useQuery<RegisterRow[]>({
     queryKey: ['pay-run-register', id],
     queryFn: async () => {
@@ -148,33 +143,15 @@ export default function PayRunDetail() {
         `${ENDPOINTS.PAYROLL.RUNS.PAYSLIPS(id!)}?${buildPaginationParams({ limit: 100 })}`,
       );
 
-      // payslip.entity.ts now denormalizes workerName onto the payslip itself
-      // (populated at calculation time) specifically so PAYSLIP_READ-only
-      // roles like finance_manager never need a separate WORKER_READ-gated
-      // lookup just to see whose payslip this is. employeeNumber has no such
-      // denormalized field yet, so it's still fetched best-effort - only for
-      // roles that actually hold WORKER_READ, so it doesn't fire calls
-      // guaranteed to 403.
-      const workerNumberMap = new Map<string, string>();
-      if (canReadWorkers) {
-        const workerIds = Array.from(new Set(payslips.map((p) => p.workerId)));
-        await Promise.all(
-          workerIds.map(async (workerId) => {
-            try {
-              const worker = await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(workerId));
-              workerNumberMap.set(workerId, worker.employeeNumber);
-            } catch {
-              // Worker may have been removed - fall back to showing nothing.
-            }
-          }),
-        );
-      }
-
+      // payslip.entity.ts denormalizes workerName/employeeNumber onto the
+      // payslip itself (populated at calculation time) specifically so
+      // PAYSLIP_READ-only roles like finance_manager never need a separate,
+      // WORKER_READ-gated lookup just to see whose payslip this is.
       return payslips.map((payslip): RegisterRow => ({
         payslipId: payslip.id,
         employeeId: payslip.workerId,
         employeeName: payslip.workerName || payslip.workerId,
-        employeeNumber: workerNumberMap.get(payslip.workerId) || '—',
+        employeeNumber: payslip.employeeNumber || '—',
         grossPay: minorToMajor(payslip.grossPayMinor),
         totalDeductions: minorToMajor(payslip.deductionsMinor),
         netPay: minorToMajor(payslip.netPayMinor),
@@ -337,9 +314,9 @@ export default function PayRunDetail() {
   // holding PAYSLIP_READ/DOWNLOAD and PAYROLL_READ for the same runs.
   const canReverse = role === 'tenant_admin' || role === 'super_admin';
   // Mirrors the backend's actual PAYROLL_APPROVE/PAYROLL_REJECT grants
-  // (roles.enum.ts ROLE_PERMISSIONS) - finance_manager does NOT hold these
-  // permissions there, payroll_manager does.
-  const canApprove = role === 'payroll_manager' || role === 'tenant_admin' || role === 'super_admin';
+  // (roles.enum.ts ROLE_PERMISSIONS) - payroll_manager and, as of the latest
+  // backend change, finance_manager both hold these permissions.
+  const canApprove = role === 'payroll_manager' || role === 'finance_manager' || role === 'tenant_admin' || role === 'super_admin';
   // Same roles that can manage payroll can retry failed calculations
   const canCalculate = canManage;
   
@@ -381,6 +358,28 @@ export default function PayRunDetail() {
               </Button>
             )}
             <Badge variant={statusVariant[run.status]} label={statusLabel[run.status]} />
+            {run.disbursementStatus && run.disbursementStatus !== 'not_started' && (
+              <Badge
+                variant={
+                  run.disbursementStatus === 'completed'
+                    ? 'success'
+                    : run.disbursementStatus === 'failed'
+                    ? 'error'
+                    : run.disbursementStatus === 'partially_completed'
+                    ? 'warning'
+                    : 'info'
+                }
+                label={
+                  run.disbursementStatus === 'completed'
+                    ? 'Payment: Paid'
+                    : run.disbursementStatus === 'failed'
+                    ? 'Payment: Failed'
+                    : run.disbursementStatus === 'partially_completed'
+                    ? 'Payment: Partially Paid'
+                    : 'Payment: In Progress'
+                }
+              />
+            )}
           </div>
         }
       />

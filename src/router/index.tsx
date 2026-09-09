@@ -88,6 +88,7 @@ const PayslipViewer = lazy(() => import('@/pages/payroll/PayslipViewer'));
 
 // Finance
 const PaymentFiles = lazy(() => import('@/pages/payments/PaymentFiles'));
+const DisbursementBatchDetail = lazy(() => import('@/pages/payments/DisbursementBatchDetail'));
 const Wallet = lazy(() => import('@/pages/payments/Wallet'));
 const WalletTopupComplete = lazy(() => import('@/pages/payments/WalletTopupComplete'));
 const DisbursementSettings = lazy(() => import('@/pages/payments/DisbursementSettings'));
@@ -288,6 +289,7 @@ export const router = createBrowserRouter([
       // only, so finance_manager/payroll_manager can approve/execute batches
       // but cannot configure providers or general settings.
       { path: 'payments', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(PaymentFiles)}</RoleGuard> },
+      { path: 'payments/disbursements/:runId', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(DisbursementBatchDetail)}</RoleGuard> },
       { path: 'payments/wallet', element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'finance_manager', 'payroll_manager']}>{w(Wallet)}</RoleGuard> },
       // Fixed path, not under /payments - matches the backend's hardcoded
       // checkout redirect exactly (see PATHS.WALLET_TOPUP_COMPLETE).

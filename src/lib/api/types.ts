@@ -304,6 +304,11 @@ export interface BackendPayslip {
    * roles with PAYSLIP_READ but not WORKER_READ (e.g. finance_manager) never need a
    * separate GET /workers/:id lookup just to identify whose payslip this is. */
   workerName: string;
+  /** Denormalized the same way as workerName above (migration AddPayslipEmployeeNumber) -
+   * lets a PAYSLIP_READ-only consumer show the employee's id without a separate,
+   * WORKER_READ-gated GET /workers/:id lookup. Empty string on payslips generated
+   * before this field existed and not backfilled from a since-deleted worker. */
+  employeeNumber: string;
   payrollWorkerId: string | null;
   /** Denormalized from the parent PayrollRun at generation time, same reasoning as workerName
    * above - lets a PAYSLIP_READ-only consumer (HR roles, employee_self_service) show the real
@@ -332,6 +337,8 @@ export interface PayslipElement {
   name: string;
   type: string;
   amountMinor: number;
+  /** Tax-type elements only (e.g. PAYE, WHT) - what reduced this period's tax, e.g. rent relief. */
+  reliefs?: Array<{ code: string; name: string; amountMinor: number }>;
 }
 
 // ============================================================================
@@ -1043,6 +1050,13 @@ export interface BackendDisbursementBatch {
   executedBy: string | null;
   confirmedBy: string | null;
   failureReason: string | null;
+  /** One entry per approval received so far - length compared against the tenant's
+   * approvalWorkflow setting (none=0/single,finance,ceo=1/dual=2/multi_level=3
+   * required) to know how many more approvals a pending_approval batch still needs. */
+  approvalRecords: Array<{ level: number; approvedBy: string; approvedAt: string; status: 'pending' | 'approved' | 'rejected'; remarks?: string }> | null;
+  manualConfirmationReference: string | null;
+  manualConfirmationRemarks: string | null;
+  manualConfirmedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }

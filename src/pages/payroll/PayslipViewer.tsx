@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { ArrowLeft, Printer, Download, ChevronDown, ChevronUp } from 'lucide-react';
@@ -6,13 +6,12 @@ import { apiClient } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatMoney, formatDate } from '@/lib/utils';
-import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import Button from '@/components/ui/Button';
 import type { Payslip, PayElement } from '@contracts/types/payroll';
-import type { BackendPayslip, BackendWorker, BackendPayrollRun, BackendPayrollItem } from '@/lib/api/types';
+import type { BackendPayslip, BackendPayrollRun, BackendPayrollItem } from '@/lib/api/types';
 
 // Helper to format period from start/end dates or single period string
 function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
@@ -27,13 +26,6 @@ export default function PayslipViewer() {
   const { runId, payslipId } = useParams<{ runId: string; payslipId: string }>();
   const navigate = useNavigate();
   const toast = useToast();
-  const role = useAuthStore((s) => s.user?.role);
-  // finance_manager and employee_self_service both hold PAYSLIP_READ but not
-  // WORKER_READ - skip the employeeNumber lookup entirely for them rather
-  // than firing a call guaranteed to 403 (the .catch(() => null) below would
-  // absorb it either way, this just avoids the wasted round-trip).
-  const canReadWorkers = role !== 'finance_manager' && role !== 'employee_self_service';
-
   // Generates (or returns the cached) server-rendered PDF, distinct from the
   // Print button below (which is just the browser's own print-to-PDF of this
   // page's markup).
@@ -63,12 +55,6 @@ export default function PayslipViewer() {
         apiClient<BackendPayrollRun>(ENDPOINTS.PAYROLL.RUNS.DETAIL(runId)).catch(() => null as BackendPayrollRun | null),
       ]);
 
-      // employeeNumber has no denormalized field yet, so it's still fetched
-      // best-effort - only for roles that actually hold WORKER_READ.
-      const resolvedWorker = canReadWorkers
-        ? await apiClient<BackendWorker>(ENDPOINTS.WORKERS.DETAIL(backendPayslip.workerId)).catch(() => null)
-        : null;
-
       const elements: PayElement[] = backendPayslip.payElements.map((el) => ({
         id: el.code,
         name: el.name,
@@ -77,6 +63,7 @@ export default function PayslipViewer() {
         currency: backendPayslip.currency,
         isStatutory: false,
         formula: null,
+        reliefs: el.reliefs,
       }));
 
       return {
@@ -84,7 +71,7 @@ export default function PayslipViewer() {
         payRunId: backendPayslip.payrollRunId,
         employeeId: backendPayslip.workerId,
         employeeName: backendPayslip.workerName || backendPayslip.workerId,
-        employeeNumber: resolvedWorker?.employeeNumber || '—',
+        employeeNumber: backendPayslip.employeeNumber || '—',
         // Straight off the payslip now (see BackendPayslip.periodStart/periodEnd
         // doc comment) - no PAYROLL_READ-gated run fetch required. Falls back to
         // the run's dates (pre-backfill payslips only) or createdAt as a last resort.
@@ -335,12 +322,27 @@ export default function PayslipViewer() {
                 </thead>
                 <tbody className="bg-white">
                   {taxes.map((el, idx) => (
-                    <tr key={el.id} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
-                      <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
-                      <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
-                        {formatMoney(el.amount, el.currency)}
-                      </td>
-                    </tr>
+                    <Fragment key={el.id}>
+                      <tr className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                        <td className="px-4 py-2.5 text-deep-cash border-b border-mint-light/20">{el.name}</td>
+                        <td className="px-4 py-2.5 text-right font-medium text-deep-cash tabular-nums border-b border-mint-light/20">
+                          {formatMoney(el.amount, el.currency)}
+                        </td>
+                      </tr>
+                      {/* What reduced this tax line (e.g. rent relief) - denormalized
+                          onto the payslip so it's visible without the more granular,
+                          PAYROLL_READ-gated PayrollItem record. */}
+                      {el.reliefs?.map((relief) => (
+                        <tr key={`${el.id}-${relief.code}`} className={idx % 2 === 0 ? 'bg-mint-light/5' : 'bg-white'}>
+                          <td className="pl-8 pr-4 py-1 text-xs text-cash-green/70 italic border-b border-mint-light/20">
+                            {relief.name} applied
+                          </td>
+                          <td className="px-4 py-1 text-right text-xs text-cash-green/70 italic tabular-nums border-b border-mint-light/20">
+                            − {formatMoney(minorToMajor(relief.amountMinor), el.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </Fragment>
                   ))}
                 </tbody>
                 <tfoot>

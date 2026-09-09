@@ -13,15 +13,8 @@ import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 import Spinner from '@/components/ui/Spinner';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
-import type { BackendDisbursementBatch, BackendProviderType } from '@/lib/api/types';
-
-const PROVIDER_LABELS: Record<BackendProviderType, string> = {
-  manual_bank_file: 'Manual Bank File',
-  monnify: 'Monnify',
-  paystack: 'Paystack',
-  flutterwave: 'Flutterwave',
-  remita: 'Remita',
-};
+import { PROVIDER_LABELS } from './disbursementConstants';
+import type { BackendDisbursementBatch } from '@/lib/api/types';
 
 const REPORT_FORMAT_OPTIONS = [
   { value: 'csv', label: 'CSV' },
