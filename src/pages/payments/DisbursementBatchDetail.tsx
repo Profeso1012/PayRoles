@@ -552,7 +552,15 @@ export default function DisbursementBatchDetail() {
                         <Badge variant={txStatusVariant[tx.status]} label={txStatusLabel[tx.status]} />
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        {(tx.status === 'failed' || tx.status === 'pending') && canManage && (
+                        {/* The backend allows overriding any non-terminal-success status to
+                            MANUAL (updateStatus() explicitly supports e.g. failed -> manual,
+                            skipped -> manual) - not just 'failed'/'pending'. A manual bank file
+                            batch sits every real transaction in 'processing' the whole time it's
+                            awaiting_confirmation, and a worker whose bank details were missing at
+                            initiate time is 'skipped' forever in this batch (retry only ever
+                            touches failed transactions) - both need this button to be payable
+                            individually without waiting on/duplicating the batch-wide Confirm. */}
+                        {tx.status !== 'successful' && tx.status !== 'manual' && canManage && (
                           <Button variant="ghost" size="sm" onClick={() => setMarkPaidTarget(tx)}>
                             Mark Paid
                           </Button>

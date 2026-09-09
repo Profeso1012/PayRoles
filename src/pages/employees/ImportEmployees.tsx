@@ -182,6 +182,12 @@ export default function ImportEmployees() {
   const [job, setJob] = useState<BackendImportJob | null>(null);
   const [errorReportUrl, setErrorReportUrl] = useState<string | null>(null);
   const pollTokenRef = useRef(0);
+  // bankAccount is optional on the backend (worker.entity.ts) - a row with
+  // none is created just fine, but that worker is silently excluded from
+  // every future payroll disbursement (shows up as a "Skipped" transaction,
+  // never retried) until someone notices and adds it. Surfaced here so it's
+  // caught before upload, not discovered mid-payroll.
+  const [bankWarning, setBankWarning] = useState<{ missing: number; total: number } | null>(null);
 
   const [bulkLoginOpen, setBulkLoginOpen] = useState(false);
   const [loadingUnprovisioned, setLoadingUnprovisioned] = useState(false);
@@ -239,6 +245,21 @@ export default function ImportEmployees() {
       }
     }
   }
+
+  const handleFileSelect = async (file: File | null) => {
+    setSelectedFile(file);
+    setJob(null);
+    setErrorReportUrl(null);
+    setBankWarning(null);
+    if (!file) return;
+    try {
+      const rows = await parseRows(file);
+      const missing = rows.filter((r) => !r.bankAccount?.trim()).length;
+      if (missing > 0) setBankWarning({ missing, total: rows.length });
+    } catch {
+      // Not fatal - handleUpload will surface a real parse error if there is one.
+    }
+  };
 
   const handleUpload = async () => {
     if (!selectedFile || !selectedLegalEntityId) {
@@ -470,7 +491,7 @@ export default function ImportEmployees() {
             ref={fileInputRef}
             type="file"
             accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => { setSelectedFile(e.target.files?.[0] ?? null); setJob(null); setErrorReportUrl(null); }}
+            onChange={(e) => handleFileSelect(e.target.files?.[0] ?? null)}
             className="text-sm text-deep-cash file:mr-3 file:px-3 file:py-2 file:rounded-md file:border-0 file:bg-mint-light file:text-cash-green file:text-sm file:font-medium file:cursor-pointer cursor-pointer"
           />
           <Button
@@ -483,6 +504,16 @@ export default function ImportEmployees() {
             Upload &amp; Process
           </Button>
         </div>
+        {bankWarning && (
+          <div className="flex items-start gap-2 mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <AlertCircle size={14} className="shrink-0 mt-0.5" />
+            <span>
+              {bankWarning.missing} of {bankWarning.total} row{bankWarning.total === 1 ? '' : 's'} have no bank account number.
+              They'll still be imported, but can't be paid until bank details are added — payroll disbursement skips
+              anyone with no bank account on file.
+            </span>
+          </div>
+        )}
       </div>
 
       {job && (

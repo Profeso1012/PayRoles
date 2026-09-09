@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Layers, Check, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, Search, Layers, Check, AlertCircle, RefreshCw, UserPlus, UploadCloud, DownloadCloud, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
+import { useToast } from '@/hooks/useToast';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapWorkerFields } from '@/lib/api/transforms';
@@ -17,8 +18,19 @@ import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import Avatar from '@/components/ui/Avatar';
 import type { Employee } from '@contracts/types/employee';
-import type { BackendWorker, BackendCalculationMethod, CreateWorkerPayElementRequest } from '@/lib/api/types';
+import type { BackendWorker, BackendCalculationMethod, CreateWorkerPayElementRequest, BackendExportJob, BackendExportFormat } from '@/lib/api/types';
 import type { PayElementDefinition } from '@contracts/types/payroll';
+
+const EXPORT_TERMINAL_STATUSES = new Set(['completed', 'failed', 'expired']);
+// pdf is a listed backend ExportFormat value but export-processor.service.ts
+// only ever implements csv/xlsx/json - requesting pdf always fails with
+// ExportUnsupportedFormatException. xlsx itself is also just CSV bytes under
+// a different label server-side (same toCsv() branch as csv), not a real
+// binary workbook - offered anyway since it opens fine in Excel either way.
+const EXPORT_FORMAT_OPTIONS: { value: BackendExportFormat; label: string }[] = [
+  { value: 'csv', label: 'CSV' },
+  { value: 'xlsx', label: 'Excel (.xlsx)' },
+];
 
 // Matches transformPaginatedResponse's actual (flat) return shape - see lib/api/transforms.ts.
 interface PaginatedResult<T> {
@@ -113,16 +125,93 @@ async function runWithConcurrency<T, R>(
 export default function EmployeeList() {
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const toast = useToast();
   const role = useAuthStore((s) => s.user?.role);
   const canAdd =
     role === 'hr_manager' ||
     role === 'hr_officer' ||
     role === 'tenant_admin' ||
     role === 'super_admin';
+  // Matches backend IMPORT_CREATE exactly (roles.enum.ts) - payroll_manager/
+  // payroll_officer hold this but not WORKER_WRITE, so they get the Import
+  // option but never the single-employee one (see the add-choice modal below).
+  const canImport =
+    role === 'hr_manager' ||
+    role === 'hr_officer' ||
+    role === 'payroll_manager' ||
+    role === 'payroll_officer' ||
+    role === 'tenant_admin' ||
+    role === 'super_admin';
   // Same gate EmployeeDetail.tsx uses for its own single-worker "Assign Pay
   // Element" button - bulk assignment is the same write, just to many workers
   // at once, so it should require the same permission.
   const canWritePayElements = role === 'hr_manager' || role === 'tenant_admin' || role === 'super_admin';
+  // Needs both EXPORT_CREATE (to queue the job) and EXPORT_DOWNLOAD (to
+  // actually retrieve it) - hr_officer holds only the former (roles.enum.ts),
+  // so it can't usefully self-serve a download from this quick button.
+  const canExport =
+    role === 'hr_manager' ||
+    role === 'payroll_manager' ||
+    role === 'payroll_officer' ||
+    role === 'tenant_admin' ||
+    role === 'super_admin';
+
+  const [addChoiceOpen, setAddChoiceOpen] = useState(false);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<BackendExportFormat | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!exportMenuOpen) return;
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [exportMenuOpen]);
+
+  function openAddFlow() {
+    // No point asking a single-choice question - go straight to whichever
+    // one this role actually holds.
+    if (canAdd && canImport) setAddChoiceOpen(true);
+    else if (canImport) navigate('/employees/import');
+    else if (canAdd) navigate('/employees/new');
+  }
+
+  async function handleExport(format: BackendExportFormat) {
+    setExportMenuOpen(false);
+    setExportingFormat(format);
+    try {
+      const job = await apiClient<BackendExportJob>(ENDPOINTS.EXPORTS.CREATE, {
+        method: 'POST',
+        body: JSON.stringify({ entityType: 'workers', format }),
+      });
+      toast.info('Export queued', 'Preparing your download…');
+      let latest = job;
+      // Short-lived foreground poll - worker-list exports are small and
+      // finish in a couple of seconds; a background job (like imports) would
+      // be overkill for something the user is actively waiting on right here.
+      for (let i = 0; i < 30 && !EXPORT_TERMINAL_STATUSES.has(latest.status); i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        latest = await apiClient<BackendExportJob>(ENDPOINTS.EXPORTS.STATUS(job.id));
+      }
+      if (latest.status === 'completed') {
+        const { downloadUrl } = await apiClient<{ downloadUrl: string }>(ENDPOINTS.EXPORTS.DOWNLOAD(job.id));
+        window.open(downloadUrl, '_blank');
+        toast.success('Export ready');
+      } else if (latest.status === 'failed') {
+        toast.error('Export failed', typeof latest.errorSummary?.message === 'string' ? latest.errorSummary.message : undefined);
+      } else {
+        toast.info('Export is taking longer than expected', 'Check the Exports page shortly for your file.');
+      }
+    } catch (err) {
+      toast.error('Failed to export employee list', err instanceof Error ? err.message : undefined);
+    } finally {
+      setExportingFormat(null);
+    }
+  }
 
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
@@ -352,15 +441,43 @@ export default function EmployeeList() {
                 <span className="hidden sm:inline">Bulk Assign Pay Element</span>
               </Button>
             )}
-            {canAdd && (
+            {(canAdd || canImport) && (
               <Button
                 variant="primary"
-                onClick={() => navigate('/employees/new')}
+                onClick={openAddFlow}
                 className="!text-xs sm:!text-sm !px-2.5 sm:!px-4 !py-1.5 sm:!py-2 whitespace-nowrap"
               >
                 <Plus size={16} />
-                Add Employee
+                {canAdd ? 'Add Employee' : 'Import Employees'}
               </Button>
+            )}
+            {canExport && (
+              <div className="relative" ref={exportMenuRef}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  title="Export employee list"
+                  loading={!!exportingFormat}
+                  onClick={() => setExportMenuOpen((v) => !v)}
+                  className="!px-2.5"
+                >
+                  <DownloadCloud size={16} />
+                </Button>
+                {exportMenuOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-10 bg-white border border-mint-light rounded-lg shadow-lg py-1 min-w-[160px]">
+                    {EXPORT_FORMAT_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => handleExport(opt.value)}
+                        className="w-full text-left px-3 py-2 text-sm text-deep-cash hover:bg-soft-white transition-colors"
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         }
@@ -419,6 +536,44 @@ export default function EmployeeList() {
         emptyMessage="No employees found"
         rowClassName={(row) => (row.status === 'inactive' || row.status === 'archived' ? 'opacity-60' : '')}
       />
+
+      <Modal
+        isOpen={addChoiceOpen}
+        onClose={() => setAddChoiceOpen(false)}
+        title="Add Employees"
+        size="sm"
+      >
+        <div className="flex flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => { setAddChoiceOpen(false); navigate('/employees/new'); }}
+            className="flex items-center gap-3 p-4 rounded-lg border border-mint-light hover:border-fresh-cash hover:bg-soft-white transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
+              <UserPlus size={18} className="text-cash-green" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-deep-cash">Add a Single Employee</p>
+              <p className="text-xs text-cash-green/70">Fill in one employee's details by hand</p>
+            </div>
+            <ChevronRight size={16} className="text-cash-green/40 shrink-0" />
+          </button>
+          <button
+            type="button"
+            onClick={() => { setAddChoiceOpen(false); navigate('/employees/import'); }}
+            className="flex items-center gap-3 p-4 rounded-lg border border-mint-light hover:border-fresh-cash hover:bg-soft-white transition-colors text-left"
+          >
+            <div className="w-10 h-10 rounded-full bg-mint-light flex items-center justify-center shrink-0">
+              <UploadCloud size={18} className="text-cash-green" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-deep-cash">Import via CSV</p>
+              <p className="text-xs text-cash-green/70">Add many employees at once from a spreadsheet</p>
+            </div>
+            <ChevronRight size={16} className="text-cash-green/40 shrink-0" />
+          </button>
+        </div>
+      </Modal>
 
       <Modal
         isOpen={bulkAssignOpen}

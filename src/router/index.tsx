@@ -224,10 +224,13 @@ export const router = createBrowserRouter([
       // Employees
       {
         path: 'employees',
-        // read_only holds WORKER_READ on the real backend (roles.enum.ts) but
-        // was missing here - its own sidebar nav (Sidebar.tsx READ_ONLY_NAV)
-        // links to this exact path, so it was a dead link to Unauthorized.
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'finance_manager', 'read_only']}><Outlet /></RoleGuard>,
+        // read_only, payroll_manager and payroll_officer all hold WORKER_READ
+        // on the real backend (roles.enum.ts) but were missing here.
+        // finance_manager, conversely, holds NO worker:* permission at all
+        // (its own permission block has no WORKER_READ) - it was listed here
+        // and linked from Sidebar.tsx's FINANCE_NAV, but GET /workers 403s for
+        // it every time, making that nav entry a permanent dead end. Removed.
+        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'read_only']}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(EmployeeList) },
           { path: 'new', element: <OrgGuard>{w(AddEmployee)}</OrgGuard> },
@@ -235,9 +238,11 @@ export const router = createBrowserRouter([
           { path: ':id/edit', element: w(EditEmployee) },
         ],
       },
-      // Bulk import also needs payroll_manager/payroll_officer, which the
-      // employees RoleGuard above doesn't grant - standalone route with its
-      // own broader role set (matches backend IMPORT_CREATE/IMPORT_READ).
+      // Its own route (not nested under /employees) purely so it can be
+      // reached without a sidebar link - EmployeeList.tsx's Add Employee
+      // button is the only entry point now. Role set matches backend
+      // IMPORT_CREATE exactly, same set as the /employees guard above minus
+      // read_only (which holds WORKER_READ but no import:* permission).
       {
         path: 'employees/import',
         element: (

@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FolderTree, Users, Calculator,
   CreditCard, BarChart3, Settings, Receipt, User, Landmark,
   ChevronDown, ChevronRight, FileText, MapPin, Layers, Play,
-  TrendingUp, Shield, Bell, History, UploadCloud, FileOutput, WalletCards,
+  TrendingUp, Shield, Bell, History, FileOutput, WalletCards,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -58,13 +58,9 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
       // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
     ],
   },
-  {
-    label: 'Employees', path: '/employees', icon: Users, tourId: 'tour-step-3',
-    children: [
-      { label: 'All Employees', path: '/employees', icon: Users },
-      { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
-    ],
-  },
+  // Import moved to a button on the Employees page itself (EmployeeList.tsx's
+  // Add Employee popup) - no longer a separate nav entry.
+  { label: 'Employees', path: '/employees', icon: Users, tourId: 'tour-step-3' },
   {
     label: 'Payroll', path: '/payroll', icon: Calculator, tourId: 'tour-step-4',
     children: [
@@ -100,13 +96,9 @@ const HR_NAV: NavItem[] = [
       // Deprecated: Departments, Locations, Pay Groups, Job Grades (not in backend)
     ],
   },
-  {
-    label: 'Employees', path: '/employees', icon: Users,
-    children: [
-      { label: 'All Employees', path: '/employees', icon: Users },
-      { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
-    ],
-  },
+  // Import moved to a button on the Employees page itself (EmployeeList.tsx's
+  // Add Employee popup) - no longer a separate nav entry.
+  { label: 'Employees', path: '/employees', icon: Users },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   // Deprecated: Reports (no backend /reports module)
 ];
@@ -122,7 +114,12 @@ const PAYROLL_OFFICER_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Pay Elements', path: '/payroll/pay-elements', icon: FileText },
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
-  { label: 'Import Employees', path: '/employees/import', icon: UploadCloud },
+  // Both payroll roles hold WORKER_READ (roles.enum.ts) - this was previously
+  // an "Import Employees" link straight to /employees/import with no way to
+  // browse the list at all, even though they can read it. Now a real
+  // Employees link, matching every other role's nav - import is a button on
+  // that page (EmployeeList.tsx's Add Employee popup), same as everyone else.
+  { label: 'Employees', path: '/employees', icon: Users },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
   // Deprecated: Reports (no backend /reports module)
@@ -132,7 +129,10 @@ const PAYROLL_MANAGER_NAV: NavItem[] = PAYROLL_OFFICER_NAV.filter((item) => item
 
 const FINANCE_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-  { label: 'Employees', path: '/employees', icon: Users },
+  // Deprecated: Employees - finance_manager holds no worker:* permission at
+  // all (roles.enum.ts), so GET /workers always 403s; this was a permanent
+  // dead-end nav link (router/index.tsx's /employees guard no longer lists
+  // finance_manager either).
   { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Payments', path: '/payments', icon: CreditCard },
   { label: 'Exports', path: '/exports', icon: FileOutput },

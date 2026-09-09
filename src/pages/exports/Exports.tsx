@@ -30,10 +30,12 @@ const ENTITY_OPTIONS: { value: BackendExportEntityType; label: string }[] = [
   { value: 'gl_journals', label: 'GL journals' },
 ];
 
+// pdf is a listed backend ExportFormat value but export-processor.service.ts
+// only implements csv/xlsx/json - requesting pdf always throws
+// ExportUnsupportedFormatException, so it's never offered as a choice here.
 const FORMAT_OPTIONS: { value: BackendExportFormat; label: string }[] = [
   { value: 'csv', label: 'CSV' },
   { value: 'xlsx', label: 'Excel (.xlsx)' },
-  { value: 'pdf', label: 'PDF' },
   { value: 'json', label: 'JSON' },
 ];
 

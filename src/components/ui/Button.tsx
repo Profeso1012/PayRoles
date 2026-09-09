@@ -10,6 +10,8 @@ interface ButtonProps {
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   type?: 'button' | 'submit' | 'reset';
   className?: string;
+  /** Native tooltip - mainly for icon-only buttons with no visible label. */
+  title?: string;
 }
 
 const variantMap = {
@@ -41,6 +43,7 @@ export default function Button({
   onClick,
   type = 'button',
   className,
+  title,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
 
@@ -49,6 +52,7 @@ export default function Button({
       type={type}
       onClick={onClick}
       disabled={isDisabled}
+      title={title}
       className={cn(
         'inline-flex items-center justify-center whitespace-nowrap font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-fresh-cash focus-visible:ring-offset-2',
         // Normalizes icon size off whatever numeric `size` prop each call

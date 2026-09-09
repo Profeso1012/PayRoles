@@ -1,0 +1,21 @@
+employeeNumber,firstName,lastName,hireDate,employmentType,legalEntityId,basicSalary,currency,email,phone,dateOfBirth,position,department,bankName,bankAccount,bankRoutingCode
+EMP-2001,Adaeze,Okafor,2023-02-01,full_time,,450000,NGN,adaeze.okafor@example.com,+2348011111001,1991-04-12,Software Engineer,Engineering,Zenith Bank,1007195393,057
+EMP-2002,Tunde,Bello,2022-11-15,part_time,,220000,NGN,tunde.bello@example.com,+2348011111002,1989-09-03,Sales Executive,Sales,OPay Digital Services Limited (OPay),8148879935,999992
+EMP-2003,Ifeoma,Nwosu,2024-01-08,contract,,300000,NGN,ifeoma.nwosu@example.com,+2348011111003,1994-12-25,Marketing Associate,Marketing,PalmPay,8148879935,999991
+EMP-2004,Chidi,Eze,2021-06-20,full_time,,500000,NGN,chidi.eze@example.com,+2348011111004,1985-03-18,Finance Manager,Finance,First Bank of Nigeria,3183120022,011
+EMP-2005,Blessing,Uche,2023-09-05,full_time,,380000,NGN,blessing.uche@example.com,+2348011111005,1992-07-30,HR Officer,Human Resources,Zenith Bank,1007195393,057
+EMP-2006,Emeka,Obi,2020-04-14,full_time,,600000,NGN,emeka.obi@example.com,+2348011111006,1987-01-09,Operations Manager,Operations,OPay Digital Services Limited (OPay),8148879935,999992
+EMP-2007,Ngozi,Chukwu,2022-08-19,part_time,,210000,NGN,ngozi.chukwu@example.com,+2348011111007,1996-05-27,Customer Support,Support,PalmPay,8148879935,999991
+EMP-2008,Segun,Afolabi,2024-03-11,contract,,275000,NGN,segun.afolabi@example.com,+2348011111008,1993-10-02,Business Analyst,Strategy,First Bank of Nigeria,3183120022,011
+EMP-2009,Grace,Danjuma,2023-05-22,full_time,,260000,NGN,grace.danjuma@example.com,+2348011111009,1995-02-14,Junior Accountant,Finance,,,
+EMP-2010,,Yakubu,2023-01-01,full_time,,300000,NGN,,,,,,,,
+EMP-2011,Fatima,,2023-01-01,full_time,,300000,NGN,,,,,,,,
+,Kelechi,Nnamdi,2023-01-01,full_time,,300000,NGN,,,,,,,,
+EMP-2013,Musa,Sule,,full_time,,300000,NGN,,,,,,,,
+EMP-2014,Ijeoma,Okonkwo,14-01-2024,full_time,,300000,NGN,,,,,,,,
+EMP-2015,Bashir,Umar,2023-06-01,freelance,,300000,NGN,,,,,,,,
+EMP-2016,Aisha,Bello,2023-06-01,full_time,HeadOffice,300000,NGN,,,,,,,,
+EMP-2017,Peter,Ikenna,2023-06-01,full_time,00000000-0000-4000-8000-000000000099,300000,NGN,,,,,,,,
+EMP-2018,Chioma,Ude,2023-06-01,full_time,,,NGN,,,,,,,,
+EMP-2019,Yusuf,Garba,2023-06-01,full_time,,-50000,NGN,,,,,,,,
+EMP-2001,Duplicate,Person,2023-06-01,full_time,,400000,NGN,,,,,,,,
