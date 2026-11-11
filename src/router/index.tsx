@@ -1,5 +1,7 @@
 import { createBrowserRouter, Outlet, Navigate, useNavigate } from 'react-router-dom';
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
+// Reloads once for the new build when a page's code file is gone after a deploy.
+import { lazyWithReload as lazy } from '@/lib/reloadOnStaleBuild';
 import { AuthGuard } from './guards/AuthGuard';
 import { GuestGuard } from './guards/GuestGuard';
 import { RoleGuard } from './guards/RoleGuard';
