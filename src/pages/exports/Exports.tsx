@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { DownloadCloud, FileOutput, Inbox } from 'lucide-react';
-import { apiClient } from '@/lib/api';
-import { ENDPOINTS } from '@/lib/api/adapter';
+import { apiClient, apiClientWithMeta } from '@/lib/api';
+import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
+import { errorMessage } from '@/lib/errors';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
 import { formatDate } from '@/lib/utils';
@@ -12,6 +13,8 @@ import Button from '@/components/ui/Button';
 import Select from '@/components/ui/Select';
 import Spinner from '@/components/ui/Spinner';
 import EmptyState from '@/components/ui/EmptyState';
+import ErrorState from '@/components/ui/ErrorState';
+import Pagination from '@/components/ui/Pagination';
 import type {
   BackendExportJob,
   BackendExportStatus,
@@ -22,22 +25,25 @@ import type {
 
 const TERMINAL_STATUSES: BackendExportStatus[] = ['completed', 'failed', 'expired'];
 
+// gl_journals stays in the backend enum (and in entityLabel, for old jobs)
+// but CreateExportJobDto rejects it - it has no generator yet.
 const ENTITY_OPTIONS: { value: BackendExportEntityType; label: string }[] = [
   { value: 'workers', label: 'Worker list' },
   { value: 'payroll_register', label: 'Payroll register' },
   { value: 'payslips', label: 'Payslips' },
   { value: 'audit_logs', label: 'Audit logs' },
-  { value: 'gl_journals', label: 'GL journals' },
 ];
 
-// pdf is a listed backend ExportFormat value but export-processor.service.ts
-// only implements csv/xlsx/json - requesting pdf always throws
-// ExportUnsupportedFormatException, so it's never offered as a choice here.
+// Every backend ExportFormat value - export-processor.service.ts implements
+// csv, xlsx, json and pdf.
 const FORMAT_OPTIONS: { value: BackendExportFormat; label: string }[] = [
   { value: 'csv', label: 'CSV' },
   { value: 'xlsx', label: 'Excel (.xlsx)' },
+  { value: 'pdf', label: 'PDF' },
   { value: 'json', label: 'JSON' },
 ];
+
+const PAGE_SIZE = 20;
 
 const entityLabel: Record<BackendExportEntityType, string> = {
   workers: 'Worker list',
@@ -75,18 +81,27 @@ export default function Exports() {
   const [entityType, setEntityType] = useState<BackendExportEntityType>('workers');
   const [format, setFormat] = useState<BackendExportFormat>('csv');
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
-  const { data: jobs, isLoading, isError, refetch } = useQuery<BackendExportJob[]>({
-    queryKey: ['export-jobs'],
+  // The list endpoint is paginated (PaginationDto, default limit 20) - page
+  // through it rather than silently showing only the newest 20 jobs.
+  const { data, isLoading, isError, error, refetch } = useQuery<{ jobs: BackendExportJob[]; total: number }>({
+    queryKey: ['export-jobs', page],
     queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.EXPORTS.LIST);
-      return Array.isArray(response) ? response : (response.data || []);
+      const { data: rows, meta } = await apiClientWithMeta<BackendExportJob[]>(
+        `${ENDPOINTS.EXPORTS.LIST}?${buildPaginationParams({ page, limit: PAGE_SIZE })}`,
+      );
+      const jobs = Array.isArray(rows) ? rows : [];
+      return { jobs, total: meta?.total ?? jobs.length };
     },
+    placeholderData: keepPreviousData,
     refetchInterval: (query) => {
-      const data = query.state.data as BackendExportJob[] | undefined;
-      return data?.some((j) => !TERMINAL_STATUSES.includes(j.status)) ? 3000 : false;
+      const d = query.state.data as { jobs: BackendExportJob[] } | undefined;
+      return d?.jobs.some((j) => !TERMINAL_STATUSES.includes(j.status)) ? 3000 : false;
     },
   });
+  const jobs = data?.jobs;
+  const total = data?.total ?? 0;
 
   const createMutation = useMutation({
     mutationFn: () =>
@@ -96,18 +111,26 @@ export default function Exports() {
       }),
     onSuccess: () => {
       toast.success('Export queued — this usually takes a few seconds');
+      setPage(1);
       qc.invalidateQueries({ queryKey: ['export-jobs'] });
     },
-    onError: (err) => toast.error('Failed to queue export', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to queue export', errorMessage(err)),
   });
 
   const handleDownload = async (job: BackendExportJob) => {
+    // Open the tab synchronously, inside the click gesture - a window.open()
+    // issued after the await below is treated as an unsolicited pop-up and
+    // blocked. Navigate it once the signed URL arrives; close it on failure.
+    const win = window.open('', '_blank');
+    if (win) win.opener = null;
     setDownloadingId(job.id);
     try {
       const { downloadUrl } = await apiClient<{ downloadUrl: string }>(ENDPOINTS.EXPORTS.DOWNLOAD(job.id));
-      window.open(downloadUrl, '_blank');
+      if (win) win.location.href = downloadUrl;
+      else window.location.assign(downloadUrl);
     } catch (err) {
-      toast.error('Failed to get download link', err instanceof Error ? err.message : undefined);
+      win?.close();
+      toast.error('Failed to get download link', errorMessage(err));
     } finally {
       setDownloadingId(null);
     }
@@ -142,9 +165,7 @@ export default function Exports() {
         {isLoading ? (
           <div className="flex justify-center py-10"><Spinner /></div>
         ) : isError ? (
-          <div className="p-6">
-            <Button variant="secondary" size="sm" onClick={() => refetch()}>Retry</Button>
-          </div>
+          <ErrorState error={error} message={errorMessage(error, 'Could not load exports.')} onRetry={() => refetch()} />
         ) : !jobs || jobs.length === 0 ? (
           <EmptyState icon={Inbox} title="No exports yet" description="Files you queue for export will show up here once ready to download." />
         ) : (
@@ -173,6 +194,11 @@ export default function Exports() {
                 </div>
               </div>
             ))}
+            {total > PAGE_SIZE && (
+              <div className="px-5">
+                <Pagination page={page} pageSize={PAGE_SIZE} total={total} onChange={setPage} />
+              </div>
+            )}
           </div>
         )}
       </div>

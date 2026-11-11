@@ -73,9 +73,9 @@ async function buildHRDashboard(): Promise<HRDashboardData> {
     return createdAt >= firstDayOfMonth;
   }).length;
   
-  const missingBankDetails = workers.filter((w: any) => 
-    !w.bankName || (!w.bankAccount && !w.bankAccountEncrypted)
-  ).length;
+  // The API never returns the account number itself, only whether one is on
+  // file (hasBankAccount) - payouts skip workers without one.
+  const missingBankDetails = workers.filter((w: any) => !w.bankName || !w.hasBankAccount).length;
 
   // Recent hires (last 10)
   const recentHires = workers.slice(0, 10).map((w: any) => ({

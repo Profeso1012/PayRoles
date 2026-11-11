@@ -2,18 +2,13 @@ import { useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Eye, EyeOff, ArrowLeft, KeyRound, Building2, MailWarning } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
-import { apiClient, ApiError } from '@/lib/api';
+import { apiClient } from '@/lib/api';
+import { errorCode, errorMessage } from '@/lib/errors';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
 import type { AuthUser } from '@contracts/types/auth';
 import type { LoginResponse } from '@/lib/api/types';
-
-function errorCode(err: unknown): string | undefined {
-  if (!(err instanceof ApiError) || !err.data || typeof err.data !== 'object') return undefined;
-  const body = err.data as { error?: { code?: string } };
-  return body.error?.code;
-}
 
 // GET /auth/me returns IAuthUser: { id, email, tenantId, role, isActive, workerId? } -
 // no fullName/tenantName/avatarUrl/permissions. fullName is composed client-side
@@ -86,10 +81,14 @@ export default function Login() {
         body: JSON.stringify({ email, tenantSlug }),
         skipAuthRedirect: true,
       });
-    } finally {
-      // Always resolves as "sent" - the backend responds 204 regardless of
-      // whether the account exists or is already verified (enumeration-safe).
+      // The backend responds 204 whether or not the account exists or is
+      // already verified (enumeration-safe), so success always reads "sent".
       setResendState('sent');
+    } catch (err) {
+      // A real failure (e.g. 429 - this is limited to 3/hour) must not be
+      // reported as "sent".
+      setResendState('idle');
+      setError(errorMessage(err, "We couldn't resend the email. Please try again later."));
     }
   };
 
@@ -112,10 +111,12 @@ export default function Login() {
         body: JSON.stringify({ email, tenantSlug }),
         skipAuthRedirect: true,
       });
-    } finally {
-      // Always resolves as "sent" - the backend responds 204 regardless of
-      // whether the account exists, is already active, or has logged in before.
+      // 204 regardless of whether the account exists, is already active, or
+      // has logged in before - success always reads "sent".
       setResendCredsState('sent');
+    } catch (err) {
+      setResendCredsState('idle');
+      setError(errorMessage(err, "We couldn't resend your login details. Please try again later."));
     }
   };
 
@@ -173,12 +174,12 @@ export default function Login() {
       const role = user.role;
       if (role === 'employee_self_service') navigate('/my-payslips');
       else navigate('/dashboard');
-    } catch (err: any) {
+    } catch (err) {
       if (errorCode(err) === 'EMAIL_NOT_VERIFIED') {
         setNeedsVerification(true);
-        setError(err?.message || 'Please verify your email before signing in.');
+        setError(errorMessage(err, 'Please verify your email before signing in.'));
       } else {
-        setError(err?.message || 'An unexpected error occurred.');
+        setError(errorMessage(err));
       }
     } finally {
       setLoading(false);
@@ -224,7 +225,7 @@ export default function Login() {
 
             <div className="w-full flex items-center gap-3 px-4 py-4 border border-mint-light rounded-sm text-sm text-cash-green/70 bg-soft-white/50">
               <Building2 size={20} className="text-cash-green/50 flex-shrink-0" />
-              <span>Don't have a company code? Contact your platform administrator.</span>
+              <span>Don't know your company code? Ask your company's PayRole administrator.</span>
             </div>
           </>
         )}
@@ -311,7 +312,13 @@ export default function Login() {
               <div className="flex items-start gap-3">
                 <KeyRound size={20} className="text-cash-green/50 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-cash-green/70">Forgot your password? Contact your administrator to reset it.</p>
+                  <p className="text-cash-green/70 mb-2">Forgot your password?</p>
+                  <Link
+                    to={`${PATHS.FORGOT_PASSWORD}?${new URLSearchParams({ company: tenantSlug, email }).toString()}`}
+                    className="text-fresh-cash font-medium hover:underline"
+                  >
+                    Email me a temporary password
+                  </Link>
                 </div>
               </div>
               <div className="h-px bg-cash-green/10" />

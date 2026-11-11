@@ -31,6 +31,10 @@ export interface Employee {
   bankName?: string | null;
   bankAccount?: string | null;
   bankRoutingCode?: string | null;
+  /** Whether a bank account number is on file - the number itself is never returned. */
+  hasBankAccount?: boolean;
+  /** Whether a national ID is on file - the ID itself is never returned. */
+  hasNationalId?: boolean;
   bankDetails: BankDetail[];
   hireDate: string;
   createdAt: string;

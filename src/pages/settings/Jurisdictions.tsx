@@ -11,6 +11,7 @@ import Modal from '@/components/ui/Modal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { TaxJurisdiction, TaxRule, TaxVersion, TaxVersionDetail } from '@/lib/api/types';
+import { errorMessage } from '@/lib/errors';
 
 const RELIEF_TYPE_LABEL: Record<string, string> = {
   fixed_amount: 'Fixed amount',
@@ -96,7 +97,7 @@ export default function Jurisdictions() {
   }
 
   if (isError || !rows) {
-    return <ErrorState error={error} onRetry={() => refetch()} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={() => refetch()} />;
   }
 
   return (

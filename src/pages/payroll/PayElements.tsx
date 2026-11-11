@@ -15,6 +15,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
+import { errorMessage } from '@/lib/errors';
 import type { PayElementDefinition } from '@contracts/types/payroll';
 
 // Real backend PayElementType enum (common.enum.ts) - lowercase.
@@ -41,6 +42,10 @@ const typeLabel: Record<string, string> = {
   tax: 'Tax',
   benefit: 'Benefit',
 };
+
+// Created automatically for every new company; the backend refuses to
+// deactivate it or change its code/type (409 PAY_ELEMENT_PROTECTED).
+const BASIC_SALARY_CODE = 'BASIC_SALARY';
 
 const blank = { 
   code: '', 
@@ -110,16 +115,24 @@ export default function PayElements() {
       // reference it elsewhere) - only send it on create.
       const payload: Record<string, unknown> = {
         name: form.name,
-        type: form.type,
-        formula: form.formula || undefined,
         isTaxable: form.isTaxable,
         sortOrder: parseInt(String(form.sortOrder), 10) || 100,
-        description: form.description || undefined,
       };
+      // BASIC_SALARY's type is locked - don't send it at all.
+      if (!editing || editing.code !== BASIC_SALARY_CODE) payload.type = form.type;
+      // On edit, an emptied optional field is sent as null so the backend
+      // (IsOptional + Object.assign) actually clears it; omitting it would
+      // silently keep the old value.
+      const formula = form.formula.trim();
+      const description = form.description.trim();
+      if (formula) payload.formula = formula;
+      else if (editing) payload.formula = null;
+      if (description) payload.description = description;
+      else if (editing) payload.description = null;
       // autoApply has no safe default for type=tax - the backend 400s
       // (PayElementAutoApplyRequiredException) if it's omitted here.
       if (form.type === 'tax') {
-        payload.taxRuleCode = form.taxRuleCode || undefined;
+        payload.taxRuleCode = form.taxRuleCode || (editing ? null : undefined);
         payload.autoApply = form.autoApply;
       }
 
@@ -139,7 +152,7 @@ export default function PayElements() {
       toast.success(editing ? 'Pay element updated' : 'Pay element created');
       closeModal();
     },
-    onError: (err) => toast.error('Failed to save pay element', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to save pay element', errorMessage(err)),
   });
 
   const deactivateMutation = useMutation({
@@ -149,7 +162,7 @@ export default function PayElements() {
       toast.success('Pay element deactivated');
       setDeleteTarget(null);
     },
-    onError: (err) => toast.error('Failed to deactivate pay element', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to deactivate pay element', errorMessage(err)),
   });
 
   // No dedicated /activate route exists, but UpdatePayElementDto (unlike
@@ -163,7 +176,7 @@ export default function PayElements() {
       qc.invalidateQueries({ queryKey: ['pay-elements'] });
       toast.success('Pay element reactivated');
     },
-    onError: (err) => toast.error('Failed to reactivate pay element', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to reactivate pay element', errorMessage(err)),
   });
 
   function openAdd() {
@@ -213,7 +226,7 @@ export default function PayElements() {
   }
 
   if (isError) {
-    return <ErrorState error={error} onRetry={refetch} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />;
   }
 
   const earnings = (elements ?? []).filter((e) => e.type === 'earning');
@@ -267,7 +280,7 @@ export default function PayElements() {
                         >
                           <Pencil size={14} />
                         </button>
-                        {!el.isStatutory && (
+                        {!el.isStatutory && el.code !== BASIC_SALARY_CODE && (
                           <button
                             onClick={() => setDeleteTarget(el)}
                             className="p-1.5 rounded hover:bg-red-50 text-red-400 hover:text-red-600 transition-colors"
@@ -320,8 +333,8 @@ export default function PayElements() {
         <div>
           <p className="text-sm font-semibold text-deep-cash mb-1">BASIC_SALARY is auto-managed</p>
           <p className="text-sm text-cash-green">
-            The BASIC_SALARY pay element is automatically created by the system during payroll calculations and pulls amounts directly from employee compensation records. 
-            You don't need to manually create or assign it.
+            The BASIC_SALARY pay element is created automatically for every new company and pulls amounts directly from employee compensation records.
+            You don't need to create or assign it. Its name and display settings can be edited, but it can't be deactivated and its code and type can't be changed.
           </p>
         </div>
       </div>
@@ -375,6 +388,8 @@ export default function PayElements() {
             label="Type"
             value={form.type}
             options={typeOptions}
+            disabled={editing?.code === BASIC_SALARY_CODE}
+            hint={editing?.code === BASIC_SALARY_CODE ? 'BASIC_SALARY is always an earning.' : undefined}
             onChange={(v) => setForm((f) => ({ 
               ...f, 
               type: v,

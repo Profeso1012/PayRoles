@@ -6,6 +6,7 @@ import {
   Link2, ExternalLink,
 } from 'lucide-react';
 import { apiClient, apiClientWithMeta, ApiError } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -31,7 +32,7 @@ import type {
 const TX_LABEL: Record<BackendWalletTransaction['type'], string> = {
   credit: 'Top-up',
   debit: 'Disbursement funding',
-  release: 'Refund (failed batch)',
+  release: 'Refund',
 };
 
 const TX_ICON: Record<BackendWalletTransaction['type'], typeof ArrowDownCircle> = {
@@ -123,7 +124,7 @@ export default function Wallet() {
       setShowIdentityForm(false);
       setCopied(false);
     },
-    onError: (err) => toast.error('Failed to get top-up account', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to get top-up account', errorMessage(err)),
   });
 
   const topupMutation = useMutation({
@@ -141,7 +142,7 @@ export default function Wallet() {
       // redirects back to /wallet/topup/complete once payment finishes.
       window.location.href = data.checkoutUrl;
     },
-    onError: (err) => toast.error('Failed to start top-up', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to start top-up', errorMessage(err)),
   });
 
   if (!canView) {
@@ -239,7 +240,7 @@ export default function Wallet() {
                   <p className="text-xs text-amber-600">
                     {needsIdentity(provisionMutation.error)
                       ? "The platform's default provider needs a BVN or NIN to verify a dedicated account for you."
-                      : (provisionMutation.error instanceof Error ? provisionMutation.error.message : 'Could not set up a top-up account.')}
+                      : errorMessage(provisionMutation.error, 'Could not set up a top-up account.')}
                   </p>
                   <Button variant="secondary" size="sm" onClick={() => setShowIdentityForm(true)}>
                     Set Up Manually

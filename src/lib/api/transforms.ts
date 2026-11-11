@@ -221,20 +221,13 @@ export function mapWorkerFields<T extends Record<string, any>>(
     // as an unknown field while silently dropping the real value.
     return { ...data };
   } else {
-    // Backend → Frontend
+    // Backend → Frontend. The worker's national ID / bank account ciphertext
+    // is @Exclude()d server-side; the response carries hasNationalId /
+    // hasBankAccount booleans instead, which pass through unchanged. Coerce
+    // them to strict booleans so a missing flag reads as "not on file".
     const mapped: any = { ...data };
-    
-    // Backend won't return decrypted values, but we can keep field names consistent
-    if (mapped.nationalIdEncrypted !== undefined) {
-      mapped.nationalId = '****';  // Masked
-      delete mapped.nationalIdEncrypted;
-    }
-    
-    if (mapped.bankAccountEncrypted !== undefined) {
-      mapped.bankAccount = '****';  // Masked
-      delete mapped.bankAccountEncrypted;
-    }
-    
+    mapped.hasBankAccount = !!mapped.hasBankAccount;
+    mapped.hasNationalId = !!mapped.hasNationalId;
     return mapped;
   }
 }

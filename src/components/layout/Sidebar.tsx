@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Building2, FolderTree, Users, Calculator,
   CreditCard, BarChart3, Settings, Receipt, User, Landmark,
   ChevronDown, ChevronRight, FileText, MapPin, Layers, Play,
-  TrendingUp, Shield, Bell, History, FileOutput, WalletCards,
+  TrendingUp, Shield, Bell, History, FileOutput, WalletCards, Upload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
@@ -69,6 +69,8 @@ const COMPANY_ADMIN_NAV: NavItem[] = [
     ],
   },
   { label: 'Payments', path: '/payments', icon: CreditCard, tourId: 'tour-step-5' },
+  // Bulk CSV imports hub (/imports) - links to every import type the role can run.
+  { label: 'Imports', path: '/imports', icon: Upload },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   // Deprecated: Reports (no backend /reports module)
   {
@@ -99,6 +101,7 @@ const HR_NAV: NavItem[] = [
   // Import moved to a button on the Employees page itself (EmployeeList.tsx's
   // Add Employee popup) - no longer a separate nav entry.
   { label: 'Employees', path: '/employees', icon: Users },
+  { label: 'Imports', path: '/imports', icon: Upload },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   // Deprecated: Reports (no backend /reports module)
 ];
@@ -143,6 +146,9 @@ const FINANCE_NAV: NavItem[] = [
 const AUDITOR_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
   { label: 'Audit Logs', path: '/audit', icon: History },
+  // auditor holds WORKER_READ and PAYROLL_READ - read-only list/detail routes.
+  { label: 'Employees', path: '/employees', icon: Users },
+  { label: 'Pay Runs', path: '/payroll/runs', icon: Play },
   { label: 'Exports', path: '/exports', icon: FileOutput },
   { label: 'Jurisdictions', path: '/settings/jurisdictions', icon: MapPin },
 ];

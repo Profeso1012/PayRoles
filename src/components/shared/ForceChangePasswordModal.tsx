@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { KeyRound } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
+import { errorMessage } from '@/lib/errors';
 import Input from '@/components/ui/Input';
 import Button from '@/components/ui/Button';
 
@@ -17,6 +18,7 @@ import Button from '@/components/ui/Button';
  */
 export default function ForceChangePasswordModal() {
   const clearMustChangePassword = useAuthStore((s) => s.clearMustChangePassword);
+  const queryClient = useQueryClient();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -27,7 +29,25 @@ export default function ForceChangePasswordModal() {
         method: 'PATCH',
         body: JSON.stringify({ currentPassword, newPassword }),
       }),
-    onSuccess: () => clearMustChangePassword(),
+    onSuccess: async () => {
+      clearMustChangePassword();
+      // Everything requested while the password was pending was refused with
+      // 403 PASSWORD_CHANGE_REQUIRED (and the 403 isn't retried), so pages
+      // would keep showing "Access Denied" - reload them all now.
+      await queryClient.invalidateQueries();
+      // /users/me was also refused at login, so the display name fell back to
+      // the email address - fetch the real name now that it's allowed.
+      try {
+        const profile = await apiClient<{ firstName: string; lastName: string }>(
+          ENDPOINTS.USERS.ME,
+        );
+        const { user, setSession } = useAuthStore.getState();
+        const fullName = `${profile.firstName} ${profile.lastName}`.trim();
+        if (user && fullName) setSession({ user: { ...user, fullName } });
+      } catch {
+        // Non-fatal - the email stays as the display name.
+      }
+    },
   });
 
   const canSubmit = currentPassword.length > 0 && newPassword.length >= 8 && newPassword === confirmPassword;
@@ -84,7 +104,7 @@ export default function ForceChangePasswordModal() {
 
           {mutation.isError && (
             <p className="text-sm text-red-500">
-              {mutation.error instanceof Error ? mutation.error.message : 'Failed to change password.'}
+              {errorMessage(mutation.error, 'Failed to change password.')}
             </p>
           )}
 

@@ -5,6 +5,7 @@ import { Building2, CheckCircle, ChevronRight, Plus, X } from 'lucide-react';
 import { apiClient, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useToast } from '@/hooks/useToast';
+import { errorMessage, fieldErrors } from '@/lib/errors';
 import type { BackendWorker } from '@/lib/api/types';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
@@ -68,6 +69,15 @@ const STEPS = [
   { id: 4, label: 'Review' },
 ];
 
+// Which wizard step each CreateWorkerDto field lives on, so a 400's
+// per-field messages can send the user back to the right step.
+const FIELD_STEP: Record<string, number> = {
+  firstName: 0, lastName: 0, middleName: 0, email: 0, phone: 0, dateOfBirth: 0, nationalId: 0, annualRentMinor: 0,
+  employeeNumber: 1, hireDate: 1, position: 1, department: 1, legalEntityId: 1, employmentType: 1, managerId: 1,
+  basicSalaryMinor: 2, currency: 2, payFrequency: 2,
+  bankName: 3, bankRoutingCode: 3, bankAccount: 3,
+};
+
 // Real backend EmploymentType enum (common.enum.ts) is lowercase snake_case.
 const employmentTypeOptions = [
   { value: 'full_time', label: 'Full Time' },
@@ -107,6 +117,7 @@ export default function AddEmployee() {
   const navigate = useNavigate();
   const toast = useToast();
   const [step, setStep] = useState(0);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [personal, setPersonal] = useState<PersonalForm>({
     firstName: '', middleName: '', lastName: '', email: '', phone: '',
@@ -138,13 +149,15 @@ export default function AddEmployee() {
     bankName: '', accountNumber: '', routingCode: '',
   });
 
+  // Full list (every page) - the endpoint defaults to limit 20. Distinct key
+  // from LegalEntities.tsx's ['legal-entities'] so the two caches can't
+  // clobber each other with differently-shaped/partial data.
   const { data: legalEntities, isLoading: loadingEntities } = useQuery<LegalEntity[]>({
-    queryKey: ['legal-entities'],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-      const entities = Array.isArray(response) ? response : (response.data || []);
-      return entities;
-    },
+    queryKey: ['legal-entities', 'all'],
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((page) =>
+        `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+      ),
   });
 
   // GET /legal-entities returns deactivated entities too (no server-side
@@ -215,8 +228,20 @@ export default function AddEmployee() {
       toast.success('Employee added successfully');
       navigate(`/employees/${employee.id}`);
     },
-    onError: (err) => toast.error('Failed to add employee', err instanceof Error ? err.message : undefined),
+    onMutate: () => setErrors({}),
+    onError: (err) => {
+      const fe = fieldErrors(err);
+      setErrors(fe);
+      // Jump back to the earliest step with a field error so the message
+      // shows under its input.
+      const steps = Object.keys(fe).map((f) => FIELD_STEP[f]).filter((n) => n !== undefined);
+      if (steps.length) setStep(Math.min(...steps));
+      toast.error('Failed to add employee', errorMessage(err));
+    },
   });
+
+  const fieldError = (name: string) =>
+    errors[name] ? <p className="text-xs text-red-500 mt-1">{errors[name]}</p> : null;
 
   const fieldClass =
     'w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors placeholder:text-cash-green/40';
@@ -306,12 +331,14 @@ export default function AddEmployee() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"
+              error={errors.firstName}
               value={personal.firstName}
               onChange={(e) => setPersonal((f) => ({ ...f, firstName: e.target.value }))}
               placeholder="e.g. Amaka"
             />
             <Input
               label="Last Name"
+              error={errors.lastName}
               value={personal.lastName}
               onChange={(e) => setPersonal((f) => ({ ...f, lastName: e.target.value }))}
               placeholder="e.g. Eze"
@@ -319,6 +346,7 @@ export default function AddEmployee() {
             <div className="col-span-2">
               <Input
                 label="Middle Name (optional)"
+                error={errors.middleName}
                 value={personal.middleName}
                 onChange={(e) => setPersonal((f) => ({ ...f, middleName: e.target.value }))}
                 placeholder="e.g. Chidinma"
@@ -326,12 +354,14 @@ export default function AddEmployee() {
             </div>
             <Input
               label="Email Address"
+              error={errors.email}
               value={personal.email}
               onChange={(e) => setPersonal((f) => ({ ...f, email: e.target.value }))}
               placeholder="amaka@company.com"
             />
             <Input
               label="Phone Number"
+              error={errors.phone}
               value={personal.phone}
               onChange={(e) => setPersonal((f) => ({ ...f, phone: e.target.value }))}
               placeholder="+2348012345678"
@@ -344,10 +374,12 @@ export default function AddEmployee() {
                 value={personal.dateOfBirth}
                 onChange={(e) => setPersonal((f) => ({ ...f, dateOfBirth: e.target.value }))}
               />
+              {fieldError('dateOfBirth')}
             </div>
             <div className="col-span-2">
               <Input
                 label="National ID (NIN)"
+                error={errors.nationalId}
                 value={personal.nationalId}
                 onChange={(e) => setPersonal((f) => ({ ...f, nationalId: e.target.value }))}
                 placeholder="NIN-000000000"
@@ -363,6 +395,7 @@ export default function AddEmployee() {
                 onChange={(e) => setPersonal((f) => ({ ...f, annualRent: e.target.value }))}
                 placeholder="e.g. 1000000"
               />
+              {fieldError('annualRentMinor')}
               <p className="text-xs text-cash-green/60 mt-1">
                 Used only to calculate this employee's Nigerian PAYE rent relief — not a payroll deduction.
               </p>
@@ -378,6 +411,7 @@ export default function AddEmployee() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Employee Number"
+              error={errors.employeeNumber}
               value={employment.employeeNumber}
               onChange={(e) => setEmployment((f) => ({ ...f, employeeNumber: e.target.value }))}
               placeholder="e.g. EMP-001"
@@ -390,10 +424,12 @@ export default function AddEmployee() {
                 value={employment.hireDate}
                 onChange={(e) => setEmployment((f) => ({ ...f, hireDate: e.target.value }))}
               />
+              {fieldError('hireDate')}
             </div>
             <div className="col-span-2">
               <Input
                 label="Job Title / Position"
+                error={errors.position}
                 value={employment.position}
                 onChange={(e) => setEmployment((f) => ({ ...f, position: e.target.value }))}
                 placeholder="e.g. HR Manager"
@@ -401,12 +437,14 @@ export default function AddEmployee() {
             </div>
             <Input
               label="Department (optional)"
+              error={errors.department}
               value={employment.department}
               onChange={(e) => setEmployment((f) => ({ ...f, department: e.target.value }))}
               placeholder="e.g. Human Resources"
             />
             <Select
               label="Legal Entity"
+              error={errors.legalEntityId}
               value={employment.legalEntityId}
               options={leOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, legalEntityId: v }))}
@@ -414,6 +452,7 @@ export default function AddEmployee() {
             />
             <Select
               label="Employment Type"
+              error={errors.employmentType}
               value={employment.employmentType}
               options={employmentTypeOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, employmentType: v }))}
@@ -421,6 +460,7 @@ export default function AddEmployee() {
             <div className="col-span-2">
               <Select
                 label="Manager (optional)"
+                error={errors.managerId}
                 value={employment.managerId}
                 options={managerOptions}
                 onChange={(v) => setEmployment((f) => ({ ...f, managerId: v }))}
@@ -450,10 +490,12 @@ export default function AddEmployee() {
                   placeholder="e.g. 500000"
                   min={0}
                 />
+                {fieldError('basicSalaryMinor')}
                 <p className="text-xs text-cash-green/60 mt-1">Required - Employee's basic salary amount</p>
               </div>
               <Select
                 label="Currency"
+                error={errors.currency}
                 value={compensation.currency}
                 options={CURRENCY_OPTIONS}
                 onChange={(v) => setCompensation((f) => ({ ...f, currency: v }))}
@@ -462,6 +504,7 @@ export default function AddEmployee() {
 
             <Select
               label="Pay Frequency"
+              error={errors.payFrequency}
               value={compensation.payFrequency}
               options={PAY_FREQUENCY_OPTIONS}
               onChange={(v) => setCompensation((f) => ({ ...f, payFrequency: v }))}
@@ -489,12 +532,20 @@ export default function AddEmployee() {
               bankCode={bank.routingCode}
               onChange={(bankName, routingCode) => setBank((f) => ({ ...f, bankName, routingCode }))}
             />
+            {fieldError('bankName')}
+            {fieldError('bankRoutingCode')}
             <Input
               label="Account Number"
+              error={errors.bankAccount}
               value={bank.accountNumber}
               onChange={(e) => setBank((f) => ({ ...f, accountNumber: e.target.value }))}
               placeholder="0123456789"
             />
+            {!bank.accountNumber && (
+              <p className="text-xs text-cash-gold">
+                Without a bank account number this employee will be skipped when salaries are paid out.
+              </p>
+            )}
           </div>
         </div>
       )}

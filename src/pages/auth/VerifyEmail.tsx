@@ -1,18 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle, XCircle } from 'lucide-react';
-import { apiClient, ApiError } from '@/lib/api';
+import { apiClient } from '@/lib/api';
+import { errorCode, errorMessage, fieldErrors } from '@/lib/errors';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { PATHS } from '@/router/paths';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Spinner from '@/components/ui/Spinner';
-
-function errorCode(err: unknown): string | undefined {
-  if (!(err instanceof ApiError) || !err.data || typeof err.data !== 'object') return undefined;
-  const body = err.data as { error?: { code?: string } };
-  return body.error?.code;
-}
 
 type Status = 'verifying' | 'verified' | 'invalid' | 'expired' | 'error';
 
@@ -23,6 +18,9 @@ export default function VerifyEmail() {
   const [email, setEmail] = useState('');
   const [tenantSlug, setTenantSlug] = useState('');
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [resendError, setResendError] = useState('');
+  const [resendFieldErrors, setResendFieldErrors] = useState<Record<string, string>>({});
+  const [verifyError, setVerifyError] = useState('');
 
   useEffect(() => {
     if (!token) {
@@ -39,21 +37,34 @@ export default function VerifyEmail() {
         const code = errorCode(err);
         if (code === 'EMAIL_VERIFICATION_TOKEN_EXPIRED') setStatus('expired');
         else if (code === 'EMAIL_VERIFICATION_TOKEN_INVALID') setStatus('invalid');
-        else setStatus('error');
+        else {
+          setVerifyError(errorMessage(err, ''));
+          setStatus('error');
+        }
       });
   }, [token]);
 
   async function handleResend() {
     if (!email.trim() || !tenantSlug.trim()) return;
     setResendState('sending');
+    setResendError('');
+    setResendFieldErrors({});
     try {
       await apiClient(ENDPOINTS.AUTH.RESEND_VERIFICATION, {
         method: 'POST',
         body: JSON.stringify({ email: email.trim(), tenantSlug: tenantSlug.trim() }),
         skipAuthRedirect: true,
       });
-    } finally {
+      // Success is identical whether or not the account exists (enumeration-safe).
       setResendState('sent');
+    } catch (err) {
+      // e.g. 429 - resends are rate-limited (3/hour) - or a validation error.
+      const fields = fieldErrors(err);
+      setResendFieldErrors(fields);
+      if (Object.keys(fields).length === 0) {
+        setResendError(errorMessage(err, 'Could not resend the verification email. Please try again.'));
+      }
+      setResendState('idle');
     }
   }
 
@@ -101,7 +112,7 @@ export default function VerifyEmail() {
                 ? 'This verification link has expired. Request a new one below.'
                 : status === 'invalid'
                   ? 'This verification link is invalid or has already been used. Request a new one below.'
-                  : 'We could not verify your email right now. Please try again in a moment.'}
+                  : verifyError || 'We could not verify your email right now. Please try again in a moment.'}
             </p>
 
             {status !== 'error' && (
@@ -118,13 +129,16 @@ export default function VerifyEmail() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="you@company.com"
+                      error={resendFieldErrors.email}
                     />
                     <Input
                       label="Company code"
                       value={tenantSlug}
                       onChange={(e) => setTenantSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
                       placeholder="dangote-cement"
+                      error={resendFieldErrors.tenantSlug}
                     />
+                    {resendError && <p className="text-sm text-red-600">{resendError}</p>}
                     <Button
                       variant="primary"
                       className="w-full"

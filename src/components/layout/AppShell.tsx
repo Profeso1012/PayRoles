@@ -15,16 +15,13 @@ export default function AppShell() {
   const setSession = useAuthStore((s) => s.setSession);
   const isPlatformAdmin = role === 'PLATFORM_ADMIN';
 
-  // mustChangePassword is deliberately NOT persisted (see authStore.ts) - it's
-  // only ever set fresh from a login response. Without this, a user who logs
-  // in with a temp password, never changes it, and just closes the tab
-  // (rather than explicitly logging out) would find mustChangePassword reset
-  // to false on their next visit - since isAuthenticated/accessToken ARE
-  // persisted, they'd sail straight into the app still on the temp password,
-  // with the forced-change gate silently bypassed. Re-derive the real value
-  // from the server (User.mustChangePassword) once per app mount instead of
-  // trusting only what login last said. Platform admin sessions have no such
-  // field at all (platform-roles.enum.ts / PlatformUser entity), so skip it there.
+  // Re-derive mustChangePassword from the server once per app mount instead
+  // of trusting only what login last said. While a temporary password is
+  // still pending, the backend refuses GET /users/me with 403
+  // PASSWORD_CHANGE_REQUIRED - lib/api.ts turns that 403 into
+  // setMustChangePassword(true), so this query raises the gate either way.
+  // Platform admin sessions have no such field at all (PlatformUser entity),
+  // so skip it there.
   useQuery({
     queryKey: ['appshell-must-change-password-sync'],
     queryFn: async () => {

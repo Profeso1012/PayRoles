@@ -95,6 +95,12 @@ export const RESOLVED_BATCH_STATUSES: BackendBatchStatus[] = [
   'paid', 'completed', 'reconciled', 'cancelled', 'expired', 'reversed',
 ];
 
+// Newest-batch statuses after which the backend accepts a fresh initiate for
+// the run (TERMINAL_BATCH_STATUSES in batch-status.enum.ts). 'completed' and
+// 'reversed' are terminal too but mean the run was settled, so they aren't
+// offered as restartable here.
+export const RESTARTABLE_BATCH_STATUSES: BackendBatchStatus[] = ['cancelled', 'failed', 'expired'];
+
 // Backend requires N approval records before pending_approval -> approved
 // (approval-workflow.service.ts#getRequiredApprovals) - none=0, dual=2,
 // multi_level=3, every other type needs exactly 1.

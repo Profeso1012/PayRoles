@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, FileBarChart, FileSpreadsheet, Download } from 'lucide-react';
 import { apiClient, downloadFile } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { minorToMajor } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -64,7 +65,7 @@ export default function DisbursementReports() {
       );
       toast.success('Report downloaded');
     } catch (err) {
-      toast.error('Failed to download batch report', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to download batch report', errorMessage(err));
     } finally {
       setBatchDownloading(false);
     }
@@ -79,7 +80,7 @@ export default function DisbursementReports() {
       );
       toast.success('Report downloaded');
     } catch (err) {
-      toast.error('Failed to download summary report', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to download summary report', errorMessage(err));
     } finally {
       setSummaryDownloading(false);
     }

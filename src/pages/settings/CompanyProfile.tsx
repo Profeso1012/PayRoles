@@ -12,6 +12,7 @@ import Select from '@/components/ui/Select';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { BackendTenant } from '@/lib/api/types';
+import { errorMessage } from '@/lib/errors';
 
 const COUNTRY_OPTIONS = [
   { value: 'NG', label: 'Nigeria' },
@@ -64,7 +65,7 @@ export default function CompanyProfile() {
     },
     onError: (err) => {
       setSaveStatus('error');
-      toast.error('Failed to save company profile', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to save company profile', errorMessage(err));
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
   });
@@ -78,7 +79,7 @@ export default function CompanyProfile() {
   }
 
   if (isError || !profile) {
-    return <ErrorState error={error} onRetry={() => refetch()} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={() => refetch()} />;
   }
 
   const isDirty = name !== profile.name || country !== (profile.country || '');

@@ -10,6 +10,7 @@ import Tabs from '@/components/ui/Tabs';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { errorMessage } from '@/lib/errors';
 
 interface StatReport {
   id: string;
@@ -126,7 +127,7 @@ export default function StatutoryReports() {
   const [period, setPeriod] = useState('');
   const [activeTab, setActiveTab] = useState('PAYE');
 
-  const { data: reports = [], isLoading, isError, refetch } = useQuery<StatReport[]>({
+  const { data: reports = [], isLoading, isError, error, refetch } = useQuery<StatReport[]>({
     queryKey: ['statutory-reports', period],
     queryFn: async () => {
       if (!period) return MOCK_REPORTS;
@@ -144,7 +145,7 @@ export default function StatutoryReports() {
   if (isError) {
     return (
       <div style={{ width: '100%', maxWidth: '1100px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
-        <ErrorState onRetry={refetch} />
+        <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />
       </div>
     );
   }

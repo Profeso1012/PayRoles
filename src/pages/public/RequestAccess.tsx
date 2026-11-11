@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import { CheckCircle, MailWarning } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
-import { apiClient, ApiError } from '@/lib/api';
+import { apiClient } from '@/lib/api';
+import { errorCode, errorMessage, fieldErrors } from '@/lib/errors';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { PATHS } from '@/router/paths';
 import type { SignupRequest, SignupResponse } from '@/lib/api/types';
@@ -35,12 +36,6 @@ const EMPTY: FormState = {
   adminEmail: '',
 };
 
-function errorCode(err: unknown): string | undefined {
-  if (!(err instanceof ApiError) || !err.data || typeof err.data !== 'object') return undefined;
-  const body = err.data as { error?: { code?: string } };
-  return body.error?.code;
-}
-
 export default function RequestAccess() {
   const [form, setForm] = useState<FormState>(EMPTY);
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
@@ -54,6 +49,7 @@ export default function RequestAccess() {
   // instead of "check your email" (which would otherwise never arrive).
   const [emailDelivered, setEmailDelivered] = useState(true);
   const [resendState, setResendState] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [resendError, setResendError] = useState('');
 
   function set(field: keyof FormState, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -97,7 +93,22 @@ export default function RequestAccess() {
       if (errorCode(err) === 'TENANT_ALREADY_EXISTS') {
         setErrors((prev) => ({ ...prev, tenantSlug: 'That company code is already taken' }));
       } else {
-        setServerError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+        // Validation errors come back per DTO field (the form's keys match
+        // SignupDto) - show them under the inputs instead of a bare
+        // "Validation failed" banner.
+        const fields = fieldErrors(err);
+        const known = Object.keys(fields).filter((k) => k in EMPTY);
+        if (known.length > 0) {
+          setErrors((prev) => {
+            const next = { ...prev };
+            for (const k of known) next[k as keyof FormState] = fields[k];
+            return next;
+          });
+          const unknown = Object.keys(fields).filter((k) => !(k in EMPTY));
+          if (unknown.length > 0) setServerError(fields[unknown[0]]);
+        } else {
+          setServerError(errorMessage(err));
+        }
       }
     } finally {
       setSubmitting(false);
@@ -109,16 +120,20 @@ export default function RequestAccess() {
   // delivery rather than resubmitting the whole form.
   async function handleResendVerification() {
     setResendState('sending');
+    setResendError('');
     try {
       await apiClient(ENDPOINTS.AUTH.RESEND_VERIFICATION, {
         method: 'POST',
         body: JSON.stringify({ email: form.adminEmail.trim(), tenantSlug: form.tenantSlug.trim() }),
         skipAuthRedirect: true,
       });
-    } finally {
-      // Always resolves as "sent" - the backend responds the same regardless
-      // of whether the account exists or is already verified (enumeration-safe).
+      // A success response is identical whether or not the account exists
+      // (enumeration-safe), so "sent" is all we can say.
       setResendState('sent');
+    } catch (err) {
+      // e.g. 429 - resends are rate-limited (3/hour) - or a delivery failure.
+      setResendError(errorMessage(err, 'Could not resend the verification email. Please try again.'));
+      setResendState('idle');
     }
   }
 
@@ -139,6 +154,11 @@ export default function RequestAccess() {
             You'll need the verification link and a separate temporary-password email to sign in for
             the first time.
           </p>
+          {resendError && (
+            <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 mb-3 text-left">
+              {resendError}
+            </div>
+          )}
           <Button
             variant="primary"
             className="w-full mb-3"

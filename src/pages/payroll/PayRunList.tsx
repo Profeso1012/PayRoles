@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { Plus } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { formatDate } from '@/lib/utils';
-import { apiClientWithMeta } from '@/lib/api';
+import { fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
-import { transformPaginatedResponse, mapPayrollRunFields } from '@/lib/api/transforms';
+import { mapPayrollRunFields } from '@/lib/api/transforms';
 import PageHeader from '@/components/layout/PageHeader';
 import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
@@ -77,6 +77,8 @@ function formatPeriod(periodStart?: string, periodEnd?: string, period?: string)
   return month;
 }
 
+const PAGE_SIZE = 20;
+
 export default function PayRunList() {
   const navigate = useNavigate();
   const role = useAuthStore((s) => s.user?.role);
@@ -95,9 +97,9 @@ export default function PayRunList() {
     queryKey: ['legal-entities-list'],
     queryFn: async () => {
       try {
-        const response = await apiClientWithMeta<any>(`${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ limit: 100 })}`);
-        const entities = Array.isArray(response.data) ? response.data : (response.data?.data || []);
-        return entities;
+        return await fetchAllPages<any>(
+          (p) => `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page: p, limit: 100 })}`,
+        );
       } catch (error) {
         console.error('Failed to fetch legal entities:', error);
         return [];
@@ -113,32 +115,20 @@ export default function PayRunList() {
     })),
   ];
 
-  const { data, isLoading, isError, error } = useQuery<PaginatedResult<PayRun>>({
-    queryKey: ['pay-runs-list', page, status, legalEntityId],
+  // GET /payroll/runs binds @Query() to plain PaginationDto (page/limit/
+  // sortBy/sortDir only) - there is no status/legalEntityId filter, and the
+  // global ValidationPipe's forbidNonWhitelisted rejects the WHOLE request if
+  // an unknown query key is present. So every run is fetched (paging through
+  // the 100-row cap) and filtered + paginated client-side - a single
+  // server page would hide runs past the first 100.
+  const { data: allRuns, isLoading, isError, error } = useQuery<PayRun[]>({
+    queryKey: ['pay-runs-list'],
     queryFn: async () => {
-      // GET /payroll/runs binds @Query() to plain PaginationDto (page/limit/
-      // sortBy/sortDir only) - there is no status field on it, and the global
-      // ValidationPipe's forbidNonWhitelisted rejects the WHOLE request if an
-      // unknown query key like "status" or "legalEntityId" is present. So they
-      // can't be sent to the server at all - filtered client-side below instead.
-      // Always fetch the max page size (100) - previously "All statuses" used
-      // a real 20-row server page while a status filter fetched 100 rows to
-      // filter within, so e.g. draft runs older than the 20 most-recent-created
-      // runs were invisible under "All" but reappeared under "Draft".
-      const params = buildPaginationParams({
-        page: 1,
-        limit: 100,
-        sortBy: 'createdAt',
-        sortDir: 'desc',
-      });
-
-      const response = await apiClientWithMeta<any>(`${ENDPOINTS.PAYROLL.RUNS.LIST}?${params}`);
-
-      // Transform response
-      const paginatedData = transformPaginatedResponse(response.data, response.meta);
-
-      // Transform each payroll run from backend format to frontend format
-      let transformedRuns = paginatedData.data.map((run: any) => {
+      const runs = await fetchAllPages<any>(
+        (p) =>
+          `${ENDPOINTS.PAYROLL.RUNS.LIST}?${buildPaginationParams({ page: p, limit: 100, sortBy: 'createdAt', sortDir: 'desc' })}`,
+      );
+      return runs.map((run: any) => {
         const transformed = mapPayrollRunFields(run, 'toFrontend');
 
         // Build period string from dates if not present
@@ -151,28 +141,24 @@ export default function PayRunList() {
           transformed.payGroupName = transformed.name;
         }
 
-        return transformed;
+        return transformed as PayRun;
       });
-
-      if (status) {
-        // run.status is already frontend-normalized by mapPayrollRunFields
-        // above (e.g. 'pending_approval' -> 'in_review'), and `status` here
-        // comes from the same frontend-facing statusOptions list - compare
-        // directly, no mapPayrollStatus conversion needed (that would wrongly
-        // convert 'in_review' -> 'pending_approval' and mismatch).
-        transformedRuns = transformedRuns.filter((run) => run.status === status);
-      }
-
-      if (legalEntityId) {
-        transformedRuns = transformedRuns.filter((run) => run.legalEntityId === legalEntityId);
-      }
-
-      return {
-        data: transformedRuns,
-        meta: { page: 1, pageSize: transformedRuns.length, total: transformedRuns.length },
-      };
     },
   });
+
+  const data = useMemo<PaginatedResult<PayRun>>(() => {
+    let runs = allRuns ?? [];
+    // run.status is already frontend-normalized by mapPayrollRunFields
+    // (e.g. 'pending_approval' -> 'in_review'), and `status` comes from the
+    // same frontend-facing statusOptions list - compare directly.
+    if (status) runs = runs.filter((run) => run.status === status);
+    if (legalEntityId) runs = runs.filter((run) => run.legalEntityId === legalEntityId);
+    const start = (page - 1) * PAGE_SIZE;
+    return {
+      data: runs.slice(start, start + PAGE_SIZE),
+      meta: { page, pageSize: PAGE_SIZE, total: runs.length },
+    };
+  }, [allRuns, status, legalEntityId, page]);
 
   const columns = [
     {

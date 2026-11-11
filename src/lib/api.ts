@@ -4,6 +4,10 @@ import { extractResponseData } from './api/transforms';
 
 const BASE_URL = API_BASE.replace(/\/+$/, '');
 
+interface ErrorEnvelope {
+  error?: { code?: string; message?: string; fieldErrors?: Record<string, string[]> };
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -14,6 +18,29 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
   }
+
+  /** Backend error code, e.g. 'INVALID_CREDENTIALS'. Undefined for network errors. */
+  get code(): string | undefined {
+    return (this.data as ErrorEnvelope | undefined)?.error?.code;
+  }
+
+  /** Backend per-field validation messages, keyed by DTO field name. */
+  get fieldErrors(): Record<string, string[]> {
+    return (this.data as ErrorEnvelope | undefined)?.error?.fieldErrors ?? {};
+  }
+}
+
+/**
+ * 401 codes that mean "your session token is bad" - only these trigger a
+ * refresh/re-login. Any other 401 is a real answer (e.g. INVALID_CREDENTIALS
+ * from a wrong current password) and must reach the caller: treating every
+ * 401 as an expired session used to log users out for mistyping a password.
+ */
+const SESSION_ERROR_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED', 'UNAUTHORIZED']);
+
+async function peekErrorCode(response: Response): Promise<string | undefined> {
+  const body = (await response.clone().json().catch(() => null)) as ErrorEnvelope | null;
+  return body?.error?.code;
 }
 
 // Flag to prevent multiple simultaneous refresh attempts
@@ -60,13 +87,16 @@ async function refreshAccessToken(): Promise<string> {
         accessToken: string;
         refreshToken: string;
         expiresIn: string;
+        mustChangePassword?: boolean;
       }>(json);
 
-      // Update tokens in store
+      // Update tokens in store. mustChangePassword is re-read from the
+      // database on every refresh, so it's authoritative when present.
       setSession({
         accessToken: data.accessToken,
         refreshToken: data.refreshToken,
         expiresIn: data.expiresIn,
+        mustChangePassword: data.mustChangePassword,
       });
 
       return data.accessToken;
@@ -118,7 +148,77 @@ async function fetchWithTimeout(url: string, options: RequestInit): Promise<Resp
 }
 
 /**
- * Shared fetch + 401/refresh-retry logic. Returns the full parsed envelope
+ * fetch() with the access token attached, plus the session handling every
+ * authenticated call needs - shared by request() and downloadFile():
+ * - a session 401 (SESSION_ERROR_CODES) refreshes the token once and retries;
+ *   if that fails too, the session is cleared and the user sent to login;
+ * - any other 401 is returned untouched for the caller to report;
+ * - a 403 PASSWORD_CHANGE_REQUIRED (still on a temporary password) raises the
+ *   change-password screen instead of looking like a permissions error.
+ */
+async function authedFetch(
+  url: string,
+  init: RequestInit,
+  skipAuthRedirect = false,
+): Promise<Response> {
+  const { accessToken, user, clearSession } = useAuthStore.getState();
+  // Captured before clearSession() wipes `user` - determines which login
+  // screen a session-expiry redirect should land on.
+  const loginPath = user?.role === 'PLATFORM_ADMIN' ? '/platform-login' : '/login';
+
+  const withToken = (token: string | null): RequestInit => ({
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  let response = await fetchWithTimeout(url, withToken(accessToken));
+
+  if (response.status === 401 && !skipAuthRedirect) {
+    const code = await peekErrorCode(response);
+    if (code && !SESSION_ERROR_CODES.has(code)) return response;
+
+    try {
+      const newAccessToken = await refreshAccessToken();
+      response = await fetchWithTimeout(url, withToken(newAccessToken));
+    } catch (error) {
+      // A connectivity failure isn't a session/auth problem - don't relabel it as one.
+      if (error instanceof ApiError && error.isNetworkError) {
+        throw error;
+      }
+      clearSession();
+      window.location.href = loginPath;
+      throw new ApiError(401, 'Session expired. Please sign in again.');
+    }
+
+    if (response.status === 401) {
+      const retryCode = await peekErrorCode(response);
+      if (!retryCode || SESSION_ERROR_CODES.has(retryCode)) {
+        clearSession();
+        window.location.href = loginPath;
+        throw new ApiError(401, 'Session expired. Please sign in again.');
+      }
+    }
+  }
+
+  if (response.status === 403 && (await peekErrorCode(response)) === 'PASSWORD_CHANGE_REQUIRED') {
+    useAuthStore.getState().setMustChangePassword(true);
+  }
+
+  return response;
+}
+
+async function errorFromResponse(response: Response): Promise<ApiError> {
+  const json = await response.json().catch(() => null);
+  const message =
+    (json as ErrorEnvelope | null)?.error?.message ?? 'An unexpected error occurred.';
+  return new ApiError(response.status, message, json);
+}
+
+/**
+ * Shared fetch + session handling. Returns the full parsed envelope
  * (data + meta) - apiClient()/apiClientWithMeta() below just decide how much
  * of it to hand back to the caller.
  */
@@ -126,77 +226,28 @@ async function request<T>(
   path: string,
   options?: RequestInit & { skipAuthRedirect?: boolean },
 ): Promise<EnvelopeResult<T>> {
-  const { accessToken, user, clearSession } = useAuthStore.getState();
-  // Captured before clearSession() wipes `user` - determines which login
-  // screen a session-expiry redirect should land on.
-  const loginPath = user?.role === 'PLATFORM_ADMIN' ? '/platform-login' : '/login';
-
   // A FormData body (file upload) must NOT get an explicit Content-Type -
   // the browser sets it itself, including the multipart boundary token,
   // which forcing 'application/json' here would silently overwrite and
   // break the upload entirely.
   const isFormData = options?.body instanceof FormData;
-  const headers: Record<string, string> = isFormData ? {} : { 'Content-Type': 'application/json' };
-
-  if (accessToken) {
-    headers['Authorization'] = `Bearer ${accessToken}`;
-  }
-
   const { skipAuthRedirect, ...fetchOptions } = options ?? {};
-  const url = `${BASE_URL}${path}`;
 
-  // Make the request
-  let response = await fetchWithTimeout(url, {
-    ...fetchOptions,
-    headers: {
-      ...headers,
-      ...(fetchOptions?.headers as Record<string, string> | undefined),
+  const response = await authedFetch(
+    `${BASE_URL}${path}`,
+    {
+      ...fetchOptions,
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...(fetchOptions.headers as Record<string, string> | undefined),
+      },
     },
-  });
+    skipAuthRedirect,
+  );
 
-  // Handle 401 with token refresh
-  if (response.status === 401 && !skipAuthRedirect) {
-    try {
-      // Attempt to refresh the token
-      const newAccessToken = await refreshAccessToken();
-
-      // Retry the original request with new token
-      headers['Authorization'] = `Bearer ${newAccessToken}`;
-      response = await fetchWithTimeout(url, {
-        ...fetchOptions,
-        headers: {
-          ...headers,
-          ...(fetchOptions?.headers as Record<string, string> | undefined),
-        },
-      });
-
-      // If still 401 after refresh, logout
-      if (response.status === 401) {
-        clearSession();
-        window.location.href = loginPath;
-        throw new ApiError(401, 'Session expired. Please sign in again.');
-      }
-    } catch (error) {
-      // A connectivity failure isn't a session/auth problem - don't relabel it as one.
-      if (error instanceof ApiError && error.isNetworkError) {
-        throw error;
-      }
-      // Refresh failed, redirect to login
-      clearSession();
-      window.location.href = loginPath;
-      throw new ApiError(401, 'Session expired. Please sign in again.');
-    }
-  }
+  if (!response.ok) throw await errorFromResponse(response);
 
   const json = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      (json as { error?: { message?: string } } | null)?.error?.message ??
-      'An unexpected error occurred.';
-    throw new ApiError(response.status, message, json);
-  }
-
   return extractResponseData<T>(json);
 }
 
@@ -252,19 +303,11 @@ export async function fetchAllPages<T>(buildUrl: (page: number) => string): Prom
  * "Download failed" - mirrors request()'s own error handling above.
  */
 export async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
-  const { accessToken } = useAuthStore.getState();
-  const url = `${BASE_URL}${path}`;
-  const response = await fetchWithTimeout(url, {
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-  });
+  // Same session handling as every other call - previously an expired access
+  // token made downloads fail outright instead of refreshing.
+  const response = await authedFetch(`${BASE_URL}${path}`, {});
 
-  if (!response.ok) {
-    const json = await response.json().catch(() => null);
-    const message =
-      (json as { error?: { message?: string } } | null)?.error?.message ??
-      'An unexpected error occurred.';
-    throw new ApiError(response.status, message, json);
-  }
+  if (!response.ok) throw await errorFromResponse(response);
 
   const blob = await response.blob();
   const disposition = response.headers.get('Content-Disposition') || '';

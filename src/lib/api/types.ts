@@ -91,9 +91,12 @@ export interface BackendWorker {
   position: string | null;
   department: string | null; // Plain string field, not a related entity
   managerId: string | null;
-  // Encrypted at rest - the backend never returns decrypted values.
-  nationalIdEncrypted: string | null;
-  bankAccountEncrypted: string | null;
+  // National ID / bank account number are encrypted at rest and never leave
+  // the server (worker.entity.ts @Exclude()s the ciphertext columns) - the
+  // API only exposes whether one is on file. Payouts skip workers whose
+  // hasBankAccount is false.
+  hasNationalId: boolean;
+  hasBankAccount: boolean;
   bankName: string | null;
   bankRoutingCode: string | null;
   // Bigint as string (kobo) - annual rent paid, feeds the Nigerian PAYE rent
@@ -107,9 +110,8 @@ export interface BackendWorker {
 /**
  * POST /workers body (CreateWorkerDto). Note: nationalId/bankAccount are sent
  * PLAIN here - there is no `*Encrypted` request field; the backend encrypts
- * them server-side into the entity's nationalIdEncrypted/bankAccountEncrypted
- * columns. Sending `nationalIdEncrypted`/`bankAccountEncrypted` in the request
- * body is rejected (ValidationPipe has forbidNonWhitelisted: true).
+ * them server-side and only ever returns hasNationalId/hasBankAccount flags.
+ * Unknown fields in the request body are rejected (forbidNonWhitelisted: true).
  */
 export interface CreateWorkerRequest {
   employeeNumber: string;
@@ -147,7 +149,19 @@ export interface CreateWorkerRequest {
 // don't exist on the DTO at all, and forbidNonWhitelisted:true 400s the whole
 // request if they're sent. Mirror that exclusion here instead of a plain
 // Partial<CreateWorkerRequest>, so a caller can't accidentally include them.
-export type UpdateWorkerRequest = Partial<Omit<CreateWorkerRequest, 'basicSalaryMinor' | 'currency' | 'payFrequency'>>;
+//
+// Nullable fields: PartialType adds @IsOptional (which lets null through) and
+// WorkerService.update() Object.assign()s the DTO onto the entity, so sending
+// null clears a nullable column. Only the columns that are nullable on the
+// entity accept it - never null employeeNumber/firstName/lastName/hireDate/
+// legalEntityId/employmentType. nationalId/bankAccount: null or '' clears.
+type ClearableWorkerField =
+  | 'middleName' | 'email' | 'phone' | 'dateOfBirth' | 'position' | 'department'
+  | 'managerId' | 'bankName' | 'bankRoutingCode' | 'annualRentMinor' | 'nationalId' | 'bankAccount';
+type WorkerUpdateBase = Omit<CreateWorkerRequest, 'basicSalaryMinor' | 'currency' | 'payFrequency'>;
+export type UpdateWorkerRequest = Partial<Omit<WorkerUpdateBase, ClearableWorkerField>> & {
+  [K in ClearableWorkerField]?: WorkerUpdateBase[K] | null;
+};
 
 export interface TerminateWorkerRequest {
   terminationDate: string;

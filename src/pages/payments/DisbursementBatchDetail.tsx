@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, BadgeCheck, DownloadCloud, Inbox,
@@ -10,6 +10,8 @@ import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
+import { errorMessage, errorCode, fieldErrors } from '@/lib/errors';
+import { PATHS } from '@/router/paths';
 import PageHeader from '@/components/layout/PageHeader';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
@@ -22,7 +24,7 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import {
   batchStatusVariant, batchStatusLabel, txStatusVariant, txStatusLabel,
-  PROVIDER_LABELS, requiredApprovals,
+  PROVIDER_LABELS, requiredApprovals, RESTARTABLE_BATCH_STATUSES,
 } from './disbursementConstants';
 import type {
   BackendDisbursementBatch, BackendDisbursementTransaction, BackendWallet,
@@ -35,6 +37,19 @@ const BULK_FILE_FORMAT_OPTIONS = [
   { value: 'excel', label: 'Excel (.xlsx)' },
   { value: 'nibss', label: 'NIBSS (pipe-delimited)' },
 ];
+
+/** Statuses the backend lets a batch be cancelled from (BATCH_STATUS_TRANSITIONS). 'queued' is
+ * also allowed there but is only momentary before execution picks it up, so it isn't offered. */
+const CANCELLABLE_BATCH_STATUSES = ['draft', 'pending_approval', 'approved', 'awaiting_schedule', 'awaiting_confirmation'];
+
+type WalletShortfall = { shortfallMinor: number; currency: string; action: 'initiate' | 'retry' };
+
+/** Pulls the shortfall out of a 422 INSUFFICIENT_WALLET_BALANCE error, else null. */
+function walletShortfallFrom(err: unknown, action: WalletShortfall['action']): WalletShortfall | null {
+  if (errorCode(err) !== 'INSUFFICIENT_WALLET_BALANCE') return null;
+  const fields = fieldErrors(err);
+  return { shortfallMinor: Number(fields.shortfallMinor ?? 0), currency: fields.currency ?? 'NGN', action };
+}
 
 function formatPeriod(periodStart?: string, periodEnd?: string, period?: string): string {
   if (period) return period;
@@ -71,6 +86,8 @@ export default function DisbursementBatchDetail() {
   const [markPaidNote, setMarkPaidNote] = useState('');
   const [scheduledAt, setScheduledAt] = useState('');
   const [fundViaWallet, setFundViaWallet] = useState(false);
+  const [walletShortfall, setWalletShortfall] = useState<WalletShortfall | null>(null);
+  const [startNewOpen, setStartNewOpen] = useState(false);
 
   const { data: run, isLoading: runLoading, isError: runIsError, error: runError } = useQuery<PayRun>({
     queryKey: ['pay-run', runId],
@@ -107,7 +124,7 @@ export default function DisbursementBatchDetail() {
   const { data: wallet } = useQuery<BackendWallet>({
     queryKey: ['wallet'],
     queryFn: () => apiClient<BackendWallet>(ENDPOINTS.WALLET.GET),
-    enabled: canManage && !batch,
+    enabled: canManage,
   });
   const walletBalanceMinor = wallet ? Number(wallet.balanceMinor) : 0;
 
@@ -115,12 +132,15 @@ export default function DisbursementBatchDetail() {
     queryKey: ['disbursement-transactions', batch?.id],
     queryFn: () => apiClient<BackendDisbursementTransaction[]>(ENDPOINTS.DISBURSEMENT.TRANSACTIONS(runId!, batch!.id)),
     enabled: !!batch,
+    refetchInterval: batch && (batch.status === 'processing' || batch.status === 'retrying') ? 3000 : false,
   });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['disbursement-batch', runId] });
     qc.invalidateQueries({ queryKey: ['disbursement-batches'] });
     qc.invalidateQueries({ queryKey: ['pay-run', runId] });
+    qc.invalidateQueries({ queryKey: ['disbursement-transactions'] });
+    qc.invalidateQueries({ queryKey: ['wallet'] });
   };
 
   const initiateMutation = useMutation({
@@ -137,42 +157,40 @@ export default function DisbursementBatchDetail() {
       toast.success('Disbursement initiated');
       setScheduledAt('');
       setFundViaWallet(false);
+      setWalletShortfall(null);
+      setStartNewOpen(false);
       invalidate();
-      qc.invalidateQueries({ queryKey: ['wallet'] });
     },
     onError: (err) => {
-      if (err instanceof ApiError && err.data && typeof err.data === 'object') {
-        const body = err.data as { error?: { code?: string; fieldErrors?: Record<string, string[]> } };
-        if (body.error?.code === 'INSUFFICIENT_WALLET_BALANCE') {
-          const shortfallMinor = Number(body.error.fieldErrors?.shortfallMinor?.[0] ?? 0);
-          const currency = body.error.fieldErrors?.currency?.[0] ?? 'NGN';
-          toast.error(
-            'Insufficient wallet balance',
-            `Top up ${formatMoney(shortfallMinor / 100, currency)} more to fund this batch, or initiate without wallet funding.`,
-          );
-          return;
-        }
+      const shortfall = walletShortfallFrom(err, 'initiate');
+      if (shortfall) {
+        setWalletShortfall(shortfall);
+        toast.error(
+          'Insufficient wallet balance',
+          `Top up ${formatMoney(shortfall.shortfallMinor / 100, shortfall.currency)} more to fund this batch, or initiate without wallet funding.`,
+        );
+        return;
       }
-      toast.error('Failed to initiate disbursement', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to initiate disbursement', errorMessage(err, 'Could not initiate the disbursement.'));
     },
   });
 
   const approveMutation = useMutation({
     mutationFn: () => apiClient(ENDPOINTS.DISBURSEMENT.APPROVE(runId!, batch!.id), { method: 'POST', body: JSON.stringify({}) }),
     onSuccess: () => { toast.success('Batch approved'); setApproveOpen(false); invalidate(); },
-    onError: (err) => toast.error('Failed to approve batch', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to approve batch', errorMessage(err)),
   });
 
   const rejectMutation = useMutation({
     mutationFn: () => apiClient(ENDPOINTS.DISBURSEMENT.REJECT(runId!, batch!.id), { method: 'POST', body: JSON.stringify({ remarks: rejectReason }) }),
     onSuccess: () => { toast.success('Batch rejected'); setShowRejectForm(false); setRejectReason(''); invalidate(); },
-    onError: (err) => toast.error('Failed to reject batch', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to reject batch', errorMessage(err)),
   });
 
   const executeMutation = useMutation({
     mutationFn: () => apiClient(ENDPOINTS.DISBURSEMENT.EXECUTE(runId!, batch!.id), { method: 'POST' }),
     onSuccess: () => { toast.success('Execution started'); setExecuteOpen(false); invalidate(); },
-    onError: (err) => toast.error('Failed to execute batch', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to execute batch', errorMessage(err)),
   });
 
   const retryMutation = useMutation({
@@ -181,8 +199,19 @@ export default function DisbursementBatchDetail() {
         method: 'POST',
         body: JSON.stringify(retryProvider ? { provider: retryProvider } : {}),
       }),
-    onSuccess: () => { toast.success('Retry started'); setShowRetryOptions(false); setRetryProvider(''); invalidate(); },
-    onError: (err) => toast.error('Failed to retry batch', err instanceof Error ? err.message : undefined),
+    onSuccess: () => { toast.success('Retry started'); setShowRetryOptions(false); setRetryProvider(''); setWalletShortfall(null); invalidate(); },
+    onError: (err) => {
+      const shortfall = walletShortfallFrom(err, 'retry');
+      if (shortfall) {
+        setWalletShortfall(shortfall);
+        toast.error(
+          'Insufficient wallet balance',
+          `Top up ${formatMoney(shortfall.shortfallMinor / 100, shortfall.currency)} more to retry the failed transactions.`,
+        );
+        return;
+      }
+      toast.error('Failed to retry batch', errorMessage(err));
+    },
   });
 
   const confirmMutation = useMutation({
@@ -192,14 +221,14 @@ export default function DisbursementBatchDetail() {
         body: JSON.stringify({ reference: confirmReference, remarks: confirmRemarks || undefined }),
       }),
     onSuccess: () => { toast.success('Payment confirmed'); setShowConfirmForm(false); setConfirmReference(''); setConfirmRemarks(''); invalidate(); },
-    onError: (err) => toast.error('Failed to confirm payment', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to confirm payment', errorMessage(err)),
   });
 
   const cancelMutation = useMutation({
     mutationFn: () =>
       apiClient(`${ENDPOINTS.DISBURSEMENT.CANCEL(runId!, batch!.id)}?reason=${encodeURIComponent('Cancelled from disbursement detail page')}`, { method: 'DELETE' }),
     onSuccess: () => { toast.success('Batch cancelled'); setCancelOpen(false); invalidate(); },
-    onError: (err) => toast.error('Failed to cancel batch', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to cancel batch', errorMessage(err)),
   });
 
   const markPaidMutation = useMutation({
@@ -209,14 +238,14 @@ export default function DisbursementBatchDetail() {
         body: JSON.stringify({ transactionReference: markPaidReference || undefined, note: markPaidNote || undefined }),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['disbursement-transactions', batch?.id] });
+      // Counts and batch status are recalculated server-side after a mark-paid.
       invalidate();
       toast.success('Transaction marked as paid');
       setMarkPaidTarget(null);
       setMarkPaidReference('');
       setMarkPaidNote('');
     },
-    onError: (err) => toast.error('Failed to mark transaction paid', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to mark transaction paid', errorMessage(err)),
   });
 
   const fileExtension: Record<typeof downloadFormat, string> = { csv: 'csv', excel: 'xlsx', nibss: 'txt' };
@@ -228,7 +257,7 @@ export default function DisbursementBatchDetail() {
       toast.success('File downloaded');
       setDownloadOpen(false);
     } catch (err) {
-      toast.error('Failed to download file', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to download file', errorMessage(err));
     } finally {
       setDownloading(false);
     }
@@ -249,6 +278,28 @@ export default function DisbursementBatchDetail() {
   const needed = requiredApprovals(settings?.approvalWorkflow);
   const enabledProviders = (providers ?? []).filter((p) => p.enabled && p.providerType !== batch?.providerType);
   const providerOptions = enabledProviders.map((p) => ({ value: p.providerType, label: PROVIDER_LABELS[p.providerType] }));
+
+  // The batch query returns the NEWEST batch; the backend accepts a fresh
+  // initiate once it is terminal. A failed batch can also be retried, so the
+  // initiate panel is opt-in there.
+  const canStartNew = !batch || RESTARTABLE_BATCH_STATUSES.includes(batch.status);
+  const showInitiate = !batch || (canStartNew && (batch.status !== 'failed' || startNewOpen));
+
+  // Mirrors RetryEngineService.retryBatch() preconditions.
+  const retryableStatus = !!batch && (batch.status === 'failed' || batch.status === 'partially_paid');
+  const retryPolicy = settings?.retryPolicy;
+  let retryBlockedReason: string | null = null;
+  if (batch && retryableStatus && retryPolicy) {
+    if (!retryPolicy.enabled) retryBlockedReason = 'Retries are disabled in Disbursement Settings';
+    else if (batch.retryCount >= retryPolicy.maxRetries) retryBlockedReason = `Retry limit reached (${retryPolicy.maxRetries})`;
+    else if ((batch.failedCount ?? 0) <= 0) retryBlockedReason = 'No failed transactions to retry';
+  }
+  const canRetry = retryableStatus && !!retryPolicy && !retryBlockedReason;
+
+  const isMarkable = (tx: BackendDisbursementTransaction) =>
+    tx.status === 'failed' ||
+    tx.status === 'skipped' ||
+    (tx.status === 'processing' && batch?.providerType === 'manual_bank_file');
 
   return (
     <div style={{ width: '100%', maxWidth: '1000px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -342,16 +393,34 @@ export default function DisbursementBatchDetail() {
         )}
       </div>
 
-      {/* No batch yet - initiate here */}
-      {!batch && (
+      {walletShortfall && canManage && (
+        <div className="bg-red-50 rounded-xl border border-red-200 p-4 mb-5 text-sm text-red-600">
+          Insufficient wallet balance — top up{' '}
+          <span className="font-semibold">{formatMoney(walletShortfall.shortfallMinor / 100, walletShortfall.currency)}</span>{' '}
+          more to {walletShortfall.action === 'retry' ? 'retry the failed transactions' : 'fund this batch'}.{' '}
+          <Link to={PATHS.PAYMENTS_WALLET} className="font-medium underline">Go to wallet</Link>
+        </div>
+      )}
+
+      {/* No batch yet, or the newest batch is terminal - initiate here */}
+      {showInitiate && (
         <div className="bg-white rounded-xl border border-mint-light p-6 mb-5">
           {canManage ? (
             <div className="flex flex-col gap-4">
               <p className="text-sm text-cash-green/70">
-                No disbursement has been started for this pay run yet. It will use the configured
+                {batch
+                  ? `The latest disbursement for this pay run was ${(batchStatusLabel[batch.status] ?? batch.status).toLowerCase()}. Starting a new one creates a fresh batch for every payslip.`
+                  : 'No disbursement has been started for this pay run yet.'}{' '}
+                It will use the configured
                 provider ({settings ? PROVIDER_LABELS[settings.defaultProvider] : '…'}) and execution
                 policy ({settings?.executionPolicy ?? '…'}) from Disbursement Settings.
               </p>
+              {batch && (batch.successfulCount ?? 0) > 0 && (
+                <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  {batch.successfulCount} worker(s) were already paid in the previous batch. A new batch
+                  pays everyone again — only continue if those payments were reversed.
+                </p>
+              )}
               {settings?.executionPolicy === 'scheduled' && (
                 <Input
                   label="Run at"
@@ -391,7 +460,10 @@ export default function DisbursementBatchDetail() {
                   </label>
                 );
               })()}
-              <div>
+              <div className="flex gap-2">
+                {batch?.status === 'failed' && (
+                  <Button variant="ghost" onClick={() => setStartNewOpen(false)}>Cancel</Button>
+                )}
                 <Button
                   variant="primary"
                   loading={initiateMutation.isPending}
@@ -399,7 +471,7 @@ export default function DisbursementBatchDetail() {
                   onClick={() => initiateMutation.mutate()}
                 >
                   <Play size={15} />
-                  Initiate Disbursement
+                  {batch ? 'Start New Disbursement' : 'Initiate Disbursement'}
                 </Button>
               </div>
             </div>
@@ -431,9 +503,17 @@ export default function DisbursementBatchDetail() {
                 <Play size={14} /> Execute
               </Button>
             )}
-            {(batch.status === 'failed' || batch.status === 'partially_paid') && (
+            {canRetry && (
               <Button variant="secondary" size="sm" onClick={() => setShowRetryOptions((v) => !v)}>
                 <RotateCcw size={14} /> Retry
+              </Button>
+            )}
+            {retryBlockedReason && (
+              <span className="text-xs text-cash-green/60">{retryBlockedReason}</span>
+            )}
+            {batch.status === 'failed' && !startNewOpen && (
+              <Button variant="secondary" size="sm" onClick={() => setStartNewOpen(true)}>
+                <Play size={14} /> Start a new disbursement
               </Button>
             )}
             {batch.status === 'awaiting_confirmation' && (
@@ -446,7 +526,7 @@ export default function DisbursementBatchDetail() {
                 <DownloadCloud size={14} /> Download File
               </Button>
             )}
-            {['draft', 'pending_approval', 'approved', 'awaiting_schedule'].includes(batch.status) && (
+            {CANCELLABLE_BATCH_STATUSES.includes(batch.status) && (
               <Button variant="ghost" size="sm" onClick={() => setCancelOpen(true)}>
                 <XCircle size={14} className="text-red-400" /> Cancel Batch
               </Button>
@@ -488,7 +568,7 @@ export default function DisbursementBatchDetail() {
             </div>
           )}
 
-          {showRetryOptions && (
+          {showRetryOptions && canRetry && (
             <div className="mt-4 pt-4 border-t border-mint-light flex flex-col gap-3">
               <p className="text-sm text-cash-green/70">
                 Retries every failed transaction in this batch with {PROVIDER_LABELS[batch.providerType]} by default.
@@ -552,15 +632,9 @@ export default function DisbursementBatchDetail() {
                         <Badge variant={txStatusVariant[tx.status]} label={txStatusLabel[tx.status]} />
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        {/* The backend allows overriding any non-terminal-success status to
-                            MANUAL (updateStatus() explicitly supports e.g. failed -> manual,
-                            skipped -> manual) - not just 'failed'/'pending'. A manual bank file
-                            batch sits every real transaction in 'processing' the whole time it's
-                            awaiting_confirmation, and a worker whose bank details were missing at
-                            initiate time is 'skipped' forever in this batch (retry only ever
-                            touches failed transactions) - both need this button to be payable
-                            individually without waiting on/duplicating the batch-wide Confirm. */}
-                        {tx.status !== 'successful' && tx.status !== 'manual' && canManage && (
+                        {/* Backend assertMarkable(): only failed/skipped, or processing on a
+                            manual bank file batch (no provider can still move that money). */}
+                        {isMarkable(tx) && canManage && (
                           <Button variant="ghost" size="sm" onClick={() => setMarkPaidTarget(tx)}>
                             Mark Paid
                           </Button>

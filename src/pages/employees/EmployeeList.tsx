@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Layers, Check, AlertCircle, RefreshCw, UserPlus, UploadCloud, DownloadCloud, ChevronRight } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
+import { errorMessage } from '@/lib/errors';
 import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { transformPaginatedResponse, mapWorkerFields } from '@/lib/api/transforms';
@@ -132,16 +133,10 @@ export default function EmployeeList() {
     role === 'hr_officer' ||
     role === 'tenant_admin' ||
     role === 'super_admin';
-  // Matches backend IMPORT_CREATE exactly (roles.enum.ts) - payroll_manager/
-  // payroll_officer hold this but not WORKER_WRITE, so they get the Import
-  // option but never the single-employee one (see the add-choice modal below).
-  const canImport =
-    role === 'hr_manager' ||
-    role === 'hr_officer' ||
-    role === 'payroll_manager' ||
-    role === 'payroll_officer' ||
-    role === 'tenant_admin' ||
-    role === 'super_admin';
+  // The worker CSV upload needs IMPORT_CREATE *and* WORKER_WRITE on the
+  // backend (import.controller.ts), so it's the same roles as canAdd -
+  // payroll_manager/payroll_officer hold IMPORT_CREATE but got a 403 here.
+  const canImport = canAdd;
   // Same gate EmployeeDetail.tsx uses for its own single-worker "Assign Pay
   // Element" button - bulk assignment is the same write, just to many workers
   // at once, so it should require the same permission.
@@ -183,6 +178,12 @@ export default function EmployeeList() {
   async function handleExport(format: BackendExportFormat) {
     setExportMenuOpen(false);
     setExportingFormat(format);
+    // Open the tab synchronously, inside the click gesture - a window.open()
+    // after the awaits below is treated as an unsolicited pop-up and
+    // blocked. It's pointed at the signed URL once the export is ready, and
+    // closed again on any failure/timeout.
+    const downloadWindow = window.open('', '_blank');
+    let handedOff = false;
     try {
       const job = await apiClient<BackendExportJob>(ENDPOINTS.EXPORTS.CREATE, {
         method: 'POST',
@@ -199,7 +200,19 @@ export default function EmployeeList() {
       }
       if (latest.status === 'completed') {
         const { downloadUrl } = await apiClient<{ downloadUrl: string }>(ENDPOINTS.EXPORTS.DOWNLOAD(job.id));
-        window.open(downloadUrl, '_blank');
+        if (downloadWindow && !downloadWindow.closed) {
+          downloadWindow.location.href = downloadUrl;
+          handedOff = true;
+        } else {
+          // Pop-ups fully blocked (or the user closed the tab) - fall back
+          // to a same-page anchor; the signed URL is served as an attachment.
+          const a = document.createElement('a');
+          a.href = downloadUrl;
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
         toast.success('Export ready');
       } else if (latest.status === 'failed') {
         toast.error('Export failed', typeof latest.errorSummary?.message === 'string' ? latest.errorSummary.message : undefined);
@@ -207,8 +220,9 @@ export default function EmployeeList() {
         toast.info('Export is taking longer than expected', 'Check the Exports page shortly for your file.');
       }
     } catch (err) {
-      toast.error('Failed to export employee list', err instanceof Error ? err.message : undefined);
+      toast.error('Failed to export employee list', errorMessage(err));
     } finally {
+      if (!handedOff) downloadWindow?.close();
       setExportingFormat(null);
     }
   }
@@ -305,7 +319,7 @@ export default function EmployeeList() {
         });
         return { worker, status: 'success' };
       } catch (err) {
-        return { worker, status: 'error', error: err instanceof Error ? err.message : 'Failed to assign' };
+        return { worker, status: 'error', error: errorMessage(err, 'Failed to assign') };
       }
     });
     setBulkAssignSubmitting(false);
@@ -314,21 +328,15 @@ export default function EmployeeList() {
   }
 
   // Fetch legal entities (replaces departments for filtering)
+  // Full list (every page) - the endpoint defaults to limit 20, which cut
+  // the filter off for larger tenants. Distinct key from LegalEntities.tsx's
+  // ['legal-entities'] so the two caches can't clobber each other.
   const { data: legalEntities } = useQuery<LegalEntity[]>({
-    queryKey: ['legal-entities'],
-    queryFn: async () => {
-      try {
-        const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-        // Handle both paginated and direct array responses
-        if (Array.isArray(response)) {
-          return response;
-        }
-        return response.data || [];
-      } catch (error) {
-        console.error('Failed to fetch legal entities:', error);
-        return [];
-      }
-    },
+    queryKey: ['legal-entities', 'all'],
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((p) =>
+        `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page: p, limit: 100 })}`,
+      ),
   });
 
   const entityOptions = [
@@ -398,6 +406,13 @@ export default function EmployeeList() {
               {row.firstName} {row.lastName}
             </p>
             <p className="text-xs text-cash-green/70">{row.email}</p>
+            {/* Payouts skip workers with no account number on file. */}
+            {!(row as { hasBankAccount?: boolean }).hasBankAccount && (
+              <p className="flex items-center gap-1 text-xs text-cash-gold mt-0.5">
+                <AlertCircle size={12} />
+                No bank account on file
+              </p>
+            )}
           </div>
         </div>
       ),

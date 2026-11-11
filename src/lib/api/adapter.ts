@@ -31,9 +31,10 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Authentication - Tenant
   // ---------------------------------------------------------------------------
-  // No forgot-password/reset-password/accept-invite here - auth.controller.ts
-  // exposes no such routes. The only password-recovery path on this backend is
-  // an admin-issued PATCH /users/:id/reset-password (see USERS.RESET_PASSWORD).
+  // Password recovery: FORGOT_PASSWORD takes {email, tenantSlug} and always
+  // returns 204 (no account enumeration). It emails a fresh TEMPORARY
+  // PASSWORD - not a reset link - and the user is forced to change it on next
+  // login. Admins can also reset via USERS.RESET_PASSWORD.
   AUTH: {
     SIGNUP: `${API_VERSION}/auth/signup`,
     VERIFY_EMAIL: `${API_VERSION}/auth/verify-email`,
@@ -48,6 +49,7 @@ export const ENDPOINTS = {
     LOGOUT: `${API_VERSION}/auth/logout`,
     ME: `${API_VERSION}/auth/me`,
     REFRESH: `${API_VERSION}/auth/refresh`,
+    FORGOT_PASSWORD: `${API_VERSION}/auth/forgot-password`,
   },
 
   // ---------------------------------------------------------------------------
@@ -283,18 +285,18 @@ export const ENDPOINTS = {
   // ---------------------------------------------------------------------------
   // Tax Engine
   // ---------------------------------------------------------------------------
-  // Import/Export (New in backend)
+  // Import/Export
   // ---------------------------------------------------------------------------
-  // WORKERS_UPLOAD/LIST/STATUS are unused by ImportEmployees.tsx, which
-  // parses the file itself and drives individual POST/PATCH /workers calls
-  // instead. Originally worked around two backend bugs (transaction
-  // poisoning on row failure; blank fields stored as '' instead of NULL,
-  // colliding with Worker.email's unique index) - both are now fixed
-  // (per-row SAVEPOINTs; `|| null`), but the bypass is being kept
-  // deliberately for now. See ImportEmployees.tsx's own comment.
+  // Every upload is multipart (field 'file'), processed in the background:
+  // poll STATUS, then fetch ERRORS for the row-level report. Each type also
+  // needs that area's write permission on top of IMPORT_CREATE.
   IMPORTS: {
     LIST: `${API_VERSION}/imports`,
     WORKERS_UPLOAD: `${API_VERSION}/imports/workers/upload`,
+    COMPENSATION_UPLOAD: `${API_VERSION}/imports/compensation/upload`,
+    PAY_ELEMENTS_UPLOAD: `${API_VERSION}/imports/pay-elements/upload`,
+    ASSIGNMENTS_UPLOAD: `${API_VERSION}/imports/assignments/upload`,
+    LEGAL_ENTITIES_UPLOAD: `${API_VERSION}/imports/legal-entities/upload`,
     STATUS: (id: string) => `${API_VERSION}/imports/${id}`,
     ERRORS: (id: string) => `${API_VERSION}/imports/${id}/errors`,
     CANCEL: (id: string) => `${API_VERSION}/imports/${id}/cancel`,

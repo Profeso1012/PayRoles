@@ -9,6 +9,7 @@ import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { errorMessage } from '@/lib/errors';
 
 interface BankDetailsData {
   bankName: string;
@@ -56,9 +57,9 @@ export default function BankDetails() {
       toast.success('Bank details saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
-    onError: () => {
+    onError: (err) => {
       setSaveStatus('error');
-      toast.error('Failed to save bank details');
+      toast.error('Failed to save bank details', errorMessage(err));
       setTimeout(() => setSaveStatus('idle'), 3000);
     },
   });
@@ -72,7 +73,7 @@ export default function BankDetails() {
   }
 
   if (isError || !data) {
-    return <ErrorState error={error} onRetry={refetch} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />;
   }
 
   const isDirty =

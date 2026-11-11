@@ -76,8 +76,19 @@ export default function DisbursementDashboard() {
   const { data: pendingApproval, isLoading: pendingLoading } = useQuery<BackendDisbursementBatch[]>({
     queryKey: ['disbursement-dashboard-pending'],
     queryFn: () => apiClient<BackendDisbursementBatch[]>(ENDPOINTS.DISBURSEMENT.DASHBOARD.PENDING_APPROVAL),
-    enabled: tab === 'pending',
+    // Fetched up front: it also drives the "Awaiting Approval" stat card.
   });
+
+  // The summary endpoint's completedBatches counts only status 'completed',
+  // which batches rarely reach - most settle at 'paid'. Count every settled
+  // status from the batch list instead (the endpoint caps at 50, so this is
+  // exact up to 50 batches and a lower bound beyond that).
+  const SETTLED_LIMIT = 50;
+  const { data: settledSource } = useQuery<BackendDisbursementBatch[]>({
+    queryKey: ['disbursement-dashboard-batches', SETTLED_LIMIT],
+    queryFn: () => apiClient<BackendDisbursementBatch[]>(ENDPOINTS.DISBURSEMENT.DASHBOARD.BATCHES(SETTLED_LIMIT)),
+  });
+  const settledCount = settledSource?.filter((b) => ['paid', 'reconciled', 'completed'].includes(b.status)).length;
 
   const { data: retryQueue, isLoading: retryLoading } = useQuery<BackendDisbursementBatch[]>({
     queryKey: ['disbursement-dashboard-retry'],
@@ -118,11 +129,16 @@ export default function DisbursementDashboard() {
         <div className="flex justify-center py-8"><Spinner /></div>
       ) : (
         <div className="grid gap-4 mb-6" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
-          <StatCard icon={Clock} label="Awaiting Approval" value={pendingApproval?.length ?? summary.totalBatches - summary.completedBatches - summary.failedBatches} />
+          <StatCard icon={Clock} label="Awaiting Approval" value={pendingLoading ? '…' : pendingApproval?.length ?? '—'} />
           <StatCard icon={CalendarClock} label="Scheduled" value={summary.scheduled} />
           <StatCard icon={ShieldAlert} label="Awaiting Confirmation" value={summary.awaitingConfirmation} tone="bg-mint-light" />
           <StatCard icon={Layers} label="Total Batches" value={summary.totalBatches} />
-          <StatCard icon={CheckCircle2} label="Completed" value={summary.completedBatches} tone="bg-mint-light" />
+          <StatCard
+            icon={CheckCircle2}
+            label="Paid / Completed"
+            value={settledCount === undefined ? '…' : summary.totalBatches > SETTLED_LIMIT ? `${settledCount}+` : settledCount}
+            tone="bg-mint-light"
+          />
           <StatCard icon={XCircle} label="Failed" value={summary.failedBatches} tone="bg-red-100" />
         </div>
       )}

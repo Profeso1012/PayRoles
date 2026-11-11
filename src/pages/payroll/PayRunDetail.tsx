@@ -773,6 +773,10 @@ export default function PayRunDetail() {
                         <td className="px-5 py-3">
                           {emp.disbursementStatus === 'paid' ? (
                             <Badge variant="success" label="Paid" />
+                          ) : emp.disbursementStatus === 'manual' ? (
+                            <Badge variant="success" label="Paid (manual)" />
+                          ) : emp.disbursementStatus === 'skipped' ? (
+                            <Badge variant="draft" label="Skipped" />
                           ) : emp.disbursementStatus === 'failed' ? (
                             <Badge variant="error" label="Failed" />
                           ) : emp.disbursementStatus === 'in_progress' ? (

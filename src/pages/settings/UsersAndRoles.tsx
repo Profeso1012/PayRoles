@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { UserPlus, ShieldOff, ShieldCheck, KeyRound, Pencil, Building2 } from 'lucide-react';
-import { apiClient, apiClientWithMeta, fetchAllPages } from '@/lib/api';
+import { apiClient, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -16,6 +16,7 @@ import ConfirmModal from '@/components/ui/ConfirmModal';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { BackendUser, BackendRole, BackendWorker, BackendLegalEntity, CreateUserRequest, UpdateUserRequest } from '@/lib/api/types';
+import { errorMessage } from '@/lib/errors';
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -88,11 +89,12 @@ export default function UsersAndRoles() {
     refetch,
   } = useQuery<BackendUser[]>({
     queryKey: ['settings-users'],
-    queryFn: async () => {
-      const params = buildPaginationParams({ page: 1, limit: 100 });
-      const { data } = await apiClientWithMeta<BackendUser[]>(`${ENDPOINTS.USERS.LIST}?${params}`);
-      return data;
-    },
+    // PaginationDto caps limit at 100 - page through every user rather than
+    // silently dropping user #101+ from this full-list table.
+    queryFn: () =>
+      fetchAllPages<BackendUser>(
+        (page) => `${ENDPOINTS.USERS.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+      ),
     enabled: isSuperAdmin,
   });
 
@@ -151,7 +153,7 @@ export default function UsersAndRoles() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['user-legal-entities', legalEntityTarget?.id] }),
-    onError: (err) => toast.error('Failed to add legal entity', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to add legal entity', errorMessage(err)),
     onSettled: () => setPendingLegalEntityId(null),
   });
   const removeLegalEntityMutation = useMutation({
@@ -160,7 +162,7 @@ export default function UsersAndRoles() {
       return apiClient(ENDPOINTS.USERS.LEGAL_ENTITY(legalEntityTarget!.id, legalEntityId), { method: 'DELETE' });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['user-legal-entities', legalEntityTarget?.id] }),
-    onError: (err) => toast.error('Failed to remove legal entity', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to remove legal entity', errorMessage(err)),
     onSettled: () => setPendingLegalEntityId(null),
   });
 
@@ -173,7 +175,7 @@ export default function UsersAndRoles() {
       setForm(blankAddUserForm);
       setAddUserOpen(false);
     },
-    onError: (err) => toast.error('Failed to create user', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to create user', errorMessage(err)),
   });
 
   // UpdateUserDto (backend) only supports firstName/lastName/role/phone - there
@@ -198,7 +200,7 @@ export default function UsersAndRoles() {
       toast.success('User updated');
       setEditTarget(null);
     },
-    onError: (err) => toast.error('Failed to update user', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to update user', errorMessage(err)),
   });
 
   function openEdit(u: BackendUser) {
@@ -214,7 +216,7 @@ export default function UsersAndRoles() {
       toast.success('User disabled');
       setDisableTarget(null);
     },
-    onError: (err) => toast.error('Failed to disable user', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to disable user', errorMessage(err)),
   });
 
   const enableMutation = useMutation({
@@ -223,7 +225,7 @@ export default function UsersAndRoles() {
       qc.invalidateQueries({ queryKey: ['settings-users'] });
       toast.success('User re-enabled');
     },
-    onError: (err) => toast.error('Failed to enable user', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to enable user', errorMessage(err)),
   });
 
   // Generates a random temp password server-side and returns it once - never
@@ -239,7 +241,7 @@ export default function UsersAndRoles() {
       toast.success('Password reset', `A new temporary password was emailed to ${resetPasswordTarget?.email ?? 'the user'}.`);
       setResetPasswordTarget(null);
     },
-    onError: (err) => toast.error('Failed to reset password', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to reset password', errorMessage(err)),
   });
 
   if (!isSuperAdmin) {
@@ -275,7 +277,7 @@ export default function UsersAndRoles() {
   }
 
   if (isError) {
-    return <ErrorState error={error} onRetry={() => refetch()} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={() => refetch()} />;
   }
 
   return (

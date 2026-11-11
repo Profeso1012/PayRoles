@@ -10,7 +10,7 @@ import DataTable from '@/components/ui/DataTable';
 import Badge from '@/components/ui/Badge';
 import Button from '@/components/ui/Button';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
-import { batchStatusVariant, batchStatusLabel, RESOLVED_BATCH_STATUSES } from './disbursementConstants';
+import { batchStatusVariant, batchStatusLabel, RESOLVED_BATCH_STATUSES, RESTARTABLE_BATCH_STATUSES } from './disbursementConstants';
 import type { BackendDisbursementBatch } from '@/lib/api/types';
 import type { PayRun } from '@contracts/types/payroll';
 
@@ -68,7 +68,10 @@ export default function PaymentFiles() {
     },
   });
 
-  const readyToInitiateCount = rows.filter((r) => !r.batch).length;
+  // GET .../disbursement returns the newest batch; once that is cancelled,
+  // failed or expired the backend accepts a fresh initiate for the run.
+  const isReadyToInitiate = (r: DisbursementRow) => !r.batch || RESTARTABLE_BATCH_STATUSES.includes(r.batch.status);
+  const readyToInitiateCount = rows.filter(isReadyToInitiate).length;
   const totalNetPending = rows
     .filter((r) => r.batch && !RESOLVED_BATCH_STATUSES.includes(r.batch.status))
     .reduce((sum, r) => sum + r.run.totalNet, 0);
@@ -102,6 +105,7 @@ export default function PaymentFiles() {
               label={batchStatusLabel[row.batch.status] ?? `Unknown (${row.batch.status})`}
             />
             {row.batch.fundedByWallet && <Badge variant="info" label="Wallet" />}
+            {isReadyToInitiate(row) && <span className="text-xs text-cash-green/60">Can restart</span>}
           </div>
         ) : (
           <Badge variant="draft" label="Not started" />
@@ -193,7 +197,7 @@ export default function PaymentFiles() {
             <Clock size={18} className="text-amber-600" />
           </div>
           <div>
-            <p className="text-xs text-cash-green/70 mb-0.5">Not Yet Initiated</p>
+            <p className="text-xs text-cash-green/70 mb-0.5">Ready to Initiate</p>
             <p className="text-2xl font-bold text-deep-cash tabular-nums">{readyToInitiateCount}</p>
           </div>
         </div>

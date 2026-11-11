@@ -15,14 +15,20 @@ import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import EmptyState from '@/components/ui/EmptyState';
 import ConfirmModal from '@/components/ui/ConfirmModal';
+import { errorMessage, fieldErrors } from '@/lib/errors';
 
 interface LegalEntity {
   id: string;
   tenantId: string;
   name: string;
-  country: string;
-  taxIdEncrypted: string | null; // Backend never returns the decrypted value
-  address: string;
+  type?: string | null;
+  registrationNumber?: string | null;
+  currency?: string | null;
+  country: string | null;
+  taxIdEncrypted?: string | null; // Backend never returns the decrypted value
+  address: string | null;
+  phone?: string | null;
+  email?: string | null;
   // 'active' | 'inactive' - set by /deactivate, PATCH-able nowhere else.
   // CreateLegalEntityDto/UpdateLegalEntityDto have no isActive/status field
   // at all, so there is no way to reactivate one once deactivated - not a
@@ -38,7 +44,111 @@ const countryOptions = [
   { value: 'US', label: 'United States' },
 ];
 
-const blankForm = { name: '', country: '', taxId: '', address: '' };
+// Backend LegalEntityType enum (legal-entity.entity.ts).
+const typeOptions = [
+  { value: 'company', label: 'Company' },
+  { value: 'branch', label: 'Branch' },
+  { value: 'subsidiary', label: 'Subsidiary' },
+  { value: 'department', label: 'Department' },
+];
+
+const blankForm = {
+  name: '',
+  type: 'company',
+  registrationNumber: '',
+  country: '',
+  currency: '',
+  taxId: '',
+  address: '',
+  phone: '',
+  email: '',
+};
+type EntityForm = typeof blankForm;
+
+const OPTIONAL_FIELDS = ['registrationNumber', 'country', 'currency', 'address', 'phone', 'email'] as const;
+
+/**
+ * CreateLegalEntityDto/UpdateLegalEntityDto body. Empty optional fields are
+ * omitted on create; on edit they're sent as null so clearing a field really
+ * clears it (the service Object.assign()s the DTO). registrationNumber must
+ * never be '' - it's unique per tenant. taxId is write-only: blank on edit
+ * keeps the stored (encrypted) value.
+ */
+function buildBody(form: EntityForm, isEdit: boolean): Record<string, string | null> {
+  const body: Record<string, string | null> = { name: form.name.trim(), type: form.type };
+  for (const key of OPTIONAL_FIELDS) {
+    const v = key === 'currency' ? form[key].trim().toUpperCase() : form[key].trim();
+    if (v) body[key] = v;
+    else if (isEdit) body[key] = null;
+  }
+  if (form.taxId.trim()) body.taxId = form.taxId.trim();
+  return body;
+}
+
+function EntityFields({
+  form,
+  setForm,
+  errors,
+  isEdit,
+}: {
+  form: EntityForm;
+  setForm: (updater: (f: EntityForm) => EntityForm) => void;
+  errors: Record<string, string>;
+  isEdit: boolean;
+}) {
+  const set = (key: keyof EntityForm) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+  return (
+    <>
+      <Input label="Name" value={form.name} maxLength={255} onChange={set('name')} placeholder="e.g. Acme Corp Nigeria" error={errors.name} />
+      <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        <Select label="Type" value={form.type} options={typeOptions} onChange={(v) => setForm((f) => ({ ...f, type: v }))} error={errors.type} />
+        <Input
+          label="Registration Number"
+          value={form.registrationNumber}
+          maxLength={100}
+          onChange={set('registrationNumber')}
+          placeholder="e.g. RC-123456"
+          hint="Used to match rows in legal-entity CSV imports."
+          error={errors.registrationNumber}
+        />
+        <Select
+          label="Country"
+          value={form.country}
+          options={countryOptions}
+          onChange={(v) => setForm((f) => ({ ...f, country: v }))}
+          placeholder="Select a country"
+          error={errors.country}
+        />
+        <Input
+          label="Currency"
+          value={form.currency}
+          maxLength={3}
+          onChange={(e) => {
+            const value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+            setForm((f) => ({ ...f, currency: value }));
+          }}
+          placeholder="e.g. NGN"
+          error={errors.currency}
+        />
+        <Input label="Phone" value={form.phone} maxLength={50} onChange={set('phone')} placeholder="e.g. +234 801 234 5678" error={errors.phone} />
+        <Input label="Email" type="email" value={form.email} onChange={set('email')} placeholder="e.g. payroll@acme.ng" error={errors.email} />
+      </div>
+      <Input
+        label="Tax ID"
+        value={form.taxId}
+        maxLength={50}
+        onChange={set('taxId')}
+        placeholder={isEdit ? 'Leave blank to keep the current tax ID unchanged' : 'e.g. 12345678-0001'}
+        hint={isEdit ? 'The current tax ID is encrypted and never shown back - only fill this in if you want to replace it.' : undefined}
+        error={errors.taxId}
+      />
+      <Input label="Address" value={form.address} onChange={set('address')} placeholder="e.g. 3 Osborne Road, Ikoyi, Lagos" error={errors.address} />
+    </>
+  );
+}
 
 export default function LegalEntities() {
   const qc = useQueryClient();
@@ -54,6 +164,19 @@ export default function LegalEntities() {
   const [editTarget, setEditTarget] = useState<LegalEntity | null>(null);
   const [editForm, setEditForm] = useState(blankForm);
   const [deleteTarget, setDeleteTarget] = useState<LegalEntity | null>(null);
+  const [addErrors, setAddErrors] = useState<Record<string, string>>({});
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  function closeAdd() {
+    setAddOpen(false);
+    setForm(blankForm);
+    setAddErrors({});
+  }
+  function closeEdit() {
+    setEditTarget(null);
+    setEditForm(blankForm);
+    setEditErrors({});
+  }
 
   const {
     data: legalEntities,
@@ -71,45 +194,46 @@ export default function LegalEntities() {
   });
 
   const addMutation = useMutation({
-    mutationFn: (body: typeof blankForm) =>
-      apiClient(ENDPOINTS.LEGAL_ENTITIES.CREATE, {
+    mutationFn: (f: EntityForm) => {
+      setAddErrors({});
+      return apiClient(ENDPOINTS.LEGAL_ENTITIES.CREATE, {
         method: 'POST',
-        body: JSON.stringify(body),
-      }),
+        body: JSON.stringify(buildBody(f, false)),
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['legal-entities'] });
       qc.invalidateQueries({ queryKey: ['org-overview'] });
       toast.success('Legal entity added');
-      setForm(blankForm);
-      setAddOpen(false);
+      closeAdd();
     },
-    onError: (err) => toast.error('Failed to add legal entity', err instanceof Error ? err.message : undefined),
+    onError: (err) => {
+      setAddErrors(fieldErrors(err));
+      toast.error('Failed to add legal entity', errorMessage(err));
+    },
   });
 
   const editMutation = useMutation({
     mutationFn: () => {
+      setEditErrors({});
       // taxId comes back from the backend only as "Protected" (write-only,
       // encrypted at rest) - leaving the field blank must NOT overwrite an
-      // existing one, so it's only included in the body when actually typed.
-      const body: Record<string, string> = {
-        name: editForm.name,
-        country: editForm.country,
-        address: editForm.address,
-      };
-      if (editForm.taxId.trim()) body.taxId = editForm.taxId.trim();
+      // existing one, so buildBody only includes it when actually typed.
       return apiClient(ENDPOINTS.LEGAL_ENTITIES.UPDATE(editTarget!.id), {
         method: 'PATCH',
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody(editForm, true)),
       });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['legal-entities'] });
       qc.invalidateQueries({ queryKey: ['org-overview'] });
       toast.success('Legal entity updated');
-      setEditTarget(null);
-      setEditForm(blankForm);
+      closeEdit();
     },
-    onError: (err) => toast.error('Failed to update legal entity', err instanceof Error ? err.message : undefined),
+    onError: (err) => {
+      setEditErrors(fieldErrors(err));
+      toast.error('Failed to update legal entity', errorMessage(err));
+    },
   });
 
   const deleteMutation = useMutation({
@@ -121,7 +245,7 @@ export default function LegalEntities() {
       toast.success('Legal entity deactivated');
       setDeleteTarget(null);
     },
-    onError: (err) => toast.error('Failed to deactivate legal entity', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to deactivate legal entity', errorMessage(err)),
   });
 
   if (isLoading) {
@@ -133,7 +257,7 @@ export default function LegalEntities() {
   }
 
   if (isError) {
-    return <ErrorState error={error} onRetry={refetch} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />;
   }
 
   return (
@@ -194,7 +318,7 @@ export default function LegalEntities() {
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
               <thead>
                 <tr style={{ background: '#F7FAF8', borderBottom: '1px solid #CDEFD7' }}>
-                  {['Name', 'Country', 'Tax ID', 'Address', 'Created', 'Actions'].map((h) => (
+                  {['Name', 'Reg. No.', 'Country', 'Tax ID', 'Address', 'Created', 'Actions'].map((h) => (
                     <th
                       key={h}
                       style={{
@@ -234,8 +358,11 @@ export default function LegalEntities() {
                         </span>
                       )}
                     </td>
+                    <td style={{ padding: '0.875rem 1rem', color: '#1F6F4E', whiteSpace: 'nowrap' }}>
+                      {le.registrationNumber || '—'}
+                    </td>
                     <td style={{ padding: '0.875rem 1rem' }}>
-                      <Badge variant="info" label={le.country} />
+                      {le.country ? <Badge variant="info" label={le.country} /> : '—'}
                     </td>
                     <td
                       style={{
@@ -257,7 +384,7 @@ export default function LegalEntities() {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {le.address}
+                      {le.address || '—'}
                     </td>
                     <td
                       style={{
@@ -275,7 +402,18 @@ export default function LegalEntities() {
                             type="button"
                             onClick={() => {
                               setEditTarget(le);
-                              setEditForm({ name: le.name, country: le.country, taxId: '', address: le.address });
+                              setEditErrors({});
+                              setEditForm({
+                                name: le.name,
+                                type: le.type || 'company',
+                                registrationNumber: le.registrationNumber ?? '',
+                                country: le.country ?? '',
+                                currency: le.currency ?? '',
+                                taxId: '',
+                                address: le.address ?? '',
+                                phone: le.phone ?? '',
+                                email: le.email ?? '',
+                              });
                             }}
                             style={{
                               display: 'inline-flex',
@@ -333,41 +471,17 @@ export default function LegalEntities() {
         </div>
       )}
 
-      <Modal isOpen={addOpen} onClose={() => { setAddOpen(false); setForm(blankForm); }} title="Add Legal Entity" size="md">
+      <Modal isOpen={addOpen} onClose={closeAdd} title="Add Legal Entity" size="md">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <Input
-            label="Name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            placeholder="e.g. Acme Corp Nigeria"
-          />
-          <Select
-            label="Country"
-            value={form.country}
-            options={countryOptions}
-            onChange={(v) => setForm((f) => ({ ...f, country: v }))}
-            placeholder="Select a country"
-          />
-          <Input
-            label="Tax ID"
-            value={form.taxId}
-            onChange={(e) => setForm((f) => ({ ...f, taxId: e.target.value }))}
-            placeholder="e.g. RC-0001234"
-          />
-          <Input
-            label="Address"
-            value={form.address}
-            onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-            placeholder="e.g. 3 Osborne Road, Ikoyi, Lagos"
-          />
+          <EntityFields form={form} setForm={setForm} errors={addErrors} isEdit={false} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <Button variant="ghost" onClick={() => { setAddOpen(false); setForm(blankForm); }}>
+            <Button variant="ghost" onClick={closeAdd}>
               Cancel
             </Button>
             <Button
               variant="primary"
               loading={addMutation.isPending}
-              disabled={!form.name || !form.country}
+              disabled={!form.name.trim()}
               onClick={() => addMutation.mutate(form)}
             >
               Add Legal Entity
@@ -378,47 +492,20 @@ export default function LegalEntities() {
 
       <Modal
         isOpen={!!editTarget}
-        onClose={() => { setEditTarget(null); setEditForm(blankForm); }}
+        onClose={closeEdit}
         title={`Edit ${editTarget?.name ?? 'Legal Entity'}`}
         size="md"
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <Input
-            label="Name"
-            value={editForm.name}
-            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Select
-            label="Country"
-            value={editForm.country}
-            options={countryOptions}
-            onChange={(v) => setEditForm((f) => ({ ...f, country: v }))}
-            placeholder="Select a country"
-          />
-          <div>
-            <Input
-              label="Tax ID"
-              value={editForm.taxId}
-              onChange={(e) => setEditForm((f) => ({ ...f, taxId: e.target.value }))}
-              placeholder="Leave blank to keep the current tax ID unchanged"
-            />
-            <p style={{ fontSize: '0.75rem', color: '#1F6F4E', opacity: 0.7, marginTop: '0.25rem' }}>
-              The current tax ID is encrypted and never shown back — only fill this in if you want to replace it.
-            </p>
-          </div>
-          <Input
-            label="Address"
-            value={editForm.address}
-            onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
-          />
+          <EntityFields form={editForm} setForm={setEditForm} errors={editErrors} isEdit />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
-            <Button variant="ghost" onClick={() => { setEditTarget(null); setEditForm(blankForm); }}>
+            <Button variant="ghost" onClick={closeEdit}>
               Cancel
             </Button>
             <Button
               variant="primary"
               loading={editMutation.isPending}
-              disabled={!editForm.name || !editForm.country}
+              disabled={!editForm.name.trim()}
               onClick={() => editMutation.mutate()}
             >
               Save Changes

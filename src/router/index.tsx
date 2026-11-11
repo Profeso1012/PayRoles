@@ -6,6 +6,25 @@ import { RoleGuard } from './guards/RoleGuard';
 import { OrgGuard } from './guards/OrgGuard';
 import { useAuthStore } from '@/store/authStore';
 import { PATHS } from './paths';
+import {
+  WORKER_IMPORT_ROLES,
+  COMPENSATION_IMPORT_ROLES,
+  PAY_ELEMENT_IMPORT_ROLES,
+  ASSIGNMENT_IMPORT_ROLES,
+  LEGAL_ENTITY_IMPORT_ROLES,
+  IMPORTS_HUB_ROLES,
+} from '@/pages/imports/importTypes';
+import type { UserRole } from '@contracts/types/auth';
+
+// Roles holding WORKER_READ (backend roles.enum.ts) - employee list/detail.
+const EMPLOYEE_READ_ROLES: UserRole[] = ['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'read_only', 'auditor'];
+// Roles holding WORKER_WRITE - only these may reach the create/edit screens;
+// payroll_manager/payroll_officer/read_only/auditor would just get a 403 on save.
+const EMPLOYEE_WRITE_ROLES: UserRole[] = ['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer'];
+// Roles that reach /payroll/runs/new and /payroll/pay-elements - unchanged
+// from the original /payroll guard (auditor holds PAYROLL_READ but neither
+// PAYROLL_CREATE nor PAY_ELEMENT_READ).
+const PAYROLL_NON_AUDITOR_ROLES: UserRole[] = ['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'read_only'];
 
 function Loading() {
   return (
@@ -34,11 +53,9 @@ const FeaturesPayments = lazy(() => import('@/pages/public/features/FeaturesPaym
 const Login = lazy(() => import('@/pages/auth/Login'));
 const PlatformLogin = lazy(() => import('@/pages/auth/PlatformLogin'));
 const VerifyEmail = lazy(() => import('@/pages/auth/VerifyEmail'));
-// Deprecated: ForgotPassword, ResetPassword, AcceptInvite - the real
-// auth.controller.ts only exposes signup/verify-email/resend-verification/
-// login/refresh/logout/me, no forgot-password/reset-password/accept-invite
-// routes exist on the backend.
-// const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+// Deprecated: ResetPassword, AcceptInvite - the backend has no reset-link or
+// invite routes (forgot-password emails a temporary password instead).
 // const ResetPassword = lazy(() => import('@/pages/auth/ResetPassword'));
 // const AcceptInvite = lazy(() => import('@/pages/auth/AcceptInvite'));
 
@@ -78,6 +95,13 @@ const ImportEmployees = lazy(() => import('@/pages/employees/ImportEmployees'));
 const EmployeeDetail = lazy(() => import('@/pages/employees/EmployeeDetail'));
 const EditEmployee = lazy(() => import('@/pages/employees/EditEmployee'));
 
+// Bulk CSV imports
+const ImportsHub = lazy(() => import('@/pages/imports/ImportsHub'));
+const CompensationImport = lazy(() => import('@/pages/imports/CsvImportPage').then((m) => ({ default: m.CompensationImport })));
+const PayElementsImport = lazy(() => import('@/pages/imports/CsvImportPage').then((m) => ({ default: m.PayElementsImport })));
+const AssignmentsImport = lazy(() => import('@/pages/imports/CsvImportPage').then((m) => ({ default: m.AssignmentsImport })));
+const LegalEntitiesImport = lazy(() => import('@/pages/imports/CsvImportPage').then((m) => ({ default: m.LegalEntitiesImport })));
+
 // Payroll
 const PayElements = lazy(() => import('@/pages/payroll/PayElements'));
 const FormulaGuide = lazy(() => import('@/pages/payroll/FormulaGuide'));
@@ -112,10 +136,10 @@ const Notifications = lazy(() => import('@/pages/notifications/Notifications'));
 // Employee portal
 const MyPayslips = lazy(() => import('@/pages/employee-portal/MyPayslips'));
 const MyProfile = lazy(() => import('@/pages/employee-portal/MyProfile'));
-// Deprecated: MyBankDetails - the employee_self_service role only holds
-// payslip:read/payslip:download permissions on the real backend, with no
-// worker:read/worker:write grant at all, so there is no reachable endpoint
-// for a self-service user to view or edit their own bank details.
+// MyBankDetails reads/writes the signed-in user's own worker record via
+// GET/PATCH /workers/:id, which needs WORKER_READ + WORKER_WRITE - so it's only
+// routed for EMPLOYEE_WRITE_ROLES. employee_self_service has neither.
+const MyBankDetails = lazy(() => import('@/pages/employee-portal/MyBankDetails'));
 
 function Unauthorized() {
   return (
@@ -167,7 +191,8 @@ export const router = createBrowserRouter([
     children: [
       { path: PATHS.LOGIN, element: w(Login) },
       { path: '/platform-login', element: w(PlatformLogin) },
-      // Deprecated: forgot-password, reset-password, accept-invite (no backend routes)
+      { path: PATHS.FORGOT_PASSWORD, element: w(ForgotPassword) },
+      // Deprecated: reset-password, accept-invite (no backend routes)
     ],
   },
 
@@ -230,27 +255,36 @@ export const router = createBrowserRouter([
         // (its own permission block has no WORKER_READ) - it was listed here
         // and linked from Sidebar.tsx's FINANCE_NAV, but GET /workers 403s for
         // it every time, making that nav entry a permanent dead end. Removed.
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'read_only']}><Outlet /></RoleGuard>,
+        // auditor holds WORKER_READ too - read-only list/detail only.
+        element: <RoleGuard allowedRoles={EMPLOYEE_READ_ROLES}><Outlet /></RoleGuard>,
         children: [
           { index: true, element: w(EmployeeList) },
-          { path: 'new', element: <OrgGuard>{w(AddEmployee)}</OrgGuard> },
+          { path: 'new', element: <RoleGuard allowedRoles={EMPLOYEE_WRITE_ROLES}><OrgGuard>{w(AddEmployee)}</OrgGuard></RoleGuard> },
           { path: ':id', element: w(EmployeeDetail) },
-          { path: ':id/edit', element: w(EditEmployee) },
+          { path: ':id/edit', element: <RoleGuard allowedRoles={EMPLOYEE_WRITE_ROLES}>{w(EditEmployee)}</RoleGuard> },
         ],
       },
-      // Its own route (not nested under /employees) purely so it can be
-      // reached without a sidebar link - EmployeeList.tsx's Add Employee
-      // button is the only entry point now. Role set matches backend
-      // IMPORT_CREATE exactly, same set as the /employees guard above minus
-      // read_only (which holds WORKER_READ but no import:* permission).
+      // Its own route (not nested under /employees) - reached from
+      // EmployeeList.tsx's Add Employee popup and the /imports hub. Backend
+      // POST /imports/workers/upload needs IMPORT_CREATE + WORKER_WRITE, so
+      // payroll_manager/payroll_officer (IMPORT_CREATE only) are excluded -
+      // every upload they tried 403'd.
       {
         path: 'employees/import',
         element: (
-          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'hr_manager', 'hr_officer']}>
+          <RoleGuard allowedRoles={WORKER_IMPORT_ROLES}>
             {w(ImportEmployees)}
           </RoleGuard>
         ),
       },
+
+      // Bulk CSV imports - each guard is IMPORT_CREATE ∩ the type's write
+      // permission (see pages/imports/importTypes.ts).
+      { path: 'imports', element: <RoleGuard allowedRoles={IMPORTS_HUB_ROLES}>{w(ImportsHub)}</RoleGuard> },
+      { path: 'imports/compensation', element: <RoleGuard allowedRoles={COMPENSATION_IMPORT_ROLES}>{w(CompensationImport)}</RoleGuard> },
+      { path: 'imports/pay-elements', element: <RoleGuard allowedRoles={PAY_ELEMENT_IMPORT_ROLES}>{w(PayElementsImport)}</RoleGuard> },
+      { path: 'imports/assignments', element: <RoleGuard allowedRoles={ASSIGNMENT_IMPORT_ROLES}>{w(AssignmentsImport)}</RoleGuard> },
+      { path: 'imports/legal-entities', element: <RoleGuard allowedRoles={LEGAL_ENTITY_IMPORT_ROLES}>{w(LegalEntitiesImport)}</RoleGuard> },
 
       // Payroll
       {
@@ -258,11 +292,12 @@ export const router = createBrowserRouter([
         // read_only holds PAYROLL_READ on the real backend (roles.enum.ts) but
         // was missing here - its own sidebar nav (Sidebar.tsx READ_ONLY_NAV)
         // links to /payroll/runs, so it was a dead link to Unauthorized.
-        element: <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'read_only']}><Outlet /></RoleGuard>,
+        // auditor holds PAYROLL_READ - read-only runs list/detail only.
+        element: <RoleGuard allowedRoles={[...PAYROLL_NON_AUDITOR_ROLES, 'auditor']}><Outlet /></RoleGuard>,
         children: [
-          { path: 'pay-elements', element: w(PayElements) },
+          { path: 'pay-elements', element: <RoleGuard allowedRoles={PAYROLL_NON_AUDITOR_ROLES}>{w(PayElements)}</RoleGuard> },
           { path: 'runs', element: w(PayRunList) },
-          { path: 'runs/new', element: w(PayRunCreate) },
+          { path: 'runs/new', element: <RoleGuard allowedRoles={PAYROLL_NON_AUDITOR_ROLES}>{w(PayRunCreate)}</RoleGuard> },
           { path: 'runs/:id', element: w(PayRunDetail) },
         ],
       },
@@ -277,7 +312,7 @@ export const router = createBrowserRouter([
       {
         path: 'payroll/runs/:runId/payslips/:payslipId',
         element: (
-          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'hr_manager', 'hr_officer', 'employee_self_service']}>
+          <RoleGuard allowedRoles={['tenant_admin', 'super_admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'hr_manager', 'hr_officer', 'auditor', 'employee_self_service']}>
             {w(PayslipViewer)}
           </RoleGuard>
         ),
@@ -346,6 +381,7 @@ export const router = createBrowserRouter([
       // on tenant vs PLATFORM_ADMIN session and hits the matching self-service
       // /users/me or /platform/users/me endpoints. No RoleGuard here.
       { path: 'my-profile', element: w(MyProfile) },
+      { path: 'my-bank-details', element: <RoleGuard allowedRoles={EMPLOYEE_WRITE_ROLES}>{w(MyBankDetails)}</RoleGuard> },
     ],
   },
 

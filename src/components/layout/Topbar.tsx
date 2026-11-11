@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, Bell, LogOut, User, ChevronDown } from 'lucide-react';
+import { Menu, Bell, LogOut, User, ChevronDown, CreditCard } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
@@ -13,6 +13,10 @@ export default function Topbar() {
   const navigate = useNavigate();
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const user = useAuthStore((s) => s.user);
+  // Same roles as the /my-bank-details route (WORKER_READ + WORKER_WRITE).
+  const canManageOwnBank = ['tenant_admin', 'super_admin', 'hr_manager', 'hr_officer'].includes(
+    user?.role ?? '',
+  );
   const clearSession = useAuthStore((s) => s.clearSession);
 
   const [scrolled, setScrolled] = useState(false);
@@ -143,6 +147,15 @@ export default function Topbar() {
                     <User size={15} />
                     My Profile
                   </button>
+                  {canManageOwnBank && (
+                    <button
+                      onClick={() => { setDropdownOpen(false); navigate(PATHS.MY_BANK_DETAILS); }}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-cash-green hover:bg-soft-white hover:text-fresh-cash transition-colors"
+                    >
+                      <CreditCard size={15} />
+                      My Bank Details
+                    </button>
+                  )}
                   <button
                     onClick={handleSignOut}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors"

@@ -7,6 +7,7 @@ import Select from '@/components/ui/Select';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { errorMessage } from '@/lib/errors';
 
 interface DeptCost {
   department: string;
@@ -59,7 +60,7 @@ const periodOptions = [
 export default function CostSummary() {
   const [period, setPeriod] = useState('2026-06');
 
-  const { data, isLoading, isError, refetch } = useQuery<CostData>({
+  const { data, isLoading, isError, error, refetch } = useQuery<CostData>({
     queryKey: ['cost-summary', period],
     queryFn: async () => ({
       departments: MOCK_DEPT,
@@ -78,7 +79,7 @@ export default function CostSummary() {
   if (isError) {
     return (
       <div style={{ width: '100%', maxWidth: '1300px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
-        <ErrorState onRetry={refetch} />
+        <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />
       </div>
     );
   }

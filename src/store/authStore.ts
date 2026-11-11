@@ -19,6 +19,8 @@ interface AuthState {
     mustChangePassword?: boolean;
   }) => void;
   clearMustChangePassword: () => void;
+  /** Raised when any request gets 403 PASSWORD_CHANGE_REQUIRED (see lib/api.ts). */
+  setMustChangePassword: (value: boolean) => void;
   clearSession: () => void;
   /**
    * Coarse role-based check only - real permission enforcement is server-side
@@ -60,6 +62,8 @@ export const useAuthStore = create<AuthState>()(
       },
 
       clearMustChangePassword: () => set({ mustChangePassword: false }),
+
+      setMustChangePassword: (value) => set({ mustChangePassword: value }),
 
       clearSession: () =>
         set({

@@ -8,6 +8,7 @@ import Button from '@/components/ui/Button';
 import MoneyDisplay from '@/components/ui/MoneyDisplay';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { errorMessage } from '@/lib/errors';
 
 interface RegisterRow {
   employeeId: string;
@@ -46,7 +47,7 @@ const periodOptions = [
 export default function PayrollRegister() {
   const [period, setPeriod] = useState('2026-06');
 
-  const { data: rows = [], isLoading, isError, refetch } = useQuery<RegisterRow[]>({
+  const { data: rows = [], isLoading, isError, error, refetch } = useQuery<RegisterRow[]>({
     queryKey: ['payroll-register', period],
     queryFn: async () => {
       return MOCK_REGISTER;
@@ -63,7 +64,7 @@ export default function PayrollRegister() {
   if (isError) {
     return (
       <div style={{ width: '100%', maxWidth: '1200px', margin: '0 auto', padding: '2rem clamp(0.75rem, 4vw, 1.5rem)' }}>
-        <ErrorState onRetry={refetch} />
+        <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />
       </div>
     );
   }

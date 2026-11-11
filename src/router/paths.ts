@@ -9,6 +9,7 @@ export const PATHS = {
   FEATURES_PAYROLL: '/features/payroll',
   FEATURES_PAYMENTS: '/features/payments',
   LOGIN: '/login',
+  FORGOT_PASSWORD: '/forgot-password',
 
   // Platform Admin
   ADMIN: '/admin',
@@ -37,6 +38,13 @@ export const PATHS = {
   EMPLOYEE_IMPORT: '/employees/import',
   EMPLOYEE_DETAIL: (id = ':id') => `/employees/${id}`,
   EMPLOYEE_EDIT: (id = ':id') => `/employees/${id}/edit`,
+
+  // Imports (bulk CSV) - worker import stays at EMPLOYEE_IMPORT above
+  IMPORTS: '/imports',
+  IMPORT_COMPENSATION: '/imports/compensation',
+  IMPORT_PAY_ELEMENTS: '/imports/pay-elements',
+  IMPORT_ASSIGNMENTS: '/imports/assignments',
+  IMPORT_LEGAL_ENTITIES: '/imports/legal-entities',
 
   // Payroll
   PAY_ELEMENTS: '/payroll/pay-elements',

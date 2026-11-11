@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Settings2, RefreshCw, ShieldCheck, PlugZap } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { ENDPOINTS } from '@/lib/api/adapter';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
@@ -203,9 +204,11 @@ export default function DisbursementSettings() {
     mutationFn: () => apiClient(ENDPOINTS.DISBURSEMENT.SETTINGS, { method: 'PATCH', body: JSON.stringify(form) }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['disbursement-settings'] });
+      // Changing defaultProvider re-syncs every provider config's isDefault.
+      qc.invalidateQueries({ queryKey: ['disbursement-providers'] });
       toast.success('Disbursement settings saved');
     },
-    onError: (err) => toast.error('Failed to save settings', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to save settings', errorMessage(err)),
   });
 
   const [providerTarget, setProviderTarget] = useState<BackendProviderType | null>(null);
@@ -236,11 +239,13 @@ export default function DisbursementSettings() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['disbursement-providers'] });
+      // isDefault sets settings.defaultProvider server-side.
+      qc.invalidateQueries({ queryKey: ['disbursement-settings'] });
       toast.success(`${PROVIDER_LABELS[providerTarget!]} configuration saved`);
       setProviderTarget(null);
       setProviderForm(blankProviderForm);
     },
-    onError: (err) => toast.error('Failed to save provider configuration', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to save provider configuration', errorMessage(err)),
   });
 
   async function handleValidate(providerType: BackendProviderType) {
@@ -250,7 +255,7 @@ export default function DisbursementSettings() {
       qc.invalidateQueries({ queryKey: ['disbursement-providers'] });
       toast.success(`${PROVIDER_LABELS[providerType]} credentials validated`);
     } catch (err) {
-      toast.error('Validation failed', err instanceof Error ? err.message : undefined);
+      toast.error('Validation failed', errorMessage(err));
     } finally {
       setValidatingProvider(null);
     }
@@ -262,7 +267,8 @@ export default function DisbursementSettings() {
     setProviderForm({
       environment: existing?.environment ?? 'sandbox',
       enabled: existing?.enabled ?? true,
-      isDefault: existing?.isDefault ?? false,
+      // settings.defaultProvider is the source of truth; config isDefault flags only mirror it.
+      isDefault: settings?.defaultProvider === providerType,
       credentials: {},
       webhookSecret: '',
     });
@@ -485,7 +491,7 @@ export default function DisbursementSettings() {
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {config?.isDefault && <Badge variant="success" label="Default" />}
+                  {settings?.defaultProvider === type && <Badge variant="success" label="Default" />}
                   {config && <Badge variant={config.enabled ? 'info' : 'error'} label={config.enabled ? 'Enabled' : 'Disabled'} />}
                   {config && PROVIDER_CREDENTIAL_FIELDS[type].length > 0 && (
                     <Button
@@ -544,9 +550,11 @@ export default function DisbursementSettings() {
             <input
               type="checkbox"
               checked={providerForm.isDefault}
+              // The backend has no "unset" — a tenant always has a default; pick another provider instead.
+              disabled={!!providerTarget && settings?.defaultProvider === providerTarget}
               onChange={(e) => setProviderForm((f) => ({ ...f, isDefault: e.target.checked }))}
             />
-            Set as default provider
+            {providerTarget && settings?.defaultProvider === providerTarget ? 'Default provider' : 'Set as default provider'}
           </label>
           {providerTarget &&
             PROVIDER_CREDENTIAL_FIELDS[providerTarget].map(({ key, label, placeholder, hint }) => (

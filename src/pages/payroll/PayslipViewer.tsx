@@ -9,6 +9,7 @@ import { formatMoney, formatDate } from '@/lib/utils';
 import { useToast } from '@/hooks/useToast';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
+import { errorMessage } from '@/lib/errors';
 import Button from '@/components/ui/Button';
 import type { Payslip, PayElement } from '@contracts/types/payroll';
 import type { BackendPayslip, BackendPayrollRun, BackendPayrollItem } from '@/lib/api/types';
@@ -29,12 +30,26 @@ export default function PayslipViewer() {
   // Generates (or returns the cached) server-rendered PDF, distinct from the
   // Print button below (which is just the browser's own print-to-PDF of this
   // page's markup).
+  // The tab is opened synchronously in the click handler (window.open after
+  // an await is blocked as a pop-up) and navigated once the URL resolves.
   const downloadPdfMutation = useMutation({
-    mutationFn: () =>
+    mutationFn: (_win: Window | null) =>
       apiClient<{ pdfUrl: string }>(ENDPOINTS.PAYROLL.PAYSLIPS.PDF(runId!, payslipId!), { method: 'POST' }),
-    onSuccess: (result) => window.open(result.pdfUrl, '_blank'),
-    onError: (err) => toast.error('Failed to generate PDF', err instanceof Error ? err.message : undefined),
+    onSuccess: (result, win) => {
+      if (win) win.location.href = result.pdfUrl;
+      else window.location.assign(result.pdfUrl);
+    },
+    onError: (err, win) => {
+      win?.close();
+      toast.error('Failed to generate PDF', errorMessage(err));
+    },
   });
+
+  function openPdf() {
+    const win = window.open('', '_blank');
+    if (win) win.opener = null;
+    downloadPdfMutation.mutate(win);
+  }
 
   const { data: payslip, isLoading, isError, error, refetch } = useQuery<Payslip>({
     queryKey: ['payslip', runId, payslipId],
@@ -120,7 +135,7 @@ export default function PayslipViewer() {
   }
 
   if (isError || !payslip) {
-    return <ErrorState error={error} onRetry={refetch} />;
+    return <ErrorState error={error} message={errorMessage(error, '') || undefined} onRetry={refetch} />;
   }
 
   const earnings = payslip.elements.filter((e: PayElement) => e.type === 'earning');
@@ -144,7 +159,7 @@ export default function PayslipViewer() {
           <Button
             variant="secondary"
             loading={downloadPdfMutation.isPending}
-            onClick={() => downloadPdfMutation.mutate()}
+            onClick={openPdf}
           >
             <Download size={15} />
             Download PDF

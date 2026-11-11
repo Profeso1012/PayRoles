@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/react-query';
 import { Pencil, AlertCircle, CreditCard, User, Briefcase, Receipt, Plus, Layers, X, RefreshCw } from 'lucide-react';
-import { apiClient } from '@/lib/api';
+import { apiClient, fetchAllPages } from '@/lib/api';
+import { errorMessage } from '@/lib/errors';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields, minorToMajor } from '@/lib/api/transforms';
 import { formatDate } from '@/lib/utils';
@@ -101,6 +102,9 @@ const wpeStatusVariant: Record<string, 'success' | 'info' | 'draft'> = {
   expired: 'info',
 };
 
+/** Backend-only worker flags (the Employee contract type predates them). */
+type WorkerFlags = { hasBankAccount?: boolean; hasNationalId?: boolean };
+
 const statusVariant: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
   active: 'success',
   inactive: 'info',
@@ -195,36 +199,39 @@ export default function EmployeeDetail() {
       setTerminationDate('');
       setTerminationReason('');
     },
-    onError: (err) => toast.error('Failed to terminate employee', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to terminate employee', errorMessage(err)),
   });
 
-  const { data: compensations } = useQuery<Compensation[]>({
+  const {
+    data: compensations,
+    isError: compensationsError,
+    error: compensationsErr,
+    refetch: refetchCompensations,
+  } = useQuery<Compensation[]>({
     queryKey: ['worker-compensations', id],
     queryFn: async () => {
-      try {
-        const result = await apiClient<BackendCompensation[]>(
-          ENDPOINTS.COMPENSATION.LIST(id!)
-        );
-        // Transform backend compensation to frontend format. Real field names:
-        // workerId, amountMinor (bigint string), effectiveDate, expiryDate.
-        return result.map((comp) => ({
-          id: comp.id,
-          employeeId: comp.workerId,
-          effectiveFrom: comp.effectiveDate,
-          effectiveTo: comp.expiryDate,
-          grossSalary: parseInt(comp.amountMinor, 10) / 100, // Convert from minor units
-          currency: comp.currency,
-          salaryType: comp.salaryType,
-          payFrequency: comp.payFrequency,
-          breakdown: comp.breakdown ?? undefined,
-          notes: comp.notes ?? undefined,
-          voidedAt: comp.voidedAt ?? undefined,
-          voidReason: comp.voidReason ?? undefined,
-        })) satisfies Compensation[];
-      } catch (error) {
-        console.error('Failed to fetch compensations:', error);
-        return [];
-      }
+      // Errors propagate so the tab shows an error state with the backend's
+      // message - previously they were swallowed into an empty list, which
+      // read as "this worker has no salary" rather than "couldn't load".
+      const result = await apiClient<BackendCompensation[]>(
+        ENDPOINTS.COMPENSATION.LIST(id!)
+      );
+      // Transform backend compensation to frontend format. Real field names:
+      // workerId, amountMinor (bigint string), effectiveDate, expiryDate.
+      return result.map((comp) => ({
+        id: comp.id,
+        employeeId: comp.workerId,
+        effectiveFrom: comp.effectiveDate,
+        effectiveTo: comp.expiryDate,
+        grossSalary: parseInt(comp.amountMinor, 10) / 100, // Convert from minor units
+        currency: comp.currency,
+        salaryType: comp.salaryType,
+        payFrequency: comp.payFrequency,
+        breakdown: comp.breakdown ?? undefined,
+        notes: comp.notes ?? undefined,
+        voidedAt: comp.voidedAt ?? undefined,
+        voidReason: comp.voidReason ?? undefined,
+      })) satisfies Compensation[];
     },
     enabled: !!id && tab === 'compensation',
   });
@@ -232,7 +239,11 @@ export default function EmployeeDetail() {
   const { data: payslips } = useQuery<Payslip[]>({
     queryKey: ['worker-payslips', id],
     queryFn: async () => {
-      const backendPayslips = await apiClient<any[]>(ENDPOINTS.WORKERS.PAYSLIPS(id!));
+      // Paginated (PaginationDto, default limit 20) - fetch every page so
+      // long-tenured workers don't silently lose older payslips.
+      const backendPayslips = await fetchAllPages<any>(
+        (page) => `${ENDPOINTS.WORKERS.PAYSLIPS(id!)}?${buildPaginationParams({ page, limit: 100 })}`,
+      );
 
       // periodStart/periodEnd are denormalized onto the payslip itself
       // (payslip.entity.ts) - previously this fired one GET /payroll/runs/:id
@@ -270,8 +281,10 @@ export default function EmployeeDetail() {
   const { data: workerPayElements } = useQuery<BackendWorkerPayElement[]>({
     queryKey: ['worker-pay-elements', id],
     queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.WORKER_PAY_ELEMENTS.LIST(id!));
-      return Array.isArray(response) ? response : (response.data || []);
+      // Paginated (default limit 20) - fetch every page.
+      return fetchAllPages<BackendWorkerPayElement>(
+        (page) => `${ENDPOINTS.WORKER_PAY_ELEMENTS.LIST(id!)}?${buildPaginationParams({ page, limit: 100 })}`,
+      );
     },
     enabled: !!id && tab === 'payElements',
   });
@@ -307,13 +320,17 @@ export default function EmployeeDetail() {
 
   const assignPayElementMutation = useMutation({
     mutationFn: () => {
-      const body: CreateWorkerPayElementRequest | UpdateWorkerPayElementRequest = {
+      // On edit, an emptied endDate/remarks is sent as null - the backend's
+      // update() treats null as "clear" (undefined would keep the old value,
+      // so an open-ended assignment could never be re-opened).
+      const clear = editingWpeId ? null : undefined;
+      const body = {
         payElementId: wpeForm.payElementId,
         calculationMethod: wpeForm.calculationMethod,
         effectiveDate: wpeForm.effectiveDate,
-        endDate: wpeForm.endDate || undefined,
-        remarks: wpeForm.remarks || undefined,
-      };
+        endDate: wpeForm.endDate || clear,
+        remarks: wpeForm.remarks.trim() || clear,
+      } as CreateWorkerPayElementRequest | UpdateWorkerPayElementRequest;
       if (wpeForm.calculationMethod === 'fixed') {
         body.amountMinor = Math.round(parseFloat(wpeForm.amount) * 100);
       } else if (wpeForm.calculationMethod === 'percentage_of_basic' || wpeForm.calculationMethod === 'percentage_of_gross') {
@@ -343,7 +360,7 @@ export default function EmployeeDetail() {
     onError: (err) =>
       toast.error(
         editingWpeId ? 'Failed to update pay element' : 'Failed to assign pay element',
-        err instanceof Error ? err.message : undefined,
+        errorMessage(err),
       ),
   });
 
@@ -391,7 +408,7 @@ export default function EmployeeDetail() {
       toast.success('Pay element unassigned');
       setUnassignTarget(null);
     },
-    onError: (err) => toast.error('Failed to unassign pay element', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to unassign pay element', errorMessage(err)),
   });
 
   const addCompensationMutation = useMutation({
@@ -427,7 +444,7 @@ export default function EmployeeDetail() {
       setAddCompOpen(false);
       setCompForm(blankCompForm);
     },
-    onError: (err) => toast.error('Failed to add compensation', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to add compensation', errorMessage(err)),
   });
 
   // UpdateCompensationDto is a full PartialType of create, so any field is
@@ -469,7 +486,7 @@ export default function EmployeeDetail() {
       toast.success('Compensation updated');
       setEditCompTarget(null);
     },
-    onError: (err) => toast.error('Failed to update compensation', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to update compensation', errorMessage(err)),
   });
 
   const voidCompensationMutation = useMutation({
@@ -485,7 +502,7 @@ export default function EmployeeDetail() {
       setVoidCompTarget(null);
       setVoidReason('');
     },
-    onError: (err) => toast.error('Failed to void compensation', err instanceof Error ? err.message : undefined),
+    onError: (err) => toast.error('Failed to void compensation', errorMessage(err)),
   });
 
   function openEditCompensation(comp: Compensation) {
@@ -525,6 +542,7 @@ export default function EmployeeDetail() {
   }
 
   const fullName = `${employee.firstName} ${employee.lastName}`;
+  const hasBankAccount = !!(employee as WorkerFlags).hasBankAccount;
   
   // Build breadcrumb with legal entity if available
   const breadcrumbs = legalEntity
@@ -586,12 +604,13 @@ export default function EmployeeDetail() {
         </div>
       </div>
 
-      {/* No bank details warning */}
-      {!employee.bankName && (
+      {/* No bank account warning - payouts skip workers with no account
+          number on file (hasBankAccount), regardless of bankName. */}
+      {!hasBankAccount && (
         <div className="flex items-start gap-3 p-4 bg-cash-gold/10 border border-cash-gold/30 rounded-lg mb-6">
           <AlertCircle size={18} className="text-cash-gold shrink-0 mt-0.5" />
           <p className="text-sm text-deep-cash">
-            No bank details on file. Salary cannot be disbursed until bank information is added.
+            No bank account on file. This employee will be skipped when salaries are paid out until a bank account number is added.
           </p>
         </div>
       )}
@@ -628,7 +647,7 @@ export default function EmployeeDetail() {
               <dd className="text-deep-cash">{employee.dateOfBirth ? formatDate(employee.dateOfBirth) : '—'}</dd>
               <dt className="text-cash-green/60">National ID</dt>
               <dd className="text-deep-cash font-mono text-xs">
-                {employee.nationalId === '****' ? 'Protected' : employee.nationalId || '—'}
+                {(employee as WorkerFlags).hasNationalId ? 'On file' : '—'}
               </dd>
               <dt className="text-cash-green/60">Annual Rent Paid</dt>
               <dd className="text-deep-cash">
@@ -667,21 +686,23 @@ export default function EmployeeDetail() {
               <CreditCard size={16} className="text-cash-green" />
               <h3 className="text-sm font-semibold text-deep-cash">Bank Details</h3>
             </div>
-            {!employee.bankName ? (
+            {!hasBankAccount && !employee.bankName ? (
               <p className="text-sm text-cash-green/60">No bank details on file.</p>
             ) : (
               <div className="flex flex-col gap-3">
                 <div className="flex items-center justify-between p-4 rounded-lg border border-fresh-cash/40 bg-mint-light/30">
                   <div>
-                    <p className="text-sm font-medium text-deep-cash">{employee.bankName}</p>
-                    <p className="text-xs text-cash-green font-mono mt-0.5">
-                      {employee.bankAccount === '****' ? 'Protected' : employee.bankAccount}
-                    </p>
+                    <p className="text-sm font-medium text-deep-cash">{employee.bankName || 'Bank not specified'}</p>
+                    {hasBankAccount ? (
+                      <p className="text-xs text-cash-green font-mono mt-0.5">•••• Account number on file</p>
+                    ) : (
+                      <p className="text-xs text-cash-gold mt-0.5">No bank account on file - payouts will skip this employee</p>
+                    )}
                     {employee.bankRoutingCode && (
                       <p className="text-xs text-cash-green/60 mt-0.5">Routing code: {employee.bankRoutingCode}</p>
                     )}
                   </div>
-                  <Badge variant="success" label="Primary" />
+                  {hasBankAccount && <Badge variant="success" label="Primary" />}
                 </div>
               </div>
             )}
@@ -704,7 +725,13 @@ export default function EmployeeDetail() {
               </Button>
             )}
           </div>
-          {!compensations ? (
+          {compensationsError ? (
+            <ErrorState
+              message={errorMessage(compensationsErr, 'Failed to load compensation history.')}
+              error={compensationsErr}
+              onRetry={() => refetchCompensations()}
+            />
+          ) : !compensations ? (
             <div className="flex justify-center py-8"><Spinner /></div>
           ) : compensations.length === 0 ? (
             <p className="text-sm text-cash-green/60">No compensation records found.</p>

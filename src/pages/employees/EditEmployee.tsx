@@ -6,6 +6,7 @@ import { apiClient, fetchAllPages } from '@/lib/api';
 import { ENDPOINTS, buildPaginationParams } from '@/lib/api/adapter';
 import { mapWorkerFields } from '@/lib/api/transforms';
 import { useToast } from '@/hooks/useToast';
+import { errorMessage, fieldErrors } from '@/lib/errors';
 import PageHeader from '@/components/layout/PageHeader';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -14,7 +15,7 @@ import BankSelect from '@/components/ui/BankSelect';
 import Spinner from '@/components/ui/Spinner';
 import ErrorState from '@/components/ui/ErrorState';
 import type { Employee } from '@contracts/types/employee';
-import type { BackendWorker } from '@/lib/api/types';
+import type { BackendWorker, UpdateWorkerRequest } from '@/lib/api/types';
 
 interface LegalEntity {
   id: string;
@@ -57,6 +58,20 @@ const STEPS = [
   { id: 3, label: 'Review' },
 ];
 
+// Which wizard step each UpdateWorkerDto field lives on, so a 400's
+// per-field messages can send the user back to the right step.
+const FIELD_STEP: Record<string, number> = {
+  firstName: 0, lastName: 0, middleName: 0, email: 0, phone: 0, dateOfBirth: 0, nationalId: 0, annualRentMinor: 0,
+  employeeNumber: 1, hireDate: 1, position: 1, department: 1, legalEntityId: 1, employmentType: 1, managerId: 1,
+  bankName: 2, bankRoutingCode: 2, bankAccount: 2,
+};
+
+/** Optional text field -> trimmed value, or null when the user emptied it
+ * (UpdateWorkerDto's @IsOptional lets null through and WorkerService.update()
+ * Object.assign()s it, clearing the nullable column; undefined would keep the
+ * old value). Only used for fields that are nullable on the Worker entity. */
+const orNull = (v: string) => v.trim() || null;
+
 const employmentTypeOptions = [
   { value: 'full_time', label: 'Full Time' },
   { value: 'part_time', label: 'Part Time' },
@@ -71,6 +86,7 @@ export default function EditEmployee() {
   const qc = useQueryClient();
   const toast = useToast();
   const [step, setStep] = useState(0);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const [personal, setPersonal] = useState<PersonalForm>({
     firstName: '', middleName: '', lastName: '', email: '', phone: '',
@@ -91,12 +107,15 @@ export default function EditEmployee() {
     bankName: '', accountNumber: '', routingCode: '',
   });
 
+  // Full list (every page) - the endpoint defaults to limit 20. Distinct key
+  // from LegalEntities.tsx's ['legal-entities'] so the two caches can't
+  // clobber each other with differently-shaped/partial data.
   const { data: legalEntities } = useQuery<LegalEntity[]>({
-    queryKey: ['legal-entities'],
-    queryFn: async () => {
-      const response = await apiClient<any>(ENDPOINTS.LEGAL_ENTITIES.LIST);
-      return Array.isArray(response) ? response : (response.data || []);
-    },
+    queryKey: ['legal-entities', 'all'],
+    queryFn: () =>
+      fetchAllPages<LegalEntity>((page) =>
+        `${ENDPOINTS.LEGAL_ENTITIES.LIST}?${buildPaginationParams({ page, limit: 100 })}`,
+      ),
   });
 
   const leOptions = (legalEntities ?? [])
@@ -136,7 +155,8 @@ export default function EditEmployee() {
         email: employee.email || '',
         phone: employee.phone || '',
         dateOfBirth: employee.dateOfBirth || '',
-        nationalId: employee.nationalId === '****' ? '' : employee.nationalId || '',
+        // The stored NIN is never returned (only hasNationalId) - blank means "keep".
+        nationalId: '',
         annualRent: employee.annualRentMinor ? String(parseInt(employee.annualRentMinor, 10) / 100) : '',
       });
       setEmployment({
@@ -150,7 +170,8 @@ export default function EditEmployee() {
       });
       setBank({
         bankName: employee.bankName || '',
-        accountNumber: employee.bankAccount === '****' ? '' : employee.bankAccount || '',
+        // The stored account number is never returned (only hasBankAccount) - blank means "keep".
+        accountNumber: '',
         routingCode: employee.bankRoutingCode || '',
       });
     }
@@ -158,25 +179,30 @@ export default function EditEmployee() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
-      const payload: Record<string, string | number | undefined> = {
+      // Required columns (names, employeeNumber, hireDate, legalEntityId,
+      // employmentType) are never sent as null - blank just leaves them as-is.
+      // Nullable optional columns are sent as null when emptied, so clearing
+      // a field actually clears it instead of silently keeping the old value.
+      const payload: UpdateWorkerRequest = {
         firstName: personal.firstName,
-        middleName: personal.middleName || undefined,
+        middleName: orNull(personal.middleName),
         lastName: personal.lastName,
-        email: personal.email || undefined,
-        phone: personal.phone || undefined,
-        dateOfBirth: personal.dateOfBirth || undefined,
-        annualRentMinor: personal.annualRent ? Math.round(parseFloat(personal.annualRent) * 100) : undefined,
+        email: orNull(personal.email),
+        phone: orNull(personal.phone),
+        dateOfBirth: personal.dateOfBirth || null,
+        annualRentMinor: personal.annualRent ? Math.round(parseFloat(personal.annualRent) * 100) : null,
         employeeNumber: employment.employeeNumber || undefined,
-        position: employment.position || undefined,
-        department: employment.department || undefined,
+        position: orNull(employment.position),
+        department: orNull(employment.department),
         legalEntityId: employment.legalEntityId || undefined,
-        managerId: employment.managerId || undefined,
-        employmentType: employment.employmentType || undefined,
+        managerId: employment.managerId || null,
+        employmentType: (employment.employmentType || undefined) as UpdateWorkerRequest['employmentType'],
         hireDate: employment.hireDate || undefined,
-        bankName: bank.bankName || undefined,
-        bankRoutingCode: bank.routingCode || undefined,
+        bankName: orNull(bank.bankName),
+        bankRoutingCode: orNull(bank.routingCode),
       };
 
+      // Blank = keep the stored (never-returned) value.
       if (personal.nationalId) payload.nationalId = personal.nationalId;
       if (bank.accountNumber) payload.bankAccount = bank.accountNumber;
 
@@ -191,8 +217,22 @@ export default function EditEmployee() {
       toast.success('Employee updated successfully');
       navigate(`/employees/${id}`);
     },
-    onError: (err) => toast.error('Failed to update employee', err instanceof Error ? err.message : undefined),
+    onMutate: () => setErrors({}),
+    onError: (err) => {
+      const fe = fieldErrors(err);
+      setErrors(fe);
+      // Jump back to the earliest step with a field error so the message
+      // shows under its input.
+      const steps = Object.keys(fe).map((f) => FIELD_STEP[f]).filter((n) => n !== undefined);
+      if (steps.length) setStep(Math.min(...steps));
+      toast.error('Failed to update employee', errorMessage(err));
+    },
   });
+
+  const fieldError = (name: string) =>
+    errors[name] ? <p className="text-xs text-red-500 mt-1">{errors[name]}</p> : null;
+  const hasNationalId = !!(employee as { hasNationalId?: boolean } | undefined)?.hasNationalId;
+  const hasBankAccount = !!(employee as { hasBankAccount?: boolean } | undefined)?.hasBankAccount;
 
   const fieldClass =
     'w-full bg-white border border-mint-light rounded-md px-3 py-2.5 text-sm text-deep-cash outline-none focus:border-fresh-cash transition-colors placeholder:text-cash-green/40';
@@ -262,28 +302,33 @@ export default function EditEmployee() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="First Name"
+              error={errors.firstName}
               value={personal.firstName}
               onChange={(e) => setPersonal((f) => ({ ...f, firstName: e.target.value }))}
             />
             <Input
               label="Last Name"
+              error={errors.lastName}
               value={personal.lastName}
               onChange={(e) => setPersonal((f) => ({ ...f, lastName: e.target.value }))}
             />
             <div className="col-span-2">
               <Input
                 label="Middle Name (optional)"
+                error={errors.middleName}
                 value={personal.middleName}
                 onChange={(e) => setPersonal((f) => ({ ...f, middleName: e.target.value }))}
               />
             </div>
             <Input
               label="Email Address"
+              error={errors.email}
               value={personal.email}
               onChange={(e) => setPersonal((f) => ({ ...f, email: e.target.value }))}
             />
             <Input
               label="Phone Number"
+              error={errors.phone}
               value={personal.phone}
               onChange={(e) => setPersonal((f) => ({ ...f, phone: e.target.value }))}
             />
@@ -295,13 +340,15 @@ export default function EditEmployee() {
                 value={personal.dateOfBirth}
                 onChange={(e) => setPersonal((f) => ({ ...f, dateOfBirth: e.target.value }))}
               />
+              {fieldError('dateOfBirth')}
             </div>
             <div className="col-span-2">
               <Input
                 label="National ID (NIN)"
+                error={errors.nationalId}
                 value={personal.nationalId}
                 onChange={(e) => setPersonal((f) => ({ ...f, nationalId: e.target.value }))}
-                placeholder={employee.nationalId === '****' ? 'Protected - enter to replace' : ''}
+                placeholder={hasNationalId ? 'On file - enter a new one to replace' : 'Not on file'}
               />
             </div>
             <div className="col-span-2">
@@ -313,6 +360,7 @@ export default function EditEmployee() {
                 value={personal.annualRent}
                 onChange={(e) => setPersonal((f) => ({ ...f, annualRent: e.target.value }))}
               />
+              {fieldError('annualRentMinor')}
             </div>
           </div>
         </div>
@@ -325,6 +373,7 @@ export default function EditEmployee() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Employee Number"
+              error={errors.employeeNumber}
               value={employment.employeeNumber}
               onChange={(e) => setEmployment((f) => ({ ...f, employeeNumber: e.target.value }))}
             />
@@ -336,16 +385,19 @@ export default function EditEmployee() {
                 value={employment.hireDate}
                 onChange={(e) => setEmployment((f) => ({ ...f, hireDate: e.target.value }))}
               />
+              {fieldError('hireDate')}
             </div>
             <div className="col-span-2">
               <Input
                 label="Job Title / Position"
+                error={errors.position}
                 value={employment.position}
                 onChange={(e) => setEmployment((f) => ({ ...f, position: e.target.value }))}
               />
             </div>
             <Input
               label="Department (optional)"
+              error={errors.department}
               value={employment.department}
               onChange={(e) => setEmployment((f) => ({ ...f, department: e.target.value }))}
             />
@@ -356,6 +408,7 @@ export default function EditEmployee() {
                 options={leOptions}
                 onChange={(v) => setEmployment((f) => ({ ...f, legalEntityId: v }))}
                 placeholder="Select legal entity"
+                error={errors.legalEntityId}
               />
               {leOptions.length === 0 && (
                 <p className="text-xs text-red-500 mt-1">
@@ -370,6 +423,7 @@ export default function EditEmployee() {
               value={employment.employmentType}
               options={employmentTypeOptions}
               onChange={(v) => setEmployment((f) => ({ ...f, employmentType: v }))}
+              error={errors.employmentType}
             />
             <div className="col-span-2">
               <Select
@@ -378,7 +432,17 @@ export default function EditEmployee() {
                 options={managerOptions}
                 onChange={(v) => setEmployment((f) => ({ ...f, managerId: v }))}
                 placeholder="Select this employee's manager"
+                error={errors.managerId}
               />
+              {employment.managerId && (
+                <button
+                  type="button"
+                  className="text-xs text-cash-green underline mt-1"
+                  onClick={() => setEmployment((f) => ({ ...f, managerId: '' }))}
+                >
+                  Remove manager
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -395,12 +459,20 @@ export default function EditEmployee() {
               bankCode={bank.routingCode}
               onChange={(bankName, routingCode) => setBank((f) => ({ ...f, bankName, routingCode }))}
             />
+            {fieldError('bankName')}
+            {fieldError('bankRoutingCode')}
             <Input
               label="Account Number"
+              error={errors.bankAccount}
               value={bank.accountNumber}
               onChange={(e) => setBank((f) => ({ ...f, accountNumber: e.target.value }))}
-              placeholder={employee.bankAccount === '****' ? 'Protected - enter to replace' : '0123456789'}
+              placeholder={hasBankAccount ? 'On file - enter a new one to replace' : '0123456789'}
             />
+            {!hasBankAccount && !bank.accountNumber && (
+              <p className="text-xs text-cash-gold">
+                No bank account on file - payouts will skip this employee until one is added.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -423,7 +495,7 @@ export default function EditEmployee() {
               <dt className="text-cash-green/60">Date of Birth</dt>
               <dd className="text-deep-cash">{personal.dateOfBirth || '—'}</dd>
               <dt className="text-cash-green/60">National ID</dt>
-              <dd className="text-deep-cash">{personal.nationalId ? 'Updated' : (employee?.nationalId === '****' ? 'Protected (Unchanged)' : '—')}</dd>
+              <dd className="text-deep-cash">{personal.nationalId ? 'Updated' : (hasNationalId ? 'On file (unchanged)' : '—')}</dd>
               <dt className="text-cash-green/60">Annual Rent</dt>
               <dd className="text-deep-cash">{personal.annualRent ? `₦${Number(personal.annualRent).toLocaleString()}` : '—'}</dd>
             </dl>
@@ -453,7 +525,7 @@ export default function EditEmployee() {
               <dt className="text-cash-green/60">Bank</dt>
               <dd className="text-deep-cash">{bank.bankName || '—'}</dd>
               <dt className="text-cash-green/60">Account</dt>
-              <dd className="text-deep-cash font-mono">{bank.accountNumber ? 'Updated' : (employee?.bankAccount === '****' ? 'Protected (Unchanged)' : '—')}</dd>
+              <dd className="text-deep-cash font-mono">{bank.accountNumber ? 'Updated' : (hasBankAccount ? 'On file (unchanged)' : 'No bank account on file')}</dd>
             </dl>
           </div>
         </div>
