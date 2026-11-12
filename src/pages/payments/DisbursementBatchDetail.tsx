@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-  ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, BadgeCheck, DownloadCloud, Inbox,
+  ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, BadgeCheck, DownloadCloud, Inbox, RefreshCw,
 } from 'lucide-react';
 import { apiClient, downloadFile, ApiError } from '@/lib/api';
 import { ENDPOINTS } from '@/lib/api/adapter';
@@ -193,6 +193,49 @@ export default function DisbursementBatchDetail() {
     onError: (err) => toast.error('Failed to execute batch', errorMessage(err)),
   });
 
+  // Settlement normally arrives by webhook; this asks the provider directly
+  // for transfers still processing (POST .../sync-status).
+  const syncStatusMutation = useMutation({
+    mutationFn: () =>
+      apiClient<{
+        checked: number;
+        successful: number;
+        failed: number;
+        reversed: number;
+        stillProcessing: number;
+        awaitingOtp: number;
+      }>(ENDPOINTS.DISBURSEMENT.SYNC_STATUS(runId!, batch!.id), { method: 'POST' }),
+    onSuccess: (r) => {
+      invalidate();
+      const provider = PROVIDER_LABELS[batch!.providerType] ?? 'The payment provider';
+      const settled = r.successful + r.failed + r.reversed;
+      if (r.awaitingOtp > 0) {
+        toast.warning(
+          `${provider} is holding ${r.awaitingOtp} transfer(s) for OTP approval`,
+          `Approve them in the ${provider} dashboard, or turn off OTP for transfers, then check again.`,
+        );
+      } else if (settled === 0) {
+        toast.info(
+          'Still processing',
+          `${provider} hasn't finished these transfers yet. Check again in a few minutes.`,
+        );
+      } else {
+        toast.success(
+          `Updated ${settled} payment(s)`,
+          [
+            r.successful && `${r.successful} paid`,
+            r.failed && `${r.failed} failed`,
+            r.reversed && `${r.reversed} reversed`,
+            r.stillProcessing && `${r.stillProcessing} still processing`,
+          ]
+            .filter(Boolean)
+            .join(', '),
+        );
+      }
+    },
+    onError: (err) => toast.error("Couldn't check with the payment provider", errorMessage(err)),
+  });
+
   const retryMutation = useMutation({
     mutationFn: () =>
       apiClient(ENDPOINTS.DISBURSEMENT.RETRY(runId!, batch!.id), {
@@ -295,6 +338,12 @@ export default function DisbursementBatchDetail() {
     else if ((batch.failedCount ?? 0) <= 0) retryBlockedReason = 'No failed transactions to retry';
   }
   const canRetry = retryableStatus && !!retryPolicy && !retryBlockedReason;
+  // API providers settle transfers asynchronously - offer a manual status
+  // check while any are still processing (a bank file has nothing to ask).
+  const hasInFlightTransfers =
+    !!batch &&
+    batch.providerType !== 'manual_bank_file' &&
+    (transactions ?? []).some((tx) => tx.status === 'processing');
 
   const isMarkable = (tx: BackendDisbursementTransaction) =>
     tx.status === 'failed' ||
@@ -501,6 +550,16 @@ export default function DisbursementBatchDetail() {
             {(batch.status === 'approved' || batch.status === 'awaiting_schedule') && (
               <Button variant="primary" size="sm" onClick={() => setExecuteOpen(true)}>
                 <Play size={14} /> Execute
+              </Button>
+            )}
+            {hasInFlightTransfers && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={syncStatusMutation.isPending}
+                onClick={() => syncStatusMutation.mutate()}
+              >
+                <RefreshCw size={14} /> Check status with {PROVIDER_LABELS[batch.providerType] ?? 'provider'}
               </Button>
             )}
             {canRetry && (

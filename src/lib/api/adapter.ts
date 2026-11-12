@@ -231,6 +231,10 @@ export const ENDPOINTS = {
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}`,
     BULK_FILE: (runId: string, batchId: string, format: 'csv' | 'excel' | 'nibss' = 'csv') =>
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/bulk-file?format=${format}`,
+    // Asks the provider about transfers still processing and settles the
+    // finished ones - the fallback when settlement webhooks don't arrive.
+    SYNC_STATUS: (runId: string, batchId: string) =>
+      `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/sync-status`,
     MARK_TRANSACTION_PAID: (runId: string, batchId: string, transactionId: string) =>
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/transactions/${transactionId}/mark-paid`,
     SETTINGS: `${API_VERSION}/disbursement/settings`,
