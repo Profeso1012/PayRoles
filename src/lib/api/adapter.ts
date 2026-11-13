@@ -233,6 +233,9 @@ export const ENDPOINTS = {
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/bulk-file?format=${format}`,
     // Asks the provider about transfers still processing and settles the
     // finished ones - the fallback when settlement webhooks don't arrive.
+    // What paying the run out would draw from the wallet (same selection as
+    // initiate), with the balance and any shortfall to top up first.
+    PREVIEW: (runId: string) => `${API_VERSION}/payroll/runs/${runId}/disbursement/preview`,
     SYNC_STATUS: (runId: string, batchId: string) =>
       `${API_VERSION}/payroll/runs/${runId}/disbursement/${batchId}/sync-status`,
     MARK_TRANSACTION_PAID: (runId: string, batchId: string, transactionId: string) =>
@@ -276,6 +279,11 @@ export const ENDPOINTS = {
     TRANSACTIONS: `${API_VERSION}/wallet/transactions`,
     PROVISION_VIRTUAL_ACCOUNT: `${API_VERSION}/wallet/virtual-account`,
     INITIATE_TOPUP: `${API_VERSION}/wallet/topup`,
+    // Checks a checkout top-up with the provider and credits it if paid -
+    // works even when the provider's webhook never arrives. Idempotent.
+    VERIFY_TOPUP: (reference: string) =>
+      `${API_VERSION}/wallet/topup/${encodeURIComponent(reference)}/verify`,
+    TOPUPS: (status?: string) => `${API_VERSION}/wallet/topups${status ? `?status=${status}` : ''}`,
   },
 
   // Platform-admin-only: the platform's own shared Paystack/Flutterwave

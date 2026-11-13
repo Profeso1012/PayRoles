@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ThumbsUp, ThumbsDown, Play, RotateCcw, XCircle, BadgeCheck, DownloadCloud, Inbox, RefreshCw,
@@ -10,6 +10,10 @@ import { mapPayrollRunFields, minorToMajor } from '@/lib/api/transforms';
 import { formatMoney, formatDate } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/useToast';
+import WalletTopUpPrompt, {
+  readResumeIntent,
+  type TopUpRequest,
+} from '@/components/shared/WalletTopUpPrompt';
 import { errorMessage, errorCode, fieldErrors } from '@/lib/errors';
 import { PATHS } from '@/router/paths';
 import PageHeader from '@/components/layout/PageHeader';
@@ -87,6 +91,8 @@ export default function DisbursementBatchDetail() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [fundViaWallet, setFundViaWallet] = useState(false);
   const [walletShortfall, setWalletShortfall] = useState<WalletShortfall | null>(null);
+  const [topUpRequest, setTopUpRequest] = useState<TopUpRequest | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [startNewOpen, setStartNewOpen] = useState(false);
 
   const { data: run, isLoading: runLoading, isError: runIsError, error: runError } = useQuery<PayRun>({
@@ -126,6 +132,18 @@ export default function DisbursementBatchDetail() {
     queryFn: () => apiClient<BackendWallet>(ENDPOINTS.WALLET.GET),
     enabled: canManage,
   });
+
+  const { data: payoutPreview } = useQuery<{
+    payableMinor: number;
+    payableCount: number;
+    skippedCount: number;
+    walletBalanceMinor: number;
+    shortfallMinor: number;
+  }>({
+    queryKey: ['payout-preview', runId, wallet?.balanceMinor],
+    queryFn: () => apiClient(ENDPOINTS.DISBURSEMENT.PREVIEW(runId!)),
+    enabled: !!runId && fundViaWallet,
+  });
   const walletBalanceMinor = wallet ? Number(wallet.balanceMinor) : 0;
 
   const { data: transactions, isLoading: transactionsLoading } = useQuery<BackendDisbursementTransaction[]>({
@@ -164,11 +182,14 @@ export default function DisbursementBatchDetail() {
     onError: (err) => {
       const shortfall = walletShortfallFrom(err, 'initiate');
       if (shortfall) {
+        // Backstop for a balance that changed since the page loaded.
         setWalletShortfall(shortfall);
-        toast.error(
-          'Insufficient wallet balance',
-          `Top up ${formatMoney(shortfall.shortfallMinor / 100, shortfall.currency)} more to fund this batch, or initiate without wallet funding.`,
-        );
+        setTopUpRequest({
+          action: 'initiate',
+          requiredMinor: walletBalanceMinor + shortfall.shortfallMinor,
+          balanceMinor: walletBalanceMinor,
+          currency: shortfall.currency,
+        });
         return;
       }
       toast.error('Failed to initiate disbursement', errorMessage(err, 'Could not initiate the disbursement.'));
@@ -247,10 +268,13 @@ export default function DisbursementBatchDetail() {
       const shortfall = walletShortfallFrom(err, 'retry');
       if (shortfall) {
         setWalletShortfall(shortfall);
-        toast.error(
-          'Insufficient wallet balance',
-          `Top up ${formatMoney(shortfall.shortfallMinor / 100, shortfall.currency)} more to retry the failed transactions.`,
-        );
+        setTopUpRequest({
+          action: 'retry',
+          requiredMinor: walletBalanceMinor + shortfall.shortfallMinor,
+          balanceMinor: walletBalanceMinor,
+          currency: shortfall.currency,
+          retryProvider: retryProvider || undefined,
+        });
         return;
       }
       toast.error('Failed to retry batch', errorMessage(err));
@@ -306,6 +330,23 @@ export default function DisbursementBatchDetail() {
     }
   };
 
+  // Back from a wallet top-up (?resume=1): reopen the step the user was on so
+  // finishing the payout is one confirmation away.
+  useEffect(() => {
+    if (searchParams.get('resume') !== '1' || runLoading || batchLoading) return;
+    const intent = readResumeIntent(true);
+    setSearchParams({}, { replace: true });
+    if (!intent || intent.runId !== runId) return;
+    setFundViaWallet(true);
+    if (intent.action === 'execute') setExecuteOpen(true);
+    else if (intent.action === 'retry') {
+      setRetryProvider(intent.retryProvider ?? '');
+      setShowRetryOptions(true);
+    } else if (batch) setStartNewOpen(true);
+    toast.success('Wallet topped up', 'Review the details and confirm to continue the payout.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, runLoading, batchLoading]);
+
   if (runLoading || batchLoading) {
     return <div className="flex justify-center py-24"><Spinner /></div>;
   }
@@ -338,6 +379,32 @@ export default function DisbursementBatchDetail() {
     else if ((batch.failedCount ?? 0) <= 0) retryBlockedReason = 'No failed transactions to retry';
   }
   const canRetry = retryableStatus && !!retryPolicy && !retryBlockedReason;
+
+  // Wallet-funded payouts: check the balance BEFORE calling the API and, if
+  // it's short, offer to top up exactly the difference (the server-side 422
+  // stays as a backstop). After the top-up the user is brought back here.
+  const failedAmountMinor = (transactions ?? [])
+    .filter((tx) => tx.status === 'failed')
+    .reduce((sum, tx) => sum + Number(tx.amountMinor), 0);
+
+  function guardWallet(
+    action: TopUpRequest['action'],
+    requiredMinor: number | undefined,
+    proceed: () => void,
+  ) {
+    if (requiredMinor !== undefined && requiredMinor > walletBalanceMinor) {
+      setTopUpRequest({
+        action,
+        requiredMinor,
+        balanceMinor: walletBalanceMinor,
+        currency: wallet?.currency,
+        retryProvider: action === 'retry' ? retryProvider || undefined : undefined,
+      });
+      return;
+    }
+    proceed();
+  }
+
   // API providers settle transfers asynchronously - offer a manual status
   // check while any are still processing (a bank file has nothing to ask).
   const hasInFlightTransfers =
@@ -482,7 +549,7 @@ export default function DisbursementBatchDetail() {
               )}
               {(() => {
                 const providerIsFileBased = settings?.defaultProvider === 'manual_bank_file';
-                const walletFundingDisabled = walletBalanceMinor <= 0 || providerIsFileBased;
+                const walletFundingDisabled = providerIsFileBased;
                 return (
                   <label className={`flex items-start gap-2 text-sm ${!walletFundingDisabled ? 'text-deep-cash' : 'text-cash-green/40'}`}>
                     <input
@@ -502,7 +569,14 @@ export default function DisbursementBatchDetail() {
                       ) : wallet && (
                         <span className="block text-xs mt-0.5 opacity-80">
                           Available: {formatMoney(minorToMajor(wallet.balanceMinor, wallet.currency), wallet.currency)}
-                          {walletBalanceMinor <= 0 && ' — top up the wallet to use this'}
+                          {fundViaWallet && payoutPreview && (
+                            <>
+                              {' · '}This payout needs{' '}
+                              {formatMoney(payoutPreview.payableMinor / 100, wallet.currency)}
+                              {payoutPreview.shortfallMinor > 0 &&
+                                ` — you'll be asked to top up ${formatMoney(payoutPreview.shortfallMinor / 100, wallet.currency)}`}
+                            </>
+                          )}
                         </span>
                       )}
                     </span>
@@ -517,7 +591,11 @@ export default function DisbursementBatchDetail() {
                   variant="primary"
                   loading={initiateMutation.isPending}
                   disabled={settings?.executionPolicy === 'scheduled' && !scheduledAt}
-                  onClick={() => initiateMutation.mutate()}
+                  onClick={() =>
+                    fundViaWallet
+                      ? guardWallet('initiate', payoutPreview?.payableMinor, () => initiateMutation.mutate())
+                      : initiateMutation.mutate()
+                  }
                 >
                   <Play size={15} />
                   {batch ? 'Start New Disbursement' : 'Initiate Disbursement'}
@@ -548,7 +626,15 @@ export default function DisbursementBatchDetail() {
               </>
             )}
             {(batch.status === 'approved' || batch.status === 'awaiting_schedule') && (
-              <Button variant="primary" size="sm" onClick={() => setExecuteOpen(true)}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() =>
+                  batch.fundedByWallet
+                    ? guardWallet('execute', Number(batch.totalAmountMinor), () => setExecuteOpen(true))
+                    : setExecuteOpen(true)
+                }
+              >
                 <Play size={14} /> Execute
               </Button>
             )}
@@ -643,7 +729,16 @@ export default function DisbursementBatchDetail() {
               )}
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => { setShowRetryOptions(false); setRetryProvider(''); }}>Cancel</Button>
-                <Button variant="primary" size="sm" loading={retryMutation.isPending} onClick={() => retryMutation.mutate()}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={retryMutation.isPending}
+                  onClick={() =>
+                    batch.fundedByWallet
+                      ? guardWallet('retry', failedAmountMinor, () => retryMutation.mutate())
+                      : retryMutation.mutate()
+                  }
+                >
                   Retry Failed Transactions
                 </Button>
               </div>
@@ -717,6 +812,8 @@ export default function DisbursementBatchDetail() {
         confirmLabel="Approve"
         isLoading={approveMutation.isPending}
       />
+
+      <WalletTopUpPrompt runId={runId!} request={topUpRequest} onClose={() => setTopUpRequest(null)} />
 
       <ConfirmModal
         isOpen={executeOpen}

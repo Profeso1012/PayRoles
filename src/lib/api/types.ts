@@ -1027,10 +1027,13 @@ export type BackendWalletTopupStatus = 'pending' | 'completed' | 'failed' | 'exp
 
 /** POST /wallet/topup - one-off hosted checkout link for a specific amount. */
 export interface BackendWalletTopupRequest {
+  id?: string;
   provider: BackendProviderType;
   amountMinor: number;
   checkoutUrl: string;
   status: BackendWalletTopupStatus;
+  providerReference?: string;
+  createdAt?: string;
 }
 
 export interface BackendDisbursementBatch {

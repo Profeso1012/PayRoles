@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft, WalletCards, Building2, Copy, Check, ArrowDownCircle, ArrowUpCircle, RotateCcw,
   Link2, ExternalLink,
@@ -68,6 +68,7 @@ function needsIdentity(err: unknown): boolean {
 export default function Wallet() {
   const navigate = useNavigate();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const role = useAuthStore((s) => s.user?.role);
   // Same permission split as DisbursementSettings/PaymentFiles: DISBURSEMENT_READ
   // (viewing balance/ledger) is broader than DISBURSEMENT_CONFIGURE (provisioning
@@ -145,6 +146,36 @@ export default function Wallet() {
     onError: (err) => toast.error('Failed to start top-up', errorMessage(err)),
   });
 
+  // Checkout top-ups the provider hasn't confirmed to us yet - normally the
+  // webhook settles these; "Check payment" asks the provider directly.
+  const { data: pendingTopupsData } = useQuery<BackendWalletTopupRequest[]>({
+    queryKey: ['wallet-topups', 'pending'],
+    queryFn: () => apiClient<BackendWalletTopupRequest[]>(ENDPOINTS.WALLET.TOPUPS('pending')),
+    enabled: canView,
+  });
+  const pendingTopups = (pendingTopupsData ?? []).filter((t) => t.providerReference);
+
+  const verifyTopupMutation = useMutation({
+    mutationFn: (reference: string) =>
+      apiClient<{ status: string; amountMinor: number }>(ENDPOINTS.WALLET.VERIFY_TOPUP(reference), {
+        method: 'POST',
+      }),
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ['wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['wallet-topups'] });
+      const currency = wallet?.currency ?? 'NGN';
+      if (r.status === 'completed') {
+        toast.success('Top-up confirmed', `${minorToMajor(r.amountMinor, currency).toLocaleString('en-NG', { style: 'currency', currency })} added to your wallet.`);
+      } else if (r.status === 'failed' || r.status === 'expired') {
+        toast.error("Payment didn't go through", 'The payment provider reports this top-up as unsuccessful.');
+      } else {
+        toast.info('Not confirmed yet', "The payment provider hasn't confirmed this payment yet. Try again in a few minutes.");
+      }
+    },
+    onError: (err) => toast.error("Couldn't check this top-up", errorMessage(err)),
+  });
+
   if (!canView) {
     return (
       <div style={{ maxWidth: '700px', margin: '0 auto', padding: 'clamp(1.25rem, 4vw, 2rem) clamp(0.75rem, 4vw, 1.5rem)' }}>
@@ -168,6 +199,7 @@ export default function Wallet() {
   }
 
   const transactions = txPage?.data ?? [];
+
   const total = txPage?.meta?.total ?? 0;
   const topupAmountValid = topupAmount !== '' && parseFloat(topupAmount) > 0;
 
@@ -345,6 +377,37 @@ export default function Wallet() {
           )}
         </div>
       </div>
+
+      {pendingTopups.length > 0 && (
+        <div className="bg-white rounded-xl border border-mint-light overflow-hidden mb-5">
+          <div className="px-6 py-4 border-b border-mint-light">
+            <h3 className="text-sm font-semibold text-deep-cash">Top-ups awaiting confirmation</h3>
+            <p className="text-xs text-cash-green/60 mt-0.5">
+              Paid but not showing in your balance? Check it with the payment provider.
+            </p>
+          </div>
+          <ul className="divide-y divide-mint-light">
+            {pendingTopups.map((t) => (
+              <li key={t.providerReference} className="px-6 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <MoneyDisplay amount={minorToMajor(t.amountMinor, wallet?.currency ?? 'NGN')} currency={wallet?.currency ?? 'NGN'} />
+                  <p className="text-xs text-cash-green/60 truncate">
+                    {t.createdAt ? formatDate(t.createdAt) : ''} · {t.providerReference}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  loading={verifyTopupMutation.isPending && verifyTopupMutation.variables === t.providerReference}
+                  onClick={() => verifyTopupMutation.mutate(t.providerReference!)}
+                >
+                  Check payment
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-mint-light overflow-hidden">
         <div className="px-6 py-4 border-b border-mint-light">
